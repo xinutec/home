@@ -4,6 +4,16 @@
 # devshell — rev-pinned via flake.lock, available without npm on PATH.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+
+# Deps must exist before `npm run verify` / ng build — verify.sh has to run from a
+# clean checkout (a fresh clone, or the tree the fleetwatch collector runs in), not
+# just a warm dev machine. Install root + frontend deps when absent or stale.
+nix develop -c bash -c '
+  set -euo pipefail
+  if [ ! -d node_modules ] || [ package-lock.json -nt node_modules ]; then npm ci; fi
+  if [ ! -d frontend/node_modules ] || [ frontend/package-lock.json -nt frontend/node_modules ]; then ( cd frontend && npm ci ); fi
+'
+
 nix develop -c npm run verify
 
 # L2 phone-width layout harness (ui-check): build the frontend, then serve the
