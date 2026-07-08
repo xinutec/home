@@ -34,6 +34,13 @@ Push to main → CI builds+pushes `xinutec/home:latest` → `scripts/deploy.sh`
 (ssh isis, `kubectl -n home rollout restart`). The DB stays raw; no migration
 needed for label/offset changes.
 
+## Smart-plug energy monitoring (POSTPONED)
+
+Backend scaffolding for metering the ENERJSMART plugs (power/voltage/current/
+energy columns, ingest, `power`-flagged labels, frontend guard) is in place but
+**not deployed**. The hardware reflash → open firmware → Mac poller is paused.
+Full plan and resume notes: `doc/energy-sockets.md`.
+
 ## Calibration & room labels
 
 - Per-device temperature offsets: `src/calibration.ts`, applied **client-side**
