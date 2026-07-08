@@ -109,14 +109,23 @@ describe('rssiByReceiverSeries', () => {
 		expect(s[1].points.map((p) => p.y)).toEqual([-81]);
 	});
 
-	it('keeps the plain device name when only one receiver hears it', () => {
+	it('suffixes the receiver even when only one hears it', () => {
 		const devices = [dev('govee-A562', false, 0)];
 		const history = {
 			'govee-A562': [reading({ rssi: -57, source: 'mac' })],
 		};
 		const s = rssiByReceiverSeries(devices, history);
 		expect(s.length).toBe(1);
-		expect(s[0].label).toBe('govee-A562');
+		expect(s[0].label).toBe('govee-A562 · mac');
+	});
+
+	it('labels pre-tag (null-source) rows as untagged', () => {
+		const devices = [dev('govee-B7AC', false, 0)];
+		const history = {
+			'govee-B7AC': [reading({ rssi: -74, source: null })],
+		};
+		const s = rssiByReceiverSeries(devices, history);
+		expect(s.map((x) => x.label)).toEqual(['govee-B7AC · untagged']);
 	});
 
 	it('drops devices with no rssi points (e.g. the wired IQAir)', () => {
