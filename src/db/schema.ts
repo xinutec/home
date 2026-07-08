@@ -28,6 +28,16 @@ const MIGRATIONS: readonly string[] = [
 	// v3: scrub the BLE "RSSI not available" sentinel (127 / any non-negative)
 	// that an early build stored verbatim — rssi is always negative dBm.
 	`UPDATE measurement SET rssi = NULL WHERE rssi >= 0`,
+	// v4: electrical columns from the smart-plug power monitors (Tasmota-flashed
+	// sockets). Instantaneous power/voltage/current, the plug's own cumulative
+	// energy counter (kWh, monotonic — diff any two rows for interval usage), and
+	// relay state. All nullable — the air/climate sensors report none of them.
+	`ALTER TABLE measurement
+    ADD COLUMN power_w DECIMAL(8,1),
+    ADD COLUMN voltage_v DECIMAL(6,1),
+    ADD COLUMN current_a DECIMAL(8,3),
+    ADD COLUMN energy_kwh DECIMAL(12,3),
+    ADD COLUMN power_on TINYINT`,
 ];
 
 export async function migrate(conn: mariadb.Connection): Promise<void> {

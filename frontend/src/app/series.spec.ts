@@ -15,6 +15,11 @@ function reading(over: Partial<Measurement>): Measurement {
 		voc_ppb: null,
 		battery: null,
 		rssi: null,
+		power_w: null,
+		voltage_v: null,
+		current_a: null,
+		energy_kwh: null,
+		power_on: null,
 		...over,
 	};
 }

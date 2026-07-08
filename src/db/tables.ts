@@ -13,6 +13,13 @@ export interface MeasurementTable {
 	voc_ppb: number | null;
 	battery: number | null;
 	rssi: number | null;
+	// Electrical readings from the smart-plug power monitors (nullable — climate
+	// sensors leave them null). power_on is stored as 0/1 (TINYINT).
+	power_w: number | null;
+	voltage_v: number | null;
+	current_a: number | null;
+	energy_kwh: number | null;
+	power_on: number | null;
 }
 
 export interface SchemaVersionTable {

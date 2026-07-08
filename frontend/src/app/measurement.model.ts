@@ -12,6 +12,11 @@ export interface Measurement {
 	voc_ppb: number | null;
 	battery: number | null;
 	rssi: number | null;
+	power_w: number | null;
+	voltage_v: number | null;
+	current_a: number | null;
+	energy_kwh: number | null;
+	power_on: number | null;
 }
 
 /** Display overlay for a device, as returned alongside its latest reading. */
@@ -20,6 +25,8 @@ export interface DeviceLabel {
 	/** Physical location; absent until the sensor is sited (UI falls back to name). */
 	room?: string;
 	airQuality: boolean;
+	/** True for the smart-plug power monitors (W/V/A/kWh), not climate sensors. */
+	power?: boolean;
 	order: number;
 	type: string;
 }

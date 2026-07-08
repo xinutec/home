@@ -27,6 +27,12 @@ function sensorValues(m: MeasurementInput) {
 		voc_ppb: m.voc_ppb ?? null,
 		battery: m.battery ?? null,
 		rssi: m.rssi ?? null,
+		power_w: m.power_w ?? null,
+		voltage_v: m.voltage_v ?? null,
+		current_a: m.current_a ?? null,
+		energy_kwh: m.energy_kwh ?? null,
+		// Boolean relay state stored as 0/1; MariaDB TINYINT round-trips as a number.
+		power_on: m.power_on == null ? null : m.power_on ? 1 : 0,
 	};
 }
 

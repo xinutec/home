@@ -18,6 +18,14 @@ describe("labelFor", () => {
 		const l = labelFor("govee-A562");
 		expect(l.airQuality).toBe(false);
 		expect(l.order).toBeGreaterThan(0);
+		expect(l.power).toBeFalsy();
+	});
+
+	it("marks smart-plug sockets as power monitors, not climate", () => {
+		const l = labelFor("socket-coffee");
+		expect(l.power).toBe(true);
+		expect(l.airQuality).toBe(false);
+		expect(l.name).toBe("Coffee Machine");
 	});
 
 	it("falls back to the raw id for an unmapped device", () => {

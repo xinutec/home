@@ -16,6 +16,11 @@ export interface DeviceLabel {
 	room?: string;
 	/** True for the whole-home air-quality sensor (CO₂/PM/AQI/VOC). */
 	airQuality: boolean;
+	/**
+	 * True for the smart-plug power monitors (W/V/A/kWh, not climate). Keeps them
+	 * out of the temperature/humidity room views and into their own power section.
+	 */
+	power?: boolean;
 	/** UI sort order; lower sorts first. */
 	order: number;
 	/** Hardware model — static per device (the BLE-reported model / device type). */
@@ -60,6 +65,25 @@ const LABELS: Record<string, DeviceLabel> = {
 		order: 4,
 		type: "Govee H5103",
 	},
+	// Smart-plug power monitors (Tasmota-flashed sockets). `power: true` routes
+	// them to the power section instead of the climate room views. Named by the
+	// appliance they meter; `room` is set once each is sited.
+	"socket-fan": { name: "Fan", airQuality: false, power: true, order: 10, type: "Smart plug" },
+	"socket-coffee": {
+		name: "Coffee Machine",
+		airQuality: false,
+		power: true,
+		order: 11,
+		type: "Smart plug",
+	},
+	"socket-desk": {
+		name: "Desktop PC",
+		airQuality: false,
+		power: true,
+		order: 12,
+		type: "Smart plug",
+	},
+	"socket-tv": { name: "TV", airQuality: false, power: true, order: 13, type: "Smart plug" },
 };
 
 /** Label for a device id, falling back to the raw id for unmapped sensors. */

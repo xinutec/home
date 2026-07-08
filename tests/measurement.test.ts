@@ -52,6 +52,26 @@ describe("MeasurementInput", () => {
 		expect(MeasurementInput.safeParse({ battery: 150 }).success).toBe(false);
 	});
 
+	it("accepts smart-plug electrical fields", () => {
+		const r = MeasurementInput.parse({
+			device: "socket-coffee",
+			power_w: 842.5,
+			voltage_v: 238.2,
+			current_a: 3.61,
+			energy_kwh: 12.345,
+			power_on: true,
+		});
+		expect(r.power_w).toBe(842.5);
+		expect(r.voltage_v).toBe(238.2);
+		expect(r.current_a).toBe(3.61);
+		expect(r.energy_kwh).toBe(12.345);
+		expect(r.power_on).toBe(true);
+	});
+
+	it("rejects negative power", () => {
+		expect(MeasurementInput.safeParse({ power_w: -5 }).success).toBe(false);
+	});
+
 	it("nulls the BLE sentinel rssi (>= 0) but keeps real negative dBm", () => {
 		expect(MeasurementInput.parse({ rssi: 127 }).rssi).toBeNull();
 		expect(MeasurementInput.parse({ rssi: 0 }).rssi).toBeNull();

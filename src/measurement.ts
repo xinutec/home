@@ -25,6 +25,14 @@ export const MeasurementInput = z.object({
 		.nullable()
 		.optional()
 		.transform((v) => (v != null && v >= 0 ? null : v)),
+	// Electrical readings from the smart-plug power monitors. power_on is the
+	// relay state (true = on); stored as 0/1. energy_kwh is the plug's own
+	// cumulative counter (monotonic), the rest are instantaneous.
+	power_w: z.number().min(0).nullable().optional(),
+	voltage_v: z.number().min(0).nullable().optional(),
+	current_a: z.number().min(0).nullable().optional(),
+	energy_kwh: z.number().min(0).nullable().optional(),
+	power_on: z.boolean().nullable().optional(),
 });
 
 export type MeasurementInput = z.infer<typeof MeasurementInput>;

@@ -30,8 +30,13 @@ export class ApiService {
 
 	private readonly _range = signal<RangeKey>('24h');
 
-	/** Latest reading per device, UI-ordered (air-quality sensor first). */
-	readonly devices = this._devices.asReadonly();
+	/**
+	 * Latest reading per climate/air device, UI-ordered. Power-monitor plugs are
+	 * excluded here so they don't render as empty room cards; see `powerDevices`.
+	 */
+	readonly devices = computed(() => this._devices().filter((d) => !d.label.power));
+	/** Latest reading per smart-plug power monitor, for the power section. */
+	readonly powerDevices = computed(() => this._devices().filter((d) => d.label.power));
 	/** True once the first `/api/devices` response has been handled. */
 	readonly devicesLoaded = this._devicesLoaded.asReadonly();
 	readonly devicesError = this._devicesError.asReadonly();
