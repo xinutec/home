@@ -17,6 +17,9 @@ export interface Measurement {
 	current_a: number | null;
 	energy_kwh: number | null;
 	power_on: number | null;
+	/** Capturing host ("mac" / "bes") for BLE readings; null for the wired IQAir
+	 *  and pre-v5 rows. Splits the RSSI chart into one line per receiver. */
+	source: string | null;
 }
 
 /** Display overlay for a device, as returned alongside its latest reading. */

@@ -37,6 +37,47 @@ export function climateSeries(
 	});
 }
 
+/**
+ * RSSI split into one line per receiver (`source`). A sensor two boxes hear
+ * (e.g. the Mac + bes) otherwise draws as a single line zig-zagging between the
+ * two links' strengths; grouping by source gives one calm line per link. A
+ * device with a single receiver keeps its plain name; only co-heard sensors get
+ * the ` · <receiver>` suffix. Rows with no source (pre-v5 / the wired IQAir)
+ * group under "unknown". Empty lines are dropped.
+ */
+export function rssiByReceiverSeries(
+	devices: DeviceLatest[],
+	history: Record<string, Measurement[]>,
+): ChartSeries[] {
+	const out: ChartSeries[] = [];
+	for (const d of devices) {
+		// Group this device's rows by capturing receiver, preserving first-seen order.
+		const bySource = new Map<string, Measurement[]>();
+		for (const m of history[d.device] ?? []) {
+			const key = m.source ?? 'unknown';
+			let group = bySource.get(key);
+			if (!group) {
+				group = [];
+				bySource.set(key, group);
+			}
+			group.push(m);
+		}
+		const name = d.label.room ?? d.label.name;
+		for (const [source, rows] of bySource) {
+			const points = toTrendPoints(rows, (m) => m.rssi);
+			if (points.length === 0) {
+				continue;
+			}
+			out.push({
+				label: bySource.size > 1 ? `${name} · ${source}` : name,
+				color: ROOM_COLORS[out.length % ROOM_COLORS.length],
+				points,
+			});
+		}
+	}
+	return out;
+}
+
 /** A single line from the air-quality device, or none if there isn't one. */
 export function airSeries(
 	devices: DeviceLatest[],

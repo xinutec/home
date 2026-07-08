@@ -18,7 +18,7 @@ import {
 	cleanVoc,
 } from './measurement.model';
 import { RelativeTimePipe } from './relative-time.pipe';
-import { airSeries, climateSeries } from './series';
+import { airSeries, climateSeries, rssiByReceiverSeries } from './series';
 import { ThemeService } from './theme.service';
 import { TrendChart } from './trend-chart/trend-chart';
 
@@ -152,12 +152,11 @@ export class App implements OnInit, OnDestroy {
 			(m) => m.pm25,
 		),
 	);
-	// Bluetooth signal (dBm): one line per device that reports rssi (the Govee
-	// sensors); empty series (e.g. the wired IQAir) are dropped.
+	// Bluetooth signal (dBm): one line per (device, receiver) so a sensor heard by
+	// both the Mac and bes shows a calm line per link, not a zig-zag between them.
+	// Empty series (e.g. the wired IQAir) are dropped inside the helper.
 	protected readonly rssiSeries = computed(() =>
-		climateSeries(this.devices(), this.api.historyByDevice(), (m) => m.rssi).filter(
-			(s) => s.points.length > 0,
-		),
+		rssiByReceiverSeries(this.devices(), this.api.historyByDevice()),
 	);
 
 	ngOnInit(): void {

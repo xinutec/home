@@ -20,6 +20,9 @@ export interface MeasurementTable {
 	current_a: number | null;
 	energy_kwh: number | null;
 	power_on: number | null;
+	// Capturing host for BLE readings ("mac" / "bes"); null for pre-v5 rows and
+	// the wired IQAir. Lets the RSSI chart split one line per receiver.
+	source: string | null;
 }
 
 export interface SchemaVersionTable {

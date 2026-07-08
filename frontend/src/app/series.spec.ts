@@ -1,5 +1,5 @@
 import type { DeviceLatest, Measurement } from './measurement.model';
-import { airSeries, climateSeries, toTrendPoints } from './series';
+import { airSeries, climateSeries, rssiByReceiverSeries, toTrendPoints } from './series';
 
 function reading(over: Partial<Measurement>): Measurement {
 	return {
@@ -20,6 +20,7 @@ function reading(over: Partial<Measurement>): Measurement {
 		current_a: null,
 		energy_kwh: null,
 		power_on: null,
+		source: null,
 		...over,
 	};
 }
@@ -89,5 +90,38 @@ describe('airSeries', () => {
 	it('returns nothing when there is no air-quality device', () => {
 		const s = airSeries([dev('govee-A562', false, 1)], {}, 'CO₂', 'red', (m) => m.co2_ppm);
 		expect(s).toEqual([]);
+	});
+});
+
+describe('rssiByReceiverSeries', () => {
+	it('splits a co-heard sensor into one line per receiver, suffixed by source', () => {
+		const devices = [dev('govee-267F', false, 0)];
+		const history = {
+			'govee-267F': [
+				reading({ ts: '2026-06-27T00:00:00.000Z', rssi: -69, source: 'bes' }),
+				reading({ ts: '2026-06-27T00:05:00.000Z', rssi: -81, source: 'mac' }),
+				reading({ ts: '2026-06-27T00:10:00.000Z', rssi: -68, source: 'bes' }),
+			],
+		};
+		const s = rssiByReceiverSeries(devices, history);
+		expect(s.map((x) => x.label)).toEqual(['govee-267F · bes', 'govee-267F · mac']);
+		expect(s[0].points.map((p) => p.y)).toEqual([-69, -68]);
+		expect(s[1].points.map((p) => p.y)).toEqual([-81]);
+	});
+
+	it('keeps the plain device name when only one receiver hears it', () => {
+		const devices = [dev('govee-A562', false, 0)];
+		const history = {
+			'govee-A562': [reading({ rssi: -57, source: 'mac' })],
+		};
+		const s = rssiByReceiverSeries(devices, history);
+		expect(s.length).toBe(1);
+		expect(s[0].label).toBe('govee-A562');
+	});
+
+	it('drops devices with no rssi points (e.g. the wired IQAir)', () => {
+		const devices = [dev('airvisual', true, 0)];
+		const history = { airvisual: [reading({ device: 'airvisual', co2_ppm: 600, rssi: null })] };
+		expect(rssiByReceiverSeries(devices, history)).toEqual([]);
 	});
 });

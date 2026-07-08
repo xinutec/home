@@ -36,16 +36,18 @@ describe("MeasurementInput", () => {
 		expect(MeasurementInput.safeParse({ ts: "yesterday" }).success).toBe(false);
 	});
 
-	it("accepts Govee device-health fields (battery, rssi)", () => {
+	it("accepts Govee device-health fields (battery, rssi, source)", () => {
 		const r = MeasurementInput.parse({
 			device: "govee-A562",
 			temp_c: 25,
 			humidity: 58,
 			battery: 100,
 			rssi: -62,
+			source: "bes",
 		});
 		expect(r.battery).toBe(100);
 		expect(r.rssi).toBe(-62);
+		expect(r.source).toBe("bes");
 	});
 
 	it("rejects an out-of-range battery", () => {

@@ -33,6 +33,7 @@ function sensorValues(m: MeasurementInput) {
 		energy_kwh: m.energy_kwh ?? null,
 		// Boolean relay state stored as 0/1; MariaDB TINYINT round-trips as a number.
 		power_on: m.power_on == null ? null : m.power_on ? 1 : 0,
+		source: m.source ?? null,
 	};
 }
 
