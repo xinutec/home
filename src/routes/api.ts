@@ -5,6 +5,11 @@ import { db } from "../db/pool.js";
 import { decorateDevices } from "../labels.js";
 import { MeasurementBatch, MeasurementInput } from "../measurement.js";
 
+// How far back /api/receivers looks when listing the devices a receiver still
+// hears. Comfortably wider than the slowest receiver's 10-minute push cadence, so
+// a healthy-but-slow receiver never looks like it has gone deaf to a sensor.
+const HEARD_WINDOW_MS = 60 * 60 * 1000;
+
 // Query parameters for /api/measurements. Validated like the write path — a
 // malformed `from`/`to` must 400, not silently return an unfiltered range
 // (`new Date("garbage")` is an Invalid Date the driver won't filter on).
@@ -99,6 +104,47 @@ export function apiRoutes(ingestToken: string): Hono {
 		// Serve raw + each device's calibration offset; the client applies it so
 		// the correction can be toggled.
 		const out = decorateDevices(rows).map((d) => ({ ...d, offset: offsetFor(d.device) }));
+		return c.json(out);
+	});
+
+	// Public read: per-RECEIVER liveness — when each capturing host (`source`) last
+	// pushed, and which devices it currently hears.
+	//
+	// Keyed by source, not device, and that distinction is the whole point: a sensor
+	// stays fresh as long as ANY receiver hears it, so device freshness cannot see a
+	// single receiver going deaf. When the pixel5 receiver went silent for 7 hours the
+	// Mac and bes still covered all four sensors, so every device — and the whole
+	// dashboard — stayed green. This is the view that makes a dead receiver visible.
+	api.get("/receivers", async (c) => {
+		const rows = await db()
+			.selectFrom("measurement")
+			.select(({ fn }) => ["source", fn.max("ts").as("last_seen")])
+			.where("source", "is not", null)
+			.groupBy("source")
+			.execute();
+
+		// Devices each receiver has heard recently. A receiver that is up but has gone
+		// deaf to one sensor (a real, separate failure) shows a shrunken list here
+		// rather than a stale `last_seen`, since the sensors it still hears keep it
+		// looking alive.
+		const since = new Date(Date.now() - HEARD_WINDOW_MS);
+		const heard = await db()
+			.selectFrom("measurement")
+			.select(["source", "device"])
+			.distinct()
+			.where("source", "is not", null)
+			.where("ts", ">=", since)
+			.execute();
+
+		const out = rows.map((r) => ({
+			source: r.source,
+			last_seen: r.last_seen,
+			devices: heard
+				.filter((h) => h.source === r.source)
+				.map((h) => h.device)
+				.sort(),
+		}));
+		out.sort((a, b) => (a.source ?? "").localeCompare(b.source ?? ""));
 		return c.json(out);
 	});
 
