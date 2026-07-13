@@ -112,7 +112,7 @@ export class TrendChart implements AfterViewInit, OnDestroy {
 	}
 
 	private withAlpha(rgb: string, alpha: number): string {
-		const m = rgb.match(/rgba?\(([^)]+)\)/);
+		const m = /rgba?\(([^)]+)\)/.exec(rgb);
 		if (!m) {
 			return rgb;
 		}
