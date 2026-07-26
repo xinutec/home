@@ -1,0 +1,39 @@
+@if (usage(); as u) {
+	<section class="claude-usage">
+		<div class="cu-head">
+			<h3 class="section-title">Claude usage</h3>
+			<span class="cu-asof" matTooltip="When this machine's Claude Code last reported">
+				<mat-icon>schedule</mat-icon>
+				{{ u.ts | relativeTime: now() }} · {{ u.host }}
+			</span>
+		</div>
+		<div class="cu-grid">
+			<mat-card class="cu-card" appearance="outlined">
+				<div class="cu-top">
+					<span class="cu-name">5-hour window</span>
+					<span class="cu-pct">
+						{{ u.five_hour_pct != null ? (u.five_hour_pct | number: '1.0-0') + '%' : '—' }}
+					</span>
+				</div>
+				<mat-progress-bar mode="determinate" [value]="u.five_hour_pct ?? 0" />
+				<div class="cu-reset">{{ fmtReset(u.five_hour_resets_at) }}</div>
+			</mat-card>
+			<mat-card class="cu-card" appearance="outlined">
+				<div class="cu-top">
+					<span class="cu-name">Weekly · all models</span>
+					<span class="cu-pct">
+						{{ u.seven_day_pct != null ? (u.seven_day_pct | number: '1.0-0') + '%' : '—' }}
+					</span>
+				</div>
+				<mat-progress-bar mode="determinate" [value]="u.seven_day_pct ?? 0" />
+				<div class="cu-reset">{{ fmtReset(u.seven_day_resets_at) }}</div>
+			</mat-card>
+		</div>
+	</section>
+} @else {
+	<section class="empty-state">
+		<mat-icon class="empty-icon">smart_toy</mat-icon>
+		<h2>Waiting for the first usage report…</h2>
+		<p>Claude Code reports its usage while you're in a session. This updates automatically.</p>
+	</section>
+}

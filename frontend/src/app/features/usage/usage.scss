@@ -1,0 +1,76 @@
+// The page content stacks vertically; the shell's `.page` only centres and pads.
+:host {
+	display: flex;
+	flex-direction: column;
+	gap: 1.5rem;
+}
+
+.claude-usage {
+	display: flex;
+	flex-direction: column;
+	gap: 0.75rem;
+}
+
+.cu-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.75rem;
+	flex-wrap: wrap;
+}
+
+.cu-asof {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.3rem;
+	color: var(--mat-sys-on-surface-variant);
+	font: var(--mat-sys-label-medium);
+}
+
+.cu-asof mat-icon {
+	font-size: 18px;
+	width: 18px;
+	height: 18px;
+}
+
+.cu-grid {
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+	gap: 1rem;
+}
+
+.cu-card {
+	--mat-card-outlined-container-shape: 20px;
+	padding: 1rem 1.1rem;
+	display: flex;
+	flex-direction: column;
+	gap: 0.55rem;
+}
+
+.cu-top {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 0.5rem;
+}
+
+.cu-name {
+	font: var(--mat-sys-title-medium);
+	color: var(--mat-sys-on-surface-variant);
+}
+
+.cu-pct {
+	font: var(--mat-sys-headline-small);
+	font-variant-numeric: tabular-nums;
+}
+
+.cu-reset {
+	color: var(--mat-sys-on-surface-variant);
+	font: var(--mat-sys-label-medium);
+}
+
+@media (max-width: 560px) {
+	.cu-grid {
+		grid-template-columns: 1fr;
+	}
+}
