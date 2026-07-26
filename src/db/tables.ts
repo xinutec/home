@@ -29,7 +29,20 @@ export interface SchemaVersionTable {
 	version: number;
 }
 
+// Latest Claude Code usage snapshot per capturing host. The percentages are
+// Anthropic's account-wide rate-limit utilisation (identical across hosts);
+// resets_at are DATETIMEs. One row per host, upserted — see schema.ts v6.
+export interface ClaudeUsageTable {
+	host: string;
+	ts: Date;
+	five_hour_pct: number | null;
+	five_hour_resets_at: Date | null;
+	seven_day_pct: number | null;
+	seven_day_resets_at: Date | null;
+}
+
 export interface Database {
 	measurement: MeasurementTable;
 	schema_version: SchemaVersionTable;
+	claude_usage: ClaudeUsageTable;
 }

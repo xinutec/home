@@ -45,6 +45,21 @@ const MIGRATIONS: readonly string[] = [
 	// zig-zag across the two links that hear the same sensor.
 	`ALTER TABLE measurement
     ADD COLUMN source VARCHAR(16)`,
+	// v6: Claude Code subscription usage snapshots, pushed by a machine's
+	// statusLine hook. The 5-hour and 7-day figures are Anthropic's own
+	// account-wide rate-limit utilisation (0-100 %), so every host reports the
+	// same numbers — `host` only records which machine's session captured this
+	// snapshot. This is current state, not history: one row per host, upserted
+	// (latest wins), so the key is `host` alone, not `(host, ts)`.
+	`CREATE TABLE IF NOT EXISTS claude_usage (
+    host VARCHAR(64) NOT NULL,
+    ts DATETIME NOT NULL,
+    five_hour_pct DECIMAL(5,2),
+    five_hour_resets_at DATETIME,
+    seven_day_pct DECIMAL(5,2),
+    seven_day_resets_at DATETIME,
+    PRIMARY KEY (host)
+  )`,
 ];
 
 export async function migrate(conn: mariadb.Connection): Promise<void> {

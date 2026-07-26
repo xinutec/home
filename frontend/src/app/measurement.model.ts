@@ -41,6 +41,21 @@ export interface DeviceLatest extends Measurement {
 	offset: { temp_c?: number; humidity?: number };
 }
 
+/**
+ * The freshest Claude Code usage snapshot from `/api/usage` (or `null` when no
+ * machine has pushed yet). The percentages are Anthropic's account-wide
+ * rate-limit utilisation; `ts` is when a machine's statusLine last captured
+ * them, and `host` which machine. Windows are independently nullable.
+ */
+export interface ClaudeUsage {
+	host: string;
+	ts: string;
+	five_hour_pct: number | null;
+	five_hour_resets_at: string | null;
+	seven_day_pct: number | null;
+	seven_day_resets_at: string | null;
+}
+
 /** Distinct line colours for the per-room comparison charts, assigned by order. */
 export const ROOM_COLORS: readonly string[] = [
 	'#26a69a',

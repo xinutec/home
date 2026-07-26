@@ -2,6 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import {
+	type ClaudeUsage,
 	type DeviceLatest,
 	type Measurement,
 	RANGE_OPTIONS,
@@ -29,6 +30,10 @@ export class ApiService {
 	private readonly _historyError = signal<string | null>(null);
 
 	private readonly _range = signal<RangeKey>('24h');
+
+	private readonly _usage = signal<ClaudeUsage | null>(null);
+	/** Freshest Claude Code usage snapshot, or null until one is pushed. */
+	readonly usage = this._usage.asReadonly();
 
 	/**
 	 * Latest reading per climate/air device, UI-ordered. Power-monitor plugs are
@@ -67,6 +72,7 @@ export class ApiService {
 			void this.refreshDevices();
 			// Quiet so the charts stay live without flashing the progress bar.
 			void this.refreshHistory(true);
+			void this.refreshUsage();
 		}, LATEST_REFRESH_MS);
 	}
 
@@ -89,6 +95,16 @@ export class ApiService {
 	private async init(): Promise<void> {
 		await this.refreshDevices();
 		await this.refreshHistory();
+		await this.refreshUsage();
+	}
+
+	async refreshUsage(): Promise<void> {
+		try {
+			const row = await firstValueFrom(this.http.get<ClaudeUsage | null>('/api/usage'));
+			this._usage.set(row ?? null);
+		} catch {
+			// Leave the last snapshot in place; a transient miss shouldn't blank it.
+		}
 	}
 
 	async refreshDevices(): Promise<void> {

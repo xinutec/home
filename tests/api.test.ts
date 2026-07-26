@@ -57,6 +57,40 @@ describe("POST /ingest/batch auth", () => {
 	});
 });
 
+describe("POST /usage auth + validation", () => {
+	it("rejects a missing token", async () => {
+		const res = await app.request("/usage", { method: "POST", body: "{}" });
+		expect(res.status).toBe(401);
+	});
+
+	it("rejects a wrong token", async () => {
+		const res = await app.request("/usage", {
+			method: "POST",
+			headers: { Authorization: "Bearer wrong" },
+			body: "{}",
+		});
+		expect(res.status).toBe(401);
+	});
+
+	it("rejects a payload missing host with a valid token", async () => {
+		const res = await app.request("/usage", {
+			method: "POST",
+			headers: { Authorization: `Bearer ${TOKEN}` },
+			body: JSON.stringify({ seven_day_pct: 32 }),
+		});
+		expect(res.status).toBe(400);
+	});
+
+	it("rejects an out-of-range percentage with a valid token", async () => {
+		const res = await app.request("/usage", {
+			method: "POST",
+			headers: { Authorization: `Bearer ${TOKEN}` },
+			body: JSON.stringify({ host: "mac-mini", seven_day_pct: 150 }),
+		});
+		expect(res.status).toBe(400);
+	});
+});
+
 describe("GET /measurements query validation", () => {
 	it("rejects a malformed from/to instead of silently ignoring it", async () => {
 		for (const qs of ["from=garbage", "to=garbage", "from="]) {

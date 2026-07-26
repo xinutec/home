@@ -64,6 +64,7 @@ export class App implements OnInit, OnDestroy {
 	protected readonly ranges = RANGE_OPTIONS;
 
 	protected readonly devices = this.api.devices;
+	protected readonly usage = this.api.usage;
 	protected readonly airDevice = this.api.airDevice;
 	protected readonly devicesError = this.api.devicesError;
 	protected readonly historyLoading = this.api.historyLoading;
@@ -223,5 +224,23 @@ export class App implements OnInit, OnDestroy {
 	 */
 	protected roomColor(i: number): string {
 		return ROOM_COLORS[i % ROOM_COLORS.length];
+	}
+
+	/**
+	 * Human "resets in Xh Ym" for a rate-limit window's reset instant. Reads the
+	 * `now()` tick so the countdown updates as time passes; empty when there's no
+	 * reset time (window absent from the snapshot).
+	 */
+	protected fmtReset(iso: string | null): string {
+		if (!iso) {
+			return '';
+		}
+		const ms = new Date(iso).getTime() - this.now();
+		if (ms <= 0) {
+			return 'resets now';
+		}
+		const h = Math.floor(ms / 3_600_000);
+		const m = Math.floor((ms % 3_600_000) / 60_000);
+		return h > 0 ? `resets in ${h}h ${m}m` : `resets in ${m}m`;
 	}
 }

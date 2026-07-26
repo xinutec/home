@@ -20,7 +20,8 @@ app.onError((err, c) => {
 // Liveness/readiness probe (no auth).
 app.get("/health", (c) => c.json({ ok: true }));
 
-// JSON API: token-gated /api/ingest, public /api/devices + /api/measurements.
+// JSON API: token-gated writes (/api/ingest, /api/usage), public reads
+// (/api/devices, /api/measurements, /api/usage).
 app.route("/api", apiRoutes(config.ingestToken));
 
 // Unknown /api paths are JSON 404s — they must never fall through to the SPA
