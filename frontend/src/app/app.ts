@@ -4,6 +4,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
+import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatToolbarModule } from '@angular/material/toolbar';
@@ -48,6 +49,7 @@ function writeLocal(key: string, value: string): void {
 		MatButtonToggleModule,
 		MatCardModule,
 		MatIconModule,
+		MatMenuModule,
 		MatTooltipModule,
 		MatProgressBarModule,
 		MatSlideToggleModule,
@@ -107,6 +109,11 @@ export class App implements OnInit, OnDestroy {
 	// viewing stays uncluttered; flipped on when correlating a moved physical
 	// sensor to the id you edit in labels.ts. Remembered across reloads.
 	protected readonly showIds = signal(readLocal('showIds') === 'on');
+
+	// Which top-level view is shown. Environment (temperature/air) is the default;
+	// the Claude-usage view is reached from the toolbar menu. Remembered across
+	// reloads like the other UI prefs, so the first/cleared load lands on env.
+	protected readonly view = signal<'env' | 'ai'>(readLocal('view') === 'ai' ? 'ai' : 'env');
 
 	// Temperature & humidity: one coloured line per device, for room comparison.
 	protected readonly tempSeries = computed(() =>
@@ -191,6 +198,11 @@ export class App implements OnInit, OnDestroy {
 		const v = !this.showIds();
 		this.showIds.set(v);
 		writeLocal('showIds', v ? 'on' : 'off');
+	}
+
+	protected setView(v: 'env' | 'ai'): void {
+		this.view.set(v);
+		writeLocal('view', v);
 	}
 
 	/**

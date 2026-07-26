@@ -440,6 +440,12 @@
 	--mat-button-toggle-shape: 999px;
 }
 
+/* View menu: right-align the check on the active item. */
+.view-active {
+	margin-left: auto;
+	color: var(--mat-sys-primary);
+}
+
 /* Claude usage ------------------------------------------------------ */
 .claude-usage {
 	display: flex;
