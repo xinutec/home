@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { offsetFor } from "../calibration.js";
 import { db } from "../db/pool.js";
+import type { AppEnv } from "../env.js";
 import { decorateDevices } from "../labels.js";
 import { MeasurementBatch, MeasurementInput } from "../measurement.js";
 import { UsageInput } from "../usage.js";
@@ -58,8 +59,25 @@ function toUsageRow(u: UsageInput) {
 	};
 }
 
-export function apiRoutes(ingestToken: string): Hono {
-	const api = new Hono();
+/** Flatten a client-supplied label to a single harmless log field.
+ *
+ *  The security boundary of the telemetry endpoint, not tidiness. A label is
+ *  verbatim UI text written into a log line as `label=…`, so a newline inside it
+ *  forges *whole log lines* — including further `client-event` lines attributed
+ *  to someone else. The log stops being the evidence it exists to be.
+ *
+ *  Also flattens the format characters that deceive rather than break: the
+ *  zero-width ones (a label of them reads as empty while occupying the cap) and
+ *  the bidi overrides (they reorder the *rendering* of a line, so it displays as
+ *  something other than what it says). Capped by code point so a multi-byte
+ *  glyph is never split down the middle. */
+export function oneLine(raw: string, max: number): string {
+	const unbroken = raw.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, " ");
+	return [...unbroken.replace(/\s+/g, " ").trim()].slice(0, max).join("");
+}
+
+export function apiRoutes(ingestToken: string): Hono<AppEnv> {
+	const api = new Hono<AppEnv>();
 
 	const authed = (auth: string | undefined) => auth === `Bearer ${ingestToken}`;
 
@@ -216,6 +234,57 @@ export function apiRoutes(ingestToken: string): Hono {
 		if (to) q = q.where("ts", "<=", to);
 		const rows = await q.limit(limit).execute();
 		return c.json(rows);
+	});
+
+	// Client activity trace: what the browser sees and the API does not. A tap
+	// that hits a cache, a control that was disabled, a chart that rendered
+	// wrong — none of it reaches the server otherwise, so "I looked and it was
+	// blank" is undiagnosable.
+	//
+	// **Session-gated, unlike every read on this host.** home is publicly
+	// readable, and an ungated write here would be an open log-write on the
+	// internet: a flood nobody could attribute, on a node whose disk is shared
+	// with every other app, and a channel that stops being evidence the moment a
+	// stranger can forge entries in it. The Bearer token that guards /ingest is
+	// no help — a public page cannot hold a secret.
+	//
+	// Same `client-event` line shape as the rest of the fleet, deliberately: the
+	// value is grepping one word anywhere and getting the same fields. No
+	// storage — these are logs, not data.
+	api.post("/telemetry", async (c) => {
+		const session = c.get("session");
+		if (!session) {
+			return c.json({ error: "not authenticated" }, 401);
+		}
+
+		// A per-batch cap so a buggy client cannot turn one POST into a log
+		// flood, and a label cap so a pathological one cannot bloat a line.
+		const MAX_EVENTS = 100;
+		const MAX_LABEL = 160;
+
+		let body: unknown;
+		try {
+			body = await c.req.json();
+		} catch {
+			return c.json({ error: "invalid json" }, 400);
+		}
+		if (!Array.isArray(body)) {
+			return c.json({ error: "expected array" }, 400);
+		}
+		for (const raw of body.slice(0, MAX_EVENTS)) {
+			if (!raw || typeof raw !== "object") continue;
+			const e = raw as { kind?: unknown; path?: unknown; label?: unknown; at?: unknown };
+			const kind = oneLine(String(e.kind ?? ""), 32);
+			const path = oneLine(String(e.path ?? ""), MAX_LABEL);
+			const label = oneLine(String(e.label ?? ""), MAX_LABEL);
+			const at = Number(e.at ?? 0);
+			console.log(
+				`client-event user=${session.userId} kind=${kind} path=${path} label=${label} at=${at}`,
+			);
+		}
+		// Always 204: telemetry is best-effort and the client neither reads the
+		// response nor retries.
+		return c.body(null, 204);
 	});
 
 	return api;

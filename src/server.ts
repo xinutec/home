@@ -4,13 +4,16 @@ import { Hono } from "hono";
 import { loadConfig } from "./config.js";
 import { initPool, withConnection } from "./db/pool.js";
 import { migrate } from "./db/schema.js";
+import type { AppEnv } from "./env.js";
+import { cleanupExpiredSessions, sessionMiddleware } from "./middleware/session.js";
 import { apiRoutes } from "./routes/api.js";
+import { nextcloudOAuthRoutes } from "./routes/nextcloud-oauth.js";
 
 const config = loadConfig();
 initPool(config.db);
 await withConnection(migrate);
 
-const app = new Hono();
+const app = new Hono<AppEnv>();
 
 app.onError((err, c) => {
 	console.error("Unhandled error:", err);
@@ -19,6 +22,29 @@ app.onError((err, c) => {
 
 // Liveness/readiness probe (no auth).
 app.get("/health", (c) => c.json({ ok: true }));
+
+// Populates `session` when a valid cookie is present, and does nothing at all
+// when one is not. Every read on this host stays public — the session is only
+// consulted where a *write* has to be attributed to a person.
+app.use("*", sessionMiddleware(config.sessionSecret));
+
+// Sweep expired sessions at startup, then every six hours. The lazy path in
+// `getSession` only deletes a session when its owner comes back with the
+// cookie, so without this the table grows monotonically.
+const sweepSessions = async () => {
+	try {
+		const n = await cleanupExpiredSessions();
+		if (n > 0) console.log(`Swept ${n} expired session(s)`);
+	} catch (e) {
+		console.error("Session sweep failed:", e);
+	}
+};
+await sweepSessions();
+setInterval(sweepSessions, 6 * 60 * 60 * 1000).unref();
+
+// Sign-in, so a write can be attributed. Outside /api because the callback is a
+// top-level browser navigation, not an API call.
+app.route("/", nextcloudOAuthRoutes(config));
 
 // JSON API: token-gated writes (/api/ingest, /api/usage), public reads
 // (/api/devices, /api/measurements, /api/usage).

@@ -12,6 +12,10 @@ const Env = z.object({
 	// Shared secret the Mac poller presents on POST /api/ingest. Reads are
 	// public; only writes are gated, so a leak just lets someone add readings.
 	INGEST_TOKEN: z.string().min(16),
+	// Signs the session cookie and the pending-login cookie. Required: a default
+	// would mean a deployment that silently accepts forged sessions.
+	SESSION_SECRET: z.string().min(32),
+	NC_BASE_URL: z.string().url().default("https://dash.xinutec.org"),
 });
 
 export interface Config {
@@ -24,6 +28,8 @@ export interface Config {
 		database: string;
 	};
 	ingestToken: string;
+	sessionSecret: string;
+	nextcloud: { baseUrl: string };
 }
 
 export function loadConfig(): Config {
@@ -38,5 +44,7 @@ export function loadConfig(): Config {
 			database: env.DB_NAME,
 		},
 		ingestToken: env.INGEST_TOKEN,
+		sessionSecret: env.SESSION_SECRET,
+		nextcloud: { baseUrl: env.NC_BASE_URL },
 	};
 }

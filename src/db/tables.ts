@@ -41,8 +41,16 @@ export interface ClaudeUsageTable {
 	seven_day_resets_at: Date | null;
 }
 
+export interface SessionsTable {
+	id: string;
+	user_id: string;
+	display_name: string;
+	expires_at: Date;
+}
+
 export interface Database {
 	measurement: MeasurementTable;
 	schema_version: SchemaVersionTable;
 	claude_usage: ClaudeUsageTable;
+	sessions: SessionsTable;
 }

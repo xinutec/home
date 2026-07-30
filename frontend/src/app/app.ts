@@ -6,6 +6,7 @@ import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { ApiService } from './api.service';
+import { Telemetry } from './telemetry';
 import { ThemeService } from './theme.service';
 
 /** One entry in the view menu. */
@@ -38,6 +39,9 @@ interface NavItem {
 export class App implements OnInit, OnDestroy {
 	private readonly api = inject(ApiService);
 	protected readonly theme = inject(ThemeService);
+	// Instrumented from the shell alone: a trace each screen had to remember to
+	// join would have holes in exactly the screens nobody thought about.
+	private readonly telemetry = inject(Telemetry);
 
 	protected readonly nav: readonly NavItem[] = [
 		{ path: '/environment', label: 'Environment', icon: 'thermostat' },
@@ -58,6 +62,7 @@ export class App implements OnInit, OnDestroy {
 	protected readonly themeLabel = computed(() => `Theme: ${this.theme.mode()}`);
 
 	ngOnInit(): void {
+		this.telemetry.init();
 		this.api.start();
 	}
 

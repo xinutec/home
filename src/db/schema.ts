@@ -60,6 +60,16 @@ const MIGRATIONS: readonly string[] = [
     seven_day_resets_at DATETIME,
     PRIMARY KEY (host)
   )`,
+	// v6: SSO sessions. home's reads stay public — this table exists so a *write*
+	// can be attributed to a signed-in person, which is what makes the client
+	// telemetry endpoint safe to expose on a publicly readable host.
+	`CREATE TABLE IF NOT EXISTS sessions (
+    id VARCHAR(64) NOT NULL PRIMARY KEY,
+    user_id VARCHAR(255) NOT NULL,
+    display_name VARCHAR(255) NOT NULL,
+    expires_at DATETIME NOT NULL,
+    INDEX idx_sessions_expires (expires_at)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
 ];
 
 export async function migrate(conn: mariadb.Connection): Promise<void> {
