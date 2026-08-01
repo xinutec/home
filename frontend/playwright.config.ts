@@ -13,7 +13,7 @@ import harness from './e2e/harness.mjs';
  * (repo ~/Code/ui-harness); see dev-lint/docs/layout-quality-architecture.md.
  * What this app says about itself is in e2e/harness.mjs.
  *
- * `npm run ui-check` (wired into verify.sh after `ng build`) serves the
+ * `pnpm run ui-check` (wired into verify.sh after `ng build`) serves the
  * freshly-built dist.
  */
 export default defineConfig(phoneConfig(harness, devices, { goldens: true }));

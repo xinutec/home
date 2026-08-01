@@ -1,7 +1,7 @@
 ---
 name: build
 
-# home (Node/Hono backend + Angular frontend) — gate the image on `npm run
+# home (Node/Hono backend + Angular frontend) — gate the image on `pnpm run
 # verify` (tsc + biome + angular-eslint + backend/frontend unit tests), then
 # build + push xinutec/home:latest to Docker Hub. The k8s manifests + deploy live
 # in the home monorepo (xinutec/pippijn code/kubes/home/k8s); the image tag is the
@@ -23,9 +23,9 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 24
-      - run: npm ci
-      - run: npm ci --prefix frontend
-      - run: npm run verify
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile --dir frontend
+      - run: pnpm run verify
 
   image:
     needs: verify

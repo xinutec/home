@@ -11,7 +11,8 @@
     in {
       devShells = forAll (pkgs: {
         default = pkgs.mkShell {
-          packages = [ pkgs.nodejs_24 ]; # backend + Angular 22 frontend
+          # pnpm, not npm: one machine-wide content-addressed store for both trees.
+          packages = [ pkgs.nodejs_24 pkgs.pnpm ]; # backend + Angular 22 frontend
         };
       });
     };

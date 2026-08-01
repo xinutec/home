@@ -13,7 +13,6 @@
     "format:check": "prettier --check \"src/**/*.{ts,html,scss,json}\""
   },
   "private": true,
-  "packageManager": "npm@11.12.1",
   "dependencies": {
     "@angular/animations": "^22.0.4",
     "@angular/cdk": "^22.0.3",
@@ -46,10 +45,5 @@
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.62.1",
     "vitest": "^4.1.9"
-  },
-  "overrides": {
-    "piscina": "^5.2.0",
-    "esbuild": "^0.28.1",
-    "@babel/core": "^7.29.6"
   }
 }

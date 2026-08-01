@@ -21,7 +21,7 @@ irrelevant to real builds.
 
 ## Verify
 
-`npm run verify` = tsc + tsc(frontend) + biome + ng lint + vitest + frontend
+`pnpm run verify` = tsc + tsc(frontend) + biome + ng lint + vitest + frontend
 tests. Caveat: plain `tsc -p tsconfig.app.json` does **not** run Angular
 strictTemplates — template type errors (e.g. a field missing on the frontend's
 own `DeviceLabel`) only surface under `ng build`/`ng test`. Verify templates
