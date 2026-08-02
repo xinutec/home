@@ -20,23 +20,23 @@ import { filter } from 'rxjs';
  */
 @Injectable({ providedIn: 'root' })
 export class Telemetry {
-  private readonly router = inject(Router);
-  private readonly doc = inject(DOCUMENT);
-  private readonly core = new TelemetryCore(this.doc);
+	private readonly router = inject(Router);
+	private readonly doc = inject(DOCUMENT);
+	private readonly core = new TelemetryCore(this.doc);
 
-  /** Wire the two capture points. Called once from the app shell; idempotent. */
-  init(): void {
-    if (this.core.started) return;
+	/** Wire the two capture points. Called once from the app shell; idempotent. */
+	init(): void {
+		if (this.core.started) return;
 
-    this.router.events
-      .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
-      .subscribe((e) => this.core.record('nav', e.urlAfterRedirects, null));
+		this.router.events
+			.pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
+			.subscribe((e) => this.core.record('nav', e.urlAfterRedirects, null));
 
-    // Capture phase, so the tap is seen even where a handler stops propagation.
-    this.doc.addEventListener('click', (ev) => this.core.recordTap(ev.target, this.router.url), {
-      capture: true,
-    });
+		// Capture phase, so the tap is seen even where a handler stops propagation.
+		this.doc.addEventListener('click', (ev) => this.core.recordTap(ev.target, this.router.url), {
+			capture: true,
+		});
 
-    this.core.start();
-  }
+		this.core.start();
+	}
 }
