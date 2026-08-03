@@ -10,7 +10,8 @@
     "lint": "ng lint",
     "ui-check": "playwright test",
     "format": "prettier --write \"src/**/*.{ts,html,scss,json}\"",
-    "format:check": "prettier --check \"src/**/*.{ts,html,scss,json}\""
+    "format:check": "prettier --check \"src/**/*.{ts,html,scss,json}\"",
+    "typecheck:e2e": "tsc -p tsconfig.e2e.json"
   },
   "private": true,
   "dependencies": {

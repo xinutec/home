@@ -66,9 +66,7 @@ body {
 	--chart-humidity: #2f80ed;
 	// dev-lint: allow-hardcoded-color chart accent — deliberate data-viz colour
 	--chart-pm: #8e44ad;
-}
 
-:root {
 	// Data-viz display scale — hero/numeral sizes the M3 type roles don't
 	// cover (a dashboard's big readings). One source of truth; components
 	// reference these instead of inventing per-element rem sizes.
