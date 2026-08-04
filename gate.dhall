@@ -34,11 +34,21 @@ strictTemplates, so a template error is invisible to every other row here.
 
 The generated `gate.json` is committed; `the table matches its Dhall` re-renders
 and diffs it, so running the gate needs no `dhall`.
+
+**The vocabulary moved into the schema.** `inDevShell`, the clippy target
+directory, the Angular worker cap, and the `ng-build` / `dev-lint` /
+`check-table` rows were spelled out here and in a dozen other tables
+identically — the duplication the shared tools were built to remove, recreated
+one level up. They are `G.` values now. Two consequences the rendered JSON
+shows: every dev-shell row gains `--no-warn-dirty`, because a gate that prints
+"Git tree is dirty" on every row of every run has trained everyone to ignore a
+warning; and dev-lint is pinned to its committed HEAD rather than run out of its
+worktree, which is what stops a neighbour's half-finished edit failing this gate
+for a reason no commit anywhere explains.
+
 -}
 
 let G = ../dev-lint/gate/schema.dhall
-
-let inDevShell = \(argv : List Text) -> [ "nix", "develop", "--command" ] # argv
 
 in  { name = "home"
     , checks =
@@ -49,24 +59,24 @@ in  { name = "home"
         -}
         G.Check::{
         , name = "root deps match the lockfile"
-        , argv = inDevShell [ "pnpm", "install", "--frozen-lockfile" ]
+        , argv = G.inDevShell [ "pnpm", "install", "--frozen-lockfile" ]
         , timeout_s = 900
         }
       , G.Check::{
         , name = "frontend deps match the lockfile"
         , cwd = "frontend"
-        , argv = inDevShell [ "pnpm", "install", "--frozen-lockfile" ]
+        , argv = G.inDevShell [ "pnpm", "install", "--frozen-lockfile" ]
         , timeout_s = 900
         }
       , G.Check::{
         , name = "backend typecheck"
-        , argv = inDevShell [ "pnpm", "exec", "tsc", "--noEmit" ]
+        , argv = G.inDevShell [ "pnpm", "exec", "tsc", "--noEmit" ]
         , timeout_s = 900
         }
       , G.Check::{
         , name = "backend typecheck (tests)"
         , argv =
-            inDevShell
+            G.inDevShell
               [ "pnpm", "exec", "tsc", "--noEmit", "-p", "tsconfig.test.json" ]
         , timeout_s = 900
         }
@@ -74,7 +84,7 @@ in  { name = "home"
         , name = "frontend typecheck (app)"
         , cwd = "frontend"
         , argv =
-            inDevShell
+            G.inDevShell
               [ "pnpm", "exec", "tsc", "--noEmit", "-p", "tsconfig.app.json" ]
         , timeout_s = 900
         }
@@ -82,36 +92,36 @@ in  { name = "home"
         , name = "frontend typecheck (e2e)"
         , cwd = "frontend"
         , argv =
-            inDevShell
+            G.inDevShell
               [ "pnpm", "exec", "tsc", "--noEmit", "-p", "tsconfig.e2e.json" ]
         , timeout_s = 900
         }
       , G.Check::{
         , name = "backend lint (biome)"
-        , argv = inDevShell [ "pnpm", "run", "lint" ]
+        , argv = G.inDevShell [ "pnpm", "run", "lint" ]
         , timeout_s = 900
         }
       , G.Check::{
         , name = "frontend lint"
         , cwd = "frontend"
-        , argv = inDevShell [ "pnpm", "run", "lint" ]
+        , argv = G.inDevShell [ "pnpm", "run", "lint" ]
         , timeout_s = 900
         }
       , G.Check::{
         , name = "frontend formatting"
         , cwd = "frontend"
-        , argv = inDevShell [ "pnpm", "run", "format:check" ]
+        , argv = G.inDevShell [ "pnpm", "run", "format:check" ]
         , timeout_s = 900
         }
       , G.Check::{
         , name = "backend tests (vitest)"
-        , argv = inDevShell [ "pnpm", "test" ]
+        , argv = G.inDevShell [ "pnpm", "test" ]
         , timeout_s = 1800
         }
       , G.Check::{
         , name = "frontend tests"
         , cwd = "frontend"
-        , argv = inDevShell [ "pnpm", "test" ]
+        , argv = G.inDevShell [ "pnpm", "test" ]
         , timeout_s = 1800
         }
       , {-  `../../dev-lint`, not `../dev-lint`: cwd is `home/frontend`.
@@ -120,15 +130,10 @@ in  { name = "home"
         , name = "frontend build"
         , cwd = "frontend"
         , argv =
-              inDevShell [ "nix", "run", "../../dev-lint#ng-build", "--" ]
-            # [ "--expect"
-              , "dist/frontend/browser"
-              , "--"
-              , "pnpm"
-              , "exec"
-              , "ng"
-              , "build"
-              ]
+            G.ngBuild
+              "../../"
+              [ "dist/frontend/browser" ]
+              [ "pnpm", "exec", "ng", "build" ]
         , timeout_s = 1800
         }
       , {-  The L2 phone-width layout harness: `e2e/serve.mjs` serves the dist the
@@ -138,30 +143,10 @@ in  { name = "home"
         G.Check::{
         , name = "frontend ui-check (phone-width layout harness)"
         , cwd = "frontend"
-        , argv = inDevShell [ "pnpm", "run", "ui-check" ]
+        , argv = G.inDevShell [ "pnpm", "run", "ui-check" ]
         , timeout_s = 1800
         }
-      , G.Check::{
-        , name = "the table matches its Dhall"
-        , argv =
-            [ "nix"
-            , "run"
-            , "../dev-lint#gate"
-            , "--"
-            , "--check-table"
-            , "gate.dhall"
-            , "gate.json"
-            ]
-        , timeout_s = 120
-        }
-      , {-  Shared fleet rules over the whole repository. `nix run`, never
-            result/bin — a pinned build goes stale and silently misses rules
-            shipped since.
-        -}
-        G.Check::{
-        , name = "dev-lint"
-        , argv = [ "nix", "run", "../dev-lint", "--", "." ]
-        , timeout_s = 900
-        }
+      , G.checkTable "../dev-lint"
+      , G.devLint "../"
       ]
     }
