@@ -1,0 +1,231 @@
+{
+  "checks": [
+    {
+      "argv": [
+        "nix",
+        "develop",
+        "--command",
+        "pnpm",
+        "install",
+        "--frozen-lockfile"
+      ],
+      "cwd": ".",
+      "env": {},
+      "name": "root deps match the lockfile",
+      "timeout_s": 900
+    },
+    {
+      "argv": [
+        "nix",
+        "develop",
+        "--command",
+        "pnpm",
+        "install",
+        "--frozen-lockfile"
+      ],
+      "cwd": "frontend",
+      "env": {},
+      "name": "frontend deps match the lockfile",
+      "timeout_s": 900
+    },
+    {
+      "argv": [
+        "nix",
+        "develop",
+        "--command",
+        "pnpm",
+        "exec",
+        "tsc",
+        "--noEmit"
+      ],
+      "cwd": ".",
+      "env": {},
+      "name": "backend typecheck",
+      "timeout_s": 900
+    },
+    {
+      "argv": [
+        "nix",
+        "develop",
+        "--command",
+        "pnpm",
+        "exec",
+        "tsc",
+        "--noEmit",
+        "-p",
+        "tsconfig.test.json"
+      ],
+      "cwd": ".",
+      "env": {},
+      "name": "backend typecheck (tests)",
+      "timeout_s": 900
+    },
+    {
+      "argv": [
+        "nix",
+        "develop",
+        "--command",
+        "pnpm",
+        "exec",
+        "tsc",
+        "--noEmit",
+        "-p",
+        "tsconfig.app.json"
+      ],
+      "cwd": "frontend",
+      "env": {},
+      "name": "frontend typecheck (app)",
+      "timeout_s": 900
+    },
+    {
+      "argv": [
+        "nix",
+        "develop",
+        "--command",
+        "pnpm",
+        "exec",
+        "tsc",
+        "--noEmit",
+        "-p",
+        "tsconfig.e2e.json"
+      ],
+      "cwd": "frontend",
+      "env": {},
+      "name": "frontend typecheck (e2e)",
+      "timeout_s": 900
+    },
+    {
+      "argv": [
+        "nix",
+        "develop",
+        "--command",
+        "pnpm",
+        "run",
+        "lint"
+      ],
+      "cwd": ".",
+      "env": {},
+      "name": "backend lint (biome)",
+      "timeout_s": 900
+    },
+    {
+      "argv": [
+        "nix",
+        "develop",
+        "--command",
+        "pnpm",
+        "run",
+        "lint"
+      ],
+      "cwd": "frontend",
+      "env": {},
+      "name": "frontend lint",
+      "timeout_s": 900
+    },
+    {
+      "argv": [
+        "nix",
+        "develop",
+        "--command",
+        "pnpm",
+        "run",
+        "format:check"
+      ],
+      "cwd": "frontend",
+      "env": {},
+      "name": "frontend formatting",
+      "timeout_s": 900
+    },
+    {
+      "argv": [
+        "nix",
+        "develop",
+        "--command",
+        "pnpm",
+        "test"
+      ],
+      "cwd": ".",
+      "env": {},
+      "name": "backend tests (vitest)",
+      "timeout_s": 1800
+    },
+    {
+      "argv": [
+        "nix",
+        "develop",
+        "--command",
+        "pnpm",
+        "test"
+      ],
+      "cwd": "frontend",
+      "env": {},
+      "name": "frontend tests",
+      "timeout_s": 1800
+    },
+    {
+      "argv": [
+        "nix",
+        "develop",
+        "--command",
+        "nix",
+        "run",
+        "../../dev-lint#ng-build",
+        "--",
+        "--expect",
+        "dist/frontend/browser",
+        "--",
+        "pnpm",
+        "exec",
+        "ng",
+        "build"
+      ],
+      "cwd": "frontend",
+      "env": {},
+      "name": "frontend build",
+      "timeout_s": 1800
+    },
+    {
+      "argv": [
+        "nix",
+        "develop",
+        "--command",
+        "pnpm",
+        "run",
+        "ui-check"
+      ],
+      "cwd": "frontend",
+      "env": {},
+      "name": "frontend ui-check (phone-width layout harness)",
+      "timeout_s": 1800
+    },
+    {
+      "argv": [
+        "nix",
+        "run",
+        "../dev-lint#gate",
+        "--",
+        "--check-table",
+        "gate.dhall",
+        "gate.json"
+      ],
+      "cwd": ".",
+      "env": {},
+      "name": "the table matches its Dhall",
+      "timeout_s": 120
+    },
+    {
+      "argv": [
+        "nix",
+        "run",
+        "../dev-lint",
+        "--",
+        "."
+      ],
+      "cwd": ".",
+      "env": {},
+      "name": "dev-lint",
+      "timeout_s": 900
+    }
+  ],
+  "name": "home"
+}

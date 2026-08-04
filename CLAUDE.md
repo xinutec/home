@@ -21,12 +21,24 @@ irrelevant to real builds.
 
 ## Verify
 
-`pnpm run verify` = tsc + tsc(frontend) + biome + ng lint + vitest + frontend
-tests. Caveat: plain `tsc -p tsconfig.app.json` does **not** run Angular
-strictTemplates — template type errors (e.g. a field missing on the frontend's
-own `DeviceLabel`) only surface under `ng build`/`ng test`. Verify templates
-with a real `ng build`, not just tsc. The Mac esbuild kqueue assertion that
-prints *after* "bundle generation complete" is harmless.
+`gate.dhall` is the gate (and the pre-commit hook) — fifteen named checks. Run
+it with `nix run ../dev-lint#gate -- . gate.json`.
+
+`pnpm run verify` still exists for hand use (tsc + tsc(frontend) + biome + ng
+lint + vitest + frontend tests), but it is a six-way `&&` chain and no longer
+what defines the gate: the table calls the parts, so a red gate names which of
+the six is wrong instead of stopping at the first.
+
+Caveat that earns the build row: plain `tsc -p tsconfig.app.json` does **not**
+run Angular strictTemplates — template type errors (e.g. a field missing on the
+frontend's own `DeviceLabel`) only surface under `ng build`/`ng test`. Verify
+templates with a real `ng build`, not just tsc.
+
+The Mac esbuild kqueue assertion that prints *after* "bundle generation
+complete" is harmless, and is no longer something to remember: the build row
+goes through `dev-lint`'s `ng-build`, which judges the bundle on disk rather
+than the exit status, so a teardown abort over a good bundle no longer fails
+the gate and no longer needs a re-run by hand.
 
 ## Deploy
 
