@@ -46,9 +46,41 @@ export class UsagePage implements OnInit, OnDestroy {
 	}
 
 	/**
+	 * A window's figure, or `null` once that window has turned over.
+	 *
+	 * ⚠ **A percentage belongs to a window.** When the window resets the figure
+	 * goes back to nothing, so a reading taken before the turn describes a window
+	 * that no longer exists — and drawing it is a claim about the account that is
+	 * not true. This is the ordinary case rather than a corner of it: the row
+	 * comes from a machine that may have gone quiet, and a quiet machine's last
+	 * reading ages past its own window within hours.
+	 *
+	 * Measured 2026-08-05: this page showed 28% for a five-hour window that had
+	 * ended 27 hours earlier, captioned "resets now", while the true weekly
+	 * figure was 92% against the 66% on screen. Nothing said so, because a stale
+	 * gauge looks exactly like a current one. The console's copy of the same
+	 * number already works this way — `Window.resets_in_ms` in memview's
+	 * `console/src/usage.rs`.
+	 *
+	 * Judged per window, never per reading: the five hours can be long dead while
+	 * the week containing it is still live, and one staleness flag over the row
+	 * would throw away a figure that is true.
+	 */
+	protected live(pct: number | null, iso: string | null): number | null {
+		if (pct == null || !iso) {
+			return null;
+		}
+		return new Date(iso).getTime() > this.now() ? pct : null;
+	}
+
+	/**
 	 * Human "resets in Xh Ym" for a rate-limit window's reset instant. Reads the
 	 * `now()` tick so the countdown updates as time passes; empty when there's no
 	 * reset time (window absent from the snapshot).
+	 *
+	 * ⚠ Past the reset this says the window **has** reset, not that it is
+	 * resetting "now". The old wording read as something about to happen, which
+	 * is precisely how a day-old figure got to look current.
 	 */
 	protected fmtReset(iso: string | null): string {
 		if (!iso) {
@@ -56,7 +88,7 @@ export class UsagePage implements OnInit, OnDestroy {
 		}
 		const ms = new Date(iso).getTime() - this.now();
 		if (ms <= 0) {
-			return 'resets now';
+			return 'window has reset';
 		}
 		const h = Math.floor(ms / 3_600_000);
 		const m = Math.floor((ms % 3_600_000) / 60_000);
