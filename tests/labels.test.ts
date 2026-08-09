@@ -28,6 +28,23 @@ describe("labelFor", () => {
 		expect(l.name).toBe("Coffee Machine");
 	});
 
+	it("sites the three H5103s added in August", () => {
+		// Each is a distinct room, and each sorts after the four that were here
+		// first — a new sensor should join the end of the list, not displace the
+		// rooms somebody is used to reading in order.
+		const sited: [device: string, room: string][] = [
+			["govee-0345", "Hallway"],
+			["govee-251B", "Bathroom"],
+			["govee-014E", "Stairs"],
+		];
+		for (const [device, room] of sited) {
+			const l = labelFor(device);
+			expect(l.room).toBe(room);
+			expect(l.type).toBe("Govee H5103");
+			expect(l.order).toBeGreaterThan(labelFor("govee-267F").order);
+		}
+	});
+
 	it("falls back to the raw id for an unmapped device", () => {
 		const l = labelFor("govee-FFFF");
 		expect(l.name).toBe("govee-FFFF");

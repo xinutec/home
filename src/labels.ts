@@ -65,6 +65,27 @@ const LABELS: Record<string, DeviceLabel> = {
 		order: 4,
 		type: "Govee H5103",
 	},
+	"govee-0345": {
+		name: "govee-0345",
+		room: "Hallway",
+		airQuality: false,
+		order: 5,
+		type: "Govee H5103",
+	},
+	"govee-251B": {
+		name: "govee-251B",
+		room: "Bathroom",
+		airQuality: false,
+		order: 6,
+		type: "Govee H5103",
+	},
+	"govee-014E": {
+		name: "govee-014E",
+		room: "Stairs",
+		airQuality: false,
+		order: 7,
+		type: "Govee H5103",
+	},
 	// Smart-plug power monitors (Tasmota-flashed sockets). `power: true` routes
 	// them to the power section instead of the climate room views. Named by the
 	// appliance they meter; `room` is set once each is sited.
