@@ -183,7 +183,7 @@ export function apiRoutes(ingestToken: string): Hono<AppEnv> {
 	// Keyed by source, not device, and that distinction is the whole point: a sensor
 	// stays fresh as long as ANY receiver hears it, so device freshness cannot see a
 	// single receiver going deaf. When the pixel5 receiver went silent for 7 hours the
-	// Mac and bes still covered all four sensors, so every device — and the whole
+	// other receivers still covered all four sensors, so every device — and the whole
 	// dashboard — stayed green. This is the view that makes a dead receiver visible.
 	api.get("/receivers", async (c) => {
 		const rows = await db()

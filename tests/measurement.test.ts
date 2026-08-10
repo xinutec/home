@@ -43,11 +43,11 @@ describe("MeasurementInput", () => {
 			humidity: 58,
 			battery: 100,
 			rssi: -62,
-			source: "bes",
+			source: "pixel5",
 		});
 		expect(r.battery).toBe(100);
 		expect(r.rssi).toBe(-62);
-		expect(r.source).toBe("bes");
+		expect(r.source).toBe("pixel5");
 	});
 
 	it("rejects an out-of-range battery", () => {

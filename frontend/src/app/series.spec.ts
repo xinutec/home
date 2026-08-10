@@ -98,13 +98,13 @@ describe('rssiByReceiverSeries', () => {
 		const devices = [dev('govee-267F', false, 0)];
 		const history = {
 			'govee-267F': [
-				reading({ ts: '2026-06-27T00:00:00.000Z', rssi: -69, source: 'bes' }),
+				reading({ ts: '2026-06-27T00:00:00.000Z', rssi: -69, source: 'pixel5' }),
 				reading({ ts: '2026-06-27T00:05:00.000Z', rssi: -81, source: 'mac' }),
-				reading({ ts: '2026-06-27T00:10:00.000Z', rssi: -68, source: 'bes' }),
+				reading({ ts: '2026-06-27T00:10:00.000Z', rssi: -68, source: 'pixel5' }),
 			],
 		};
 		const s = rssiByReceiverSeries(devices, history);
-		expect(s.map((x) => x.label)).toEqual(['govee-267F · bes', 'govee-267F · mac']);
+		expect(s.map((x) => x.label)).toEqual(['govee-267F · pixel5', 'govee-267F · mac']);
 		expect(s[0].points.map((p) => p.y)).toEqual([-69, -68]);
 		expect(s[1].points.map((p) => p.y)).toEqual([-81]);
 	});

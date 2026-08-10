@@ -39,9 +39,9 @@ export function climateSeries(
 
 /**
  * RSSI split into one line per receiver (`source`). A sensor two boxes hear
- * (e.g. the Mac + bes) otherwise draws as a single line zig-zagging between the
- * two links' strengths; grouping by source gives one calm line per link. Every
- * line is suffixed with its receiver (` · mac` / ` · bes`) so the legend is
+ * (e.g. the Mac + the phone) otherwise draws as a single line zig-zagging between
+ * the two links' strengths; grouping by source gives one calm line per link. Every
+ * line is suffixed with its receiver (` · mac` / ` · pixel5`) so the legend is
  * unambiguous even when a sensor has only one line. Rows captured before source
  * tagging (null source; also the wired IQAir) group under ` · untagged` — a
  * transient bucket that ages out as the window scrolls past the tagging deploy.

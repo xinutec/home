@@ -33,7 +33,7 @@ export const MeasurementInput = z.object({
 	current_a: z.number().min(0).nullable().optional(),
 	energy_kwh: z.number().min(0).nullable().optional(),
 	power_on: z.boolean().nullable().optional(),
-	// Which host captured the reading ("mac" / "bes" for the two Govee BLE
+	// Which host captured the reading ("mac" / "pixel5" for the Govee BLE
 	// receivers). Lets the RSSI chart draw one line per receiver.
 	source: z.string().min(1).max(16).nullable().optional(),
 });

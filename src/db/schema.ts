@@ -38,8 +38,10 @@ const MIGRATIONS: readonly string[] = [
     ADD COLUMN current_a DECIMAL(8,3),
     ADD COLUMN energy_kwh DECIMAL(12,3),
     ADD COLUMN power_on TINYINT`,
-	// v5: which host captured the reading (e.g. "mac" / "bes" for the two Govee
-	// BLE receivers). Nullable — pre-v5 rows and the wired IQAir leave it null.
+	// v5: which host captured the reading (e.g. "mac" / "pixel5" for the Govee
+	// BLE receivers). A free-form host id, not an enum — receivers come and go,
+	// and rows keep the name of whichever one wrote them however long ago.
+	// Nullable — pre-v5 rows and the wired IQAir leave it null.
 	// Not part of the key: a row is still one (device, ts); source just records
 	// who wrote it, so the RSSI chart can draw one line per receiver instead of a
 	// zig-zag across the two links that hear the same sensor.

@@ -140,7 +140,7 @@ export class EnvironmentPage implements OnInit, OnDestroy {
 		),
 	);
 	// Bluetooth signal (dBm): one line per (device, receiver) so a sensor heard by
-	// both the Mac and bes shows a calm line per link, not a zig-zag between them.
+	// both the Mac and the phone shows a calm line per link, not a zig-zag between them.
 	// Empty series (e.g. the wired IQAir) are dropped inside the helper.
 	protected readonly rssiSeries = computed(() =>
 		rssiByReceiverSeries(this.devices(), this.api.historyByDevice()),
