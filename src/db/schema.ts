@@ -72,6 +72,33 @@ const MIGRATIONS: readonly string[] = [
     expires_at DATETIME NOT NULL,
     INDEX idx_sessions_expires (expires_at)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+	// v8: the windows that belong to ONE MODEL rather than to the plan — today
+	// Fable's weekly allowance, which is a ceiling of its own beside the weekly
+	// all-models figure.
+	//
+	// Its own table rather than columns on `claude_usage`, for two reasons that
+	// are both about who writes what. **The model is data, not a column name:**
+	// the CLI sends these in a `model_scoped` array carrying the model's display
+	// name, and the fixed keys it used to use (`seven_day_opus`,
+	// `seven_day_sonnet`) both read null now — a column per model would want a
+	// migration every time Anthropic scopes a different one. And **the two
+	// pushers do not know the same things:** the statusLine hook's payload
+	// carries `five_hour` and `seven_day` alone (read out of CLI 2.1.226), so a
+	// column on the shared row would be nulled every time that pusher wrote and
+	// the figure would blink in and out depending on which pushed last.
+	//
+	// Current state like `claude_usage`, so the key is (host, model) and a push
+	// upserts. `ts` is per row rather than borrowed from the host's snapshot,
+	// because only the console's pusher writes these and a statusLine-written
+	// `claude_usage.ts` would otherwise date them.
+	`CREATE TABLE IF NOT EXISTS claude_usage_model (
+    host VARCHAR(64) NOT NULL,
+    model VARCHAR(64) NOT NULL,
+    ts DATETIME NOT NULL,
+    pct DECIMAL(5,2),
+    resets_at DATETIME,
+    PRIMARY KEY (host, model)
+  )`,
 ];
 
 export async function migrate(conn: mariadb.Connection): Promise<void> {

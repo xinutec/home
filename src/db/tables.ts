@@ -41,6 +41,16 @@ export interface ClaudeUsageTable {
 	seven_day_resets_at: Date | null;
 }
 
+/** One model's own rate-limit window, keyed by (host, model). See schema v8. */
+export interface ClaudeUsageModelTable {
+	host: string;
+	/** The model's display name as the CLI gives it — "Fable". Data, not an enum. */
+	model: string;
+	ts: Date;
+	pct: number | null;
+	resets_at: Date | null;
+}
+
 export interface SessionsTable {
 	id: string;
 	user_id: string;
@@ -52,5 +62,6 @@ export interface Database {
 	measurement: MeasurementTable;
 	schema_version: SchemaVersionTable;
 	claude_usage: ClaudeUsageTable;
+	claude_usage_model: ClaudeUsageModelTable;
 	sessions: SessionsTable;
 }

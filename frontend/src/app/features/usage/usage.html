@@ -30,6 +30,23 @@
 				<mat-progress-bar mode="determinate" [value]="sevenDay ?? 0" />
 				<div class="cu-reset">{{ fmtReset(u.seven_day_resets_at) }}</div>
 			</mat-card>
+			<!-- A model's own weekly ceiling, beside the all-models one. Named by
+			     the model rather than by a heading this template chose: which
+			     models are scoped is Anthropic's business and changes without
+			     notice, so the card list follows the data. -->
+			@for (m of u.models ?? []; track m.model) {
+				@let scoped = live(m.pct, m.resets_at);
+				<mat-card class="cu-card" appearance="outlined">
+					<div class="cu-top">
+						<span class="cu-name">Weekly · {{ m.model }}</span>
+						<span class="cu-pct">
+							{{ scoped != null ? (scoped | number: '1.0-0') + '%' : '—' }}
+						</span>
+					</div>
+					<mat-progress-bar mode="determinate" [value]="scoped ?? 0" />
+					<div class="cu-reset">{{ fmtReset(m.resets_at) }}</div>
+				</mat-card>
+			}
 		</div>
 	</section>
 } @else {

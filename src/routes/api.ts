@@ -138,6 +138,43 @@ export function apiRoutes(ingestToken: string): Hono<AppEnv> {
 				seven_day_resets_at: row.seven_day_resets_at,
 			})
 			.execute();
+		// ⚠ **Only when the payload speaks to them.** A pusher that cannot see
+		// model scopes omits the key entirely, and its push must leave this host's
+		// scoped rows exactly as they were — see `UsageInput.models`. An empty
+		// array is a statement and does clear them.
+		const models = parsed.data.models;
+		if (models) {
+			// A scope the account no longer has must go, and an upsert can only
+			// ever add — so this host's rows for models NOT in the push are
+			// dropped first. With an empty push that is all of them.
+			let drop = db().deleteFrom("claude_usage_model").where("host", "=", row.host);
+			if (models.length > 0) {
+				drop = drop.where(
+					"model",
+					"not in",
+					models.map((m) => m.model),
+				);
+			}
+			await drop.execute();
+			for (const m of models) {
+				const scoped = {
+					host: row.host,
+					model: m.model,
+					ts: row.ts,
+					pct: m.pct,
+					resets_at: new Date(m.resets_at),
+				};
+				await db()
+					.insertInto("claude_usage_model")
+					.values(scoped)
+					.onDuplicateKeyUpdate({
+						ts: scoped.ts,
+						pct: scoped.pct,
+						resets_at: scoped.resets_at,
+					})
+					.execute();
+			}
+		}
 		return c.json({ ok: true });
 	});
 
@@ -152,7 +189,20 @@ export function apiRoutes(ingestToken: string): Hono<AppEnv> {
 			.orderBy("ts", "desc")
 			.limit(1)
 			.executeTakeFirst();
-		return c.json(row ?? null);
+		if (!row) {
+			return c.json(null);
+		}
+		// The model-scoped windows, freshest first so one row per model survives
+		// the fold below. Account-wide like the rest, so they are gathered across
+		// hosts rather than from the host whose snapshot won above — that host may
+		// be one whose pusher cannot see scopes at all.
+		const scoped = await db()
+			.selectFrom("claude_usage_model")
+			.selectAll()
+			.orderBy("ts", "desc")
+			.execute();
+		const models = [...new Map(scoped.map((m) => [m.model, m])).values()];
+		return c.json({ ...row, models });
 	});
 
 	// Public read: the latest reading per device, each tagged with its display

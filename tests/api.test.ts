@@ -89,6 +89,27 @@ describe("POST /usage auth + validation", () => {
 		});
 		expect(res.status).toBe(400);
 	});
+
+	it("rejects a model-scoped window that is missing a part of itself", async () => {
+		// A scoped window is all three or none: the name is what the card is
+		// labelled with, and the reset is what says the figure still describes a
+		// window that exists. Half of one would be drawn as a bar for a model
+		// nobody can name.
+		for (const models of [
+			[{ pct: 6, resets_at: "2026-08-14T01:59:59.000Z" }],
+			[{ model: "Fable", resets_at: "2026-08-14T01:59:59.000Z" }],
+			[{ model: "Fable", pct: 6 }],
+			[{ model: "Fable", pct: 6, resets_at: "not a date" }],
+			[{ model: "Fable", pct: 150, resets_at: "2026-08-14T01:59:59.000Z" }],
+		]) {
+			const res = await app.request("/usage", {
+				method: "POST",
+				headers: { Authorization: `Bearer ${TOKEN}` },
+				body: JSON.stringify({ host: "mac-mini", seven_day_pct: 87, models }),
+			});
+			expect(res.status, JSON.stringify(models)).toBe(400);
+		}
+	});
 });
 
 describe("GET /measurements query validation", () => {

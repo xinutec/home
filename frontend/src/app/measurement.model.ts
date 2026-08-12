@@ -54,6 +54,22 @@ export interface ClaudeUsage {
 	five_hour_resets_at: string | null;
 	seven_day_pct: number | null;
 	seven_day_resets_at: string | null;
+	/**
+	 * The windows belonging to one model rather than to the plan. Optional
+	 * because a browser holding this build can be served by an API that predates
+	 * the column — and because the list is whatever Anthropic scopes today, which
+	 * is why the model is a field rather than a name in this type.
+	 */
+	models?: ClaudeUsageModel[];
+}
+
+/** One model's own weekly allowance, as `/api/usage` reports it. */
+export interface ClaudeUsageModel {
+	/** Display name from the CLI — "Fable". Shown verbatim. */
+	model: string;
+	ts: string;
+	pct: number | null;
+	resets_at: string | null;
 }
 
 /** Distinct line colours for the per-room comparison charts, assigned by order. */
