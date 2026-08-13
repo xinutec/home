@@ -14,6 +14,7 @@ import {
 	type RangeKey,
 	aqiBand,
 	cleanVoc,
+	rangeOption,
 } from '../../measurement.model';
 import { RelativeTimePipe } from '../../relative-time.pipe';
 import { airSeries, climateSeries, rssiByReceiverSeries } from '../../series';
@@ -77,10 +78,7 @@ export class EnvironmentPage implements OnInit, OnDestroy {
 	private nowTimer: ReturnType<typeof setInterval> | null = null;
 
 	/** Span of the active range in ms, for chart x-axis sizing. */
-	protected readonly spanMs = computed(() => {
-		const opt = RANGE_OPTIONS.find((o) => o.key === this.range()) ?? RANGE_OPTIONS[0];
-		return opt.hours * 3_600_000;
-	});
+	protected readonly spanMs = computed(() => rangeOption(this.range()).hours * 3_600_000);
 
 	protected readonly band = computed(() => aqiBand(this.airDevice()?.aqi_us));
 	protected readonly voc = computed(() => cleanVoc(this.airDevice()?.voc_ppb));

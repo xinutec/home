@@ -83,7 +83,7 @@ export const ROOM_COLORS: readonly string[] = [
 ];
 
 /** Selectable history windows for the time-series charts. */
-export type RangeKey = '24h' | '7d' | '30d';
+export type RangeKey = '1h' | '24h' | '7d' | '30d';
 
 export interface RangeOption {
 	key: RangeKey;
@@ -92,10 +92,26 @@ export interface RangeOption {
 }
 
 export const RANGE_OPTIONS: readonly RangeOption[] = [
+	{ key: '1h', label: '1 hour', hours: 1 },
 	{ key: '24h', label: '24 hours', hours: 24 },
 	{ key: '7d', label: '7 days', hours: 24 * 7 },
 	{ key: '30d', label: '30 days', hours: 24 * 30 },
 ];
+
+/** The window shown before anyone touches the selector. */
+export const DEFAULT_RANGE: RangeKey = '24h';
+
+/**
+ * The option for `key`. Named rather than `RANGE_OPTIONS[0]` so the fallback
+ * stays the default window whatever order the list is written in.
+ */
+export function rangeOption(key: RangeKey): RangeOption {
+	return (
+		RANGE_OPTIONS.find((o) => o.key === key) ??
+		RANGE_OPTIONS.find((o) => o.key === DEFAULT_RANGE) ??
+		RANGE_OPTIONS[0]
+	);
+}
 
 export interface AqiBand {
 	/** Inclusive lower bound of the US-AQI band. */

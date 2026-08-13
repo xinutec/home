@@ -3,10 +3,11 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import {
 	type ClaudeUsage,
+	DEFAULT_RANGE,
 	type DeviceLatest,
 	type Measurement,
-	RANGE_OPTIONS,
 	type RangeKey,
+	rangeOption,
 } from './measurement.model';
 
 const LATEST_REFRESH_MS = 60_000;
@@ -29,7 +30,7 @@ export class ApiService {
 	private readonly _historyLoading = signal(false);
 	private readonly _historyError = signal<string | null>(null);
 
-	private readonly _range = signal<RangeKey>('24h');
+	private readonly _range = signal<RangeKey>(DEFAULT_RANGE);
 
 	private readonly _usage = signal<ClaudeUsage | null>(null);
 	/** Freshest Claude Code usage snapshot, or null until one is pushed. */
@@ -126,7 +127,7 @@ export class ApiService {
 			this._historyByDevice.set({});
 			return;
 		}
-		const opt = RANGE_OPTIONS.find((o) => o.key === this._range()) ?? RANGE_OPTIONS[0];
+		const opt = rangeOption(this._range());
 		const to = new Date();
 		const from = new Date(to.getTime() - opt.hours * 3_600_000);
 
