@@ -82,35 +82,30 @@ export const ROOM_COLORS: readonly string[] = [
 	'#8d6e63',
 ];
 
-/** Selectable history windows for the time-series charts. */
-export type RangeKey = '4h' | '24h' | '7d' | '30d';
+/** Selectable history windows for the charts, in the order the selector shows. */
+export const RANGE_KEYS = ['4h', '24h', '7d', '30d'] as const;
 
-export interface RangeOption {
-	key: RangeKey;
-	label: string;
-	hours: number;
-}
+export type RangeKey = (typeof RANGE_KEYS)[number];
 
-export const RANGE_OPTIONS: readonly RangeOption[] = [
-	{ key: '4h', label: '4 hours', hours: 4 },
-	{ key: '24h', label: '24 hours', hours: 24 },
-	{ key: '7d', label: '7 days', hours: 24 * 7 },
-	{ key: '30d', label: '30 days', hours: 24 * 30 },
-];
+/**
+ * How long each window is. `Record<RangeKey, …>` is what keeps the two lists
+ * honest: a window listed above and missing here, or an entry here that no
+ * selector offers, is a compile error rather than a lookup that quietly
+ * substitutes some other window at runtime.
+ */
+const RANGE_HOURS: Record<RangeKey, number> = {
+	'4h': 4,
+	'24h': 24,
+	'7d': 24 * 7,
+	'30d': 24 * 30,
+};
 
 /** The window shown before anyone touches the selector. */
 export const DEFAULT_RANGE: RangeKey = '24h';
 
-/**
- * The option for `key`. Named rather than `RANGE_OPTIONS[0]` so the fallback
- * stays the default window whatever order the list is written in.
- */
-export function rangeOption(key: RangeKey): RangeOption {
-	return (
-		RANGE_OPTIONS.find((o) => o.key === key) ??
-		RANGE_OPTIONS.find((o) => o.key === DEFAULT_RANGE) ??
-		RANGE_OPTIONS[0]
-	);
+/** A window's span in ms — the one place its hours become milliseconds. */
+export function rangeMs(key: RangeKey): number {
+	return RANGE_HOURS[key] * 3_600_000;
 }
 
 export interface AqiBand {

@@ -9,12 +9,12 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { ApiService } from '../../api.service';
 import {
 	type DeviceLatest,
-	RANGE_OPTIONS,
+	RANGE_KEYS,
 	ROOM_COLORS,
 	type RangeKey,
 	aqiBand,
 	cleanVoc,
-	rangeOption,
+	rangeMs,
 } from '../../measurement.model';
 import { RelativeTimePipe } from '../../relative-time.pipe';
 import { airSeries, climateSeries, rssiByReceiverSeries } from '../../series';
@@ -62,7 +62,7 @@ function writeLocal(key: string, value: string): void {
 export class EnvironmentPage implements OnInit, OnDestroy {
 	private readonly api = inject(ApiService);
 
-	protected readonly ranges = RANGE_OPTIONS;
+	protected readonly ranges = RANGE_KEYS;
 
 	protected readonly devices = this.api.devices;
 	protected readonly airDevice = this.api.airDevice;
@@ -78,7 +78,7 @@ export class EnvironmentPage implements OnInit, OnDestroy {
 	private nowTimer: ReturnType<typeof setInterval> | null = null;
 
 	/** Span of the active range in ms, for chart x-axis sizing. */
-	protected readonly spanMs = computed(() => rangeOption(this.range()).hours * 3_600_000);
+	protected readonly spanMs = computed(() => rangeMs(this.range()));
 
 	protected readonly band = computed(() => aqiBand(this.airDevice()?.aqi_us));
 	protected readonly voc = computed(() => cleanVoc(this.airDevice()?.voc_ppb));

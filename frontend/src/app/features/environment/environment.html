@@ -179,9 +179,9 @@
 			hideSingleSelectionIndicator
 			aria-label="History range"
 		>
-			@for (r of ranges; track r.key) {
-				<mat-button-toggle [value]="r.key" (click)="onRange(r.key)">
-					{{ r.key }}
+			@for (r of ranges; track r) {
+				<mat-button-toggle [value]="r" (click)="onRange(r)">
+					{{ r }}
 				</mat-button-toggle>
 			}
 		</mat-button-toggle-group>

@@ -7,7 +7,7 @@ import {
 	type DeviceLatest,
 	type Measurement,
 	type RangeKey,
-	rangeOption,
+	rangeMs,
 } from './measurement.model';
 
 const LATEST_REFRESH_MS = 60_000;
@@ -127,9 +127,8 @@ export class ApiService {
 			this._historyByDevice.set({});
 			return;
 		}
-		const opt = rangeOption(this._range());
 		const to = new Date();
-		const from = new Date(to.getTime() - opt.hours * 3_600_000);
+		const from = new Date(to.getTime() - rangeMs(this._range()));
 
 		if (!quiet) {
 			this._historyLoading.set(true);
