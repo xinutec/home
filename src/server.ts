@@ -1,6 +1,7 @@
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
+import { compress } from "hono/compress";
 import { loadConfig } from "./config.js";
 import { initPool, withConnection } from "./db/pool.js";
 import { migrate } from "./db/schema.js";
@@ -19,6 +20,13 @@ app.onError((err, c) => {
 	console.error("Unhandled error:", err);
 	return c.json({ error: "internal server error" }, 500);
 });
+
+// Compress before anything else runs, so it wraps the API and the static build
+// alike. Nothing in front of this pod adds it: measured 2026-08-14, a 30-day
+// history for one device answered a `gzip, br` request with 4,001,381 bytes and
+// no Content-Encoding at all. These are long runs of repetitive JSON — the
+// cheapest thing that has ever been done to this response.
+app.use("*", compress());
 
 // Liveness/readiness probe (no auth).
 app.get("/health", (c) => c.json({ ok: true }));

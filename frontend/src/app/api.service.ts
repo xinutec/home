@@ -1,6 +1,7 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
+import { mergeWindow, newestTs } from './history';
 import {
 	type ClaudeUsage,
 	DEFAULT_RANGE,
@@ -12,11 +13,23 @@ import {
 
 const LATEST_REFRESH_MS = 60_000;
 
+// How far back before the newest row held a refresh asks anyway. A receiver
+// that pushes late writes a row behind the newest one already shown, which a
+// query starting at that row would never see.
+const DELTA_OVERLAP_MS = 10 * 60_000;
+
+// How often the window is re-read whole instead of extended. The overlap above
+// only covers ordinary lateness; geb spools while the network is down and can
+// flush hours of readings at once, and nothing anchored to the newest row would
+// ever notice those. Cheap enough at this interval, and it also repairs a
+// window that drifted for any reason nobody has thought of.
+const RECONCILE_MS = 15 * 60_000;
+
 /**
  * Single data layer for the dashboard. Holds the latest reading per device and
  * the per-device history for the selected range as signals, drives a 60s
- * auto-refresh of `/api/devices`, and re-queries history whenever the range
- * changes.
+ * auto-refresh of `/api/devices`, and extends the history with what has arrived
+ * since — reading the window whole on a range change, and periodically after.
  */
 @Injectable({ providedIn: 'root' })
 export class ApiService {
@@ -66,6 +79,10 @@ export class ApiService {
 	// the previous range must not overwrite the newer range's data when it lands.
 	private historyGeneration = 0;
 
+	// When the window was last read whole. Zero forces the next refresh to do so,
+	// which is how a range change gets the rows a delta could not reach back for.
+	private lastFullFetch = 0;
+
 	/** Load devices + history, then auto-refresh both on a timer. */
 	start(): void {
 		void this.init();
@@ -90,6 +107,7 @@ export class ApiService {
 			return;
 		}
 		this._range.set(range);
+		this.lastFullFetch = 0;
 		void this.refreshHistory();
 	}
 
@@ -128,7 +146,14 @@ export class ApiService {
 			return;
 		}
 		const to = new Date();
-		const from = new Date(to.getTime() - rangeMs(this._range()));
+		const windowStart = to.getTime() - rangeMs(this._range());
+		// ⚠ **A refresh asks for what it does not already hold.** Re-reading the
+		// whole window each minute is what this used to do, and it cost 1.0 MiB a
+		// minute on the default range and 17.9 MiB on 30 days (measured
+		// 2026-08-14, 65,007 rows across eight devices) to learn a handful of new
+		// readings. The rows already held do not change; only the recent end grows.
+		const whole = to.getTime() - this.lastFullFetch >= RECONCILE_MS;
+		const held = this._historyByDevice();
 
 		if (!quiet) {
 			this._historyLoading.set(true);
@@ -136,15 +161,19 @@ export class ApiService {
 		try {
 			const entries = await Promise.all(
 				devices.map(async (device) => {
+					const prev = whole ? [] : (held[device] ?? []);
+					const newest = newestTs(prev);
+					const from =
+						newest === null ? windowStart : Math.max(windowStart, newest - DELTA_OVERLAP_MS);
 					const params = new HttpParams()
-						.set('from', from.toISOString())
+						.set('from', new Date(from).toISOString())
 						.set('to', to.toISOString())
 						.set('device', device)
 						.set('limit', '20000');
 					const rows = await firstValueFrom(
 						this.http.get<Measurement[]>('/api/measurements', { params }),
 					);
-					return [device, rows ?? []] as const;
+					return [device, mergeWindow(prev, rows ?? [], windowStart)] as const;
 				}),
 			);
 			if (generation !== this.historyGeneration) {
@@ -152,6 +181,9 @@ export class ApiService {
 			}
 			this._historyByDevice.set(Object.fromEntries(entries));
 			this._historyError.set(null);
+			if (whole) {
+				this.lastFullFetch = to.getTime();
+			}
 		} catch {
 			if (generation === this.historyGeneration) {
 				this._historyError.set('Could not load history.');
