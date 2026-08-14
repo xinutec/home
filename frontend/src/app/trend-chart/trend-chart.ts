@@ -12,6 +12,7 @@ import {
 import {
 	Chart,
 	type ChartConfiguration,
+	Decimation,
 	Filler,
 	Legend,
 	LineController,
@@ -31,6 +32,7 @@ Chart.register(
 	PointElement,
 	LinearScale,
 	TimeScale,
+	Decimation,
 	Filler,
 	Legend,
 	Tooltip,
@@ -169,12 +171,29 @@ export class TrendChart implements AfterViewInit, OnDestroy {
 			options: {
 				responsive: true,
 				maintainAspectRatio: false,
+				// The points arrive already in Chart.js's internal shape ({x, y},
+				// ascending, one per instant), which is what lets the decimation below
+				// run at all — it declines to touch a chart that still has parsing to
+				// do. `normalized` says the same thing about the ordering.
+				parsing: false,
+				normalized: true,
 				// Debounce transient resizes (e.g. a backgrounded tab re-measuring at
 				// 0px) so a brief bad size doesn't trigger a shrink.
 				resizeDelay: 200,
 				animation: { duration: 350 },
 				interaction: { mode: 'index', intersect: false },
 				plugins: {
+					// ⚠ **min-max, not lttb, and not an average.** A month of readings is
+					// ~13,700 points per line on a canvas ~350 px wide, and drawing them
+					// all froze the main thread for 3.6 s on a phone (measured 2026-08-14,
+					// summed long tasks while switching to 30d). Every way of thinning
+					// them loses something, so the question is what: an averaged bucket
+					// flattens a peak, and on the CO₂ chart the peak is the reading that
+					// matters. min-max keeps the highest AND lowest point of each pixel
+					// column, so a spike cannot be averaged away — it survives as the
+					// column it happened in. Below 4× the canvas width Chart.js leaves the
+					// data alone, so the short ranges draw every point as before.
+					decimation: { enabled: true, algorithm: 'min-max' },
 					legend: {
 						display: multi,
 						position: 'bottom',
