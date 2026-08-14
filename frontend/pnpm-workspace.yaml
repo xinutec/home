@@ -29,7 +29,9 @@ allowBuilds:
 # import` re-resolves, so the constraint is dropped and packages can land BELOW
 # the floor they declare, in a lockfile that looks normal. It happened to this
 # repo's backend tree during this conversion — esbuild 0.28.1 became 0.27.7.
+# immutable: vite's sass pulls 5.1.7 and GHSA covers everything below 5.1.8.
 overrides:
+  immutable: ^5.1.8
   piscina: ^5.2.0
   esbuild: ^0.28.1
   "@babel/core": ^7.29.6
