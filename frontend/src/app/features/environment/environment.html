@@ -176,13 +176,12 @@
 		<mat-button-toggle-group
 			class="range-toggle"
 			[value]="range()"
+			(change)="onRange($event.value)"
 			hideSingleSelectionIndicator
 			aria-label="History range"
 		>
 			@for (r of ranges; track r) {
-				<mat-button-toggle [value]="r" (click)="onRange(r)">
-					{{ r }}
-				</mat-button-toggle>
+				<mat-button-toggle [value]="r">{{ r }}</mat-button-toggle>
 			}
 		</mat-button-toggle-group>
 	</section>

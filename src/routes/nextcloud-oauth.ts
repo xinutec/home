@@ -101,14 +101,21 @@ export function nextcloudOAuthRoutes(config: Config): Hono<AppEnv> {
 			return c.text("Authentication failed. Please try again.", 500);
 		}
 
-		const tokens = ncTokenSchema.parse(await tokenRes.json());
+		// safeParse, not parse: a Nextcloud that answers 200 with a shape we do not
+		// recognise is the same failure to the person signing in as one that answers
+		// 500, and it deserves the same sentence rather than a stack trace turned
+		// into a generic error page.
+		const tokens = ncTokenSchema.safeParse(await tokenRes.json().catch(() => null));
+		if (!tokens.success) {
+			console.error("Nextcloud token response did not parse:", tokens.error.flatten());
+			return c.text("Authentication failed. Please try again.", 500);
+		}
 
-		// Use the access token exactly once to look up who this is,
-		// then discard. PhoneTrack API access lives in nc_credentials
-		// (app password from Login Flow v2).
+		// Use the access token exactly once to look up who this is, then discard:
+		// home reads nothing from Nextcloud and stores no Nextcloud credential.
 		const userRes = await fetch(`${nc.baseUrl}/ocs/v2.php/cloud/user?format=json`, {
 			headers: {
-				Authorization: `Bearer ${tokens.access_token}`,
+				Authorization: `Bearer ${tokens.data.access_token}`,
 				"OCS-APIRequest": "true",
 			},
 		});
@@ -118,11 +125,15 @@ export function nextcloudOAuthRoutes(config: Config): Hono<AppEnv> {
 			return c.text("Authentication failed. Please try again.", 500);
 		}
 
-		const userData = ncUserSchema.parse(await userRes.json());
+		const userData = ncUserSchema.safeParse(await userRes.json().catch(() => null));
+		if (!userData.success) {
+			console.error("Nextcloud user response did not parse:", userData.error.flatten());
+			return c.text("Authentication failed. Please try again.", 500);
+		}
 
 		const user: UserSession = {
-			userId: userData.ocs.data.id,
-			displayName: userData.ocs.data.displayname,
+			userId: userData.data.ocs.data.id,
+			displayName: userData.data.ocs.data.displayname,
 		};
 
 		const signedId = await createSession(config.sessionSecret, user);
