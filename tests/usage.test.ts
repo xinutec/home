@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { freshestPerModel } from "../src/routes/api.js";
 import { UsageInput } from "../src/usage.js";
 
 /**
@@ -46,5 +47,30 @@ describe("UsageInput.models", () => {
 			],
 		});
 		expect(parsed.models?.[0]?.model).toBe("Something-Not-Shipped-Yet");
+	});
+});
+
+/**
+ * The read path's fold, and the reason it is not a one-liner. `new Map(rows.map(
+ * …))` keeps the LAST value for a repeated key, so folding rows that arrive
+ * newest-first kept the oldest reading of each model — a stale percentage that
+ * looks exactly like a current one. Two hosts reporting the same scope is all it
+ * takes, so the test feeds it exactly that.
+ */
+describe("freshestPerModel", () => {
+	it("keeps the first row seen for a model, so newest-first input wins", () => {
+		const rows = [
+			{ model: "Fable", host: "mac-mini", pct: 6 },
+			{ model: "Fable", host: "isis", pct: 99 },
+			{ model: "Opus", host: "isis", pct: 40 },
+		];
+		expect(freshestPerModel(rows)).toEqual([
+			{ model: "Fable", host: "mac-mini", pct: 6 },
+			{ model: "Opus", host: "isis", pct: 40 },
+		]);
+	});
+
+	it("has nothing to say about no rows", () => {
+		expect(freshestPerModel([])).toEqual([]);
 	});
 });

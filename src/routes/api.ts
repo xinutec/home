@@ -76,6 +76,23 @@ export function oneLine(raw: string, max: number): string {
 	return [...unbroken.replace(/\s+/g, " ").trim()].slice(0, max).join("");
 }
 
+/** One row per model, keeping the first seen — so pass them freshest first.
+ *
+ *  ⚠ Written as a first-wins loop rather than `new Map(rows.map(…))`, which was
+ *  the bug: a Map takes the LAST value for a repeated key, so folding rows that
+ *  arrive newest-first kept the OLDEST reading of each model. Two hosts
+ *  reporting the same scope is all it takes, and a stale percentage looks
+ *  exactly like a current one. */
+export function freshestPerModel<T extends { model: string }>(rows: readonly T[]): T[] {
+	const byModel = new Map<string, T>();
+	for (const row of rows) {
+		if (!byModel.has(row.model)) {
+			byModel.set(row.model, row);
+		}
+	}
+	return [...byModel.values()];
+}
+
 export function apiRoutes(ingestToken: string): Hono<AppEnv> {
 	const api = new Hono<AppEnv>();
 
@@ -192,17 +209,15 @@ export function apiRoutes(ingestToken: string): Hono<AppEnv> {
 		if (!row) {
 			return c.json(null);
 		}
-		// The model-scoped windows, freshest first so one row per model survives
-		// the fold below. Account-wide like the rest, so they are gathered across
-		// hosts rather than from the host whose snapshot won above — that host may
-		// be one whose pusher cannot see scopes at all.
+		// The model-scoped windows, freshest first. Account-wide like the rest, so
+		// they are gathered across hosts rather than from the host whose snapshot
+		// won above — that host may be one whose pusher cannot see scopes at all.
 		const scoped = await db()
 			.selectFrom("claude_usage_model")
 			.selectAll()
 			.orderBy("ts", "desc")
 			.execute();
-		const models = [...new Map(scoped.map((m) => [m.model, m])).values()];
-		return c.json({ ...row, models });
+		return c.json({ ...row, models: freshestPerModel(scoped) });
 	});
 
 	// Public read: the latest reading per device, each tagged with its display
@@ -275,14 +290,22 @@ export function apiRoutes(ingestToken: string): Hono<AppEnv> {
 			return c.json({ error: "invalid query", detail: parsed.error.flatten() }, 400);
 		}
 		const { from, to, device, limit } = parsed.data;
+		// ⚠ Selected NEWEST first and reversed, though the response is oldest
+		// first. The order decides which end `limit` throws away, and asking for
+		// them oldest-first threw away the recent ones: past the cap a chart
+		// stopped part-way, which reads as every sensor dying at once rather than
+		// as a truncated answer. Measured 2026-08-14: 13,767 rows over 30 days on
+		// the busiest device against the client's 20,000 — one more receiver
+		// crosses it.
 		let q = db()
 			.selectFrom("measurement")
 			.selectAll()
 			.where("device", "=", device)
-			.orderBy("ts", "asc");
+			.orderBy("ts", "desc");
 		if (from) q = q.where("ts", ">=", from);
 		if (to) q = q.where("ts", "<=", to);
 		const rows = await q.limit(limit).execute();
+		rows.reverse();
 		return c.json(rows);
 	});
 
