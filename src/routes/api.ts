@@ -161,36 +161,44 @@ export function apiRoutes(ingestToken: string): Hono<AppEnv> {
 		// array is a statement and does clear them.
 		const models = parsed.data.models;
 		if (models) {
-			// A scope the account no longer has must go, and an upsert can only
-			// ever add — so this host's rows for models NOT in the push are
-			// dropped first. With an empty push that is all of them.
-			let drop = db().deleteFrom("claude_usage_model").where("host", "=", row.host);
-			if (models.length > 0) {
-				drop = drop.where(
-					"model",
-					"not in",
-					models.map((m) => m.model),
-				);
-			}
-			await drop.execute();
-			for (const m of models) {
-				const scoped = {
-					host: row.host,
-					model: m.model,
-					ts: row.ts,
-					pct: m.pct,
-					resets_at: new Date(m.resets_at),
-				};
-				await db()
-					.insertInto("claude_usage_model")
-					.values(scoped)
-					.onDuplicateKeyUpdate({
-						ts: scoped.ts,
-						pct: scoped.pct,
-						resets_at: scoped.resets_at,
-					})
-					.execute();
-			}
+			// In one transaction, because the delete below and the writes after it
+			// are one statement about this host: between them the account looks
+			// like it has fewer scoped windows than it does, and `GET /api/usage`
+			// is public and polled — it would read that gap and blank a card.
+			await db()
+				.transaction()
+				.execute(async (trx) => {
+					// A scope the account no longer has must go, and an upsert can only
+					// ever add — so this host's rows for models NOT in the push are
+					// dropped first. With an empty push that is all of them.
+					let drop = trx.deleteFrom("claude_usage_model").where("host", "=", row.host);
+					if (models.length > 0) {
+						drop = drop.where(
+							"model",
+							"not in",
+							models.map((m) => m.model),
+						);
+					}
+					await drop.execute();
+					for (const m of models) {
+						const scoped = {
+							host: row.host,
+							model: m.model,
+							ts: row.ts,
+							pct: m.pct,
+							resets_at: new Date(m.resets_at),
+						};
+						await trx
+							.insertInto("claude_usage_model")
+							.values(scoped)
+							.onDuplicateKeyUpdate({
+								ts: scoped.ts,
+								pct: scoped.pct,
+								resets_at: scoped.resets_at,
+							})
+							.execute();
+					}
+				});
 		}
 		return c.json({ ok: true });
 	});
@@ -223,19 +231,22 @@ export function apiRoutes(ingestToken: string): Hono<AppEnv> {
 	// Public read: the latest reading per device, each tagged with its display
 	// label and ordered for the UI. Drives the per-room tiles.
 	api.get("/devices", async (c) => {
-		const devices = await db().selectFrom("measurement").select("device").distinct().execute();
-		const latest = await Promise.all(
-			devices.map((d) =>
-				db()
-					.selectFrom("measurement")
-					.selectAll()
-					.where("device", "=", d.device)
-					.orderBy("ts", "desc")
-					.limit(1)
-					.executeTakeFirst(),
-			),
-		);
-		const rows = latest.filter((r): r is NonNullable<typeof r> => r != null);
+		// One query, not one per device: joining each device's newest instant back
+		// to its row. `(device, ts)` is the primary key, so the join matches
+		// exactly one row per device and the group-by reads the index.
+		const rows = await db()
+			.selectFrom("measurement as m")
+			.innerJoin(
+				(eb) =>
+					eb
+						.selectFrom("measurement")
+						.select(({ fn }) => ["device", fn.max("ts").as("ts")])
+						.groupBy("device")
+						.as("newest"),
+				(join) => join.onRef("newest.device", "=", "m.device").onRef("newest.ts", "=", "m.ts"),
+			)
+			.selectAll("m")
+			.execute();
 		// Serve raw + each device's calibration offset; the client applies it so
 		// the correction can be toggled.
 		const out = decorateDevices(rows).map((d) => ({ ...d, offset: offsetFor(d.device) }));
