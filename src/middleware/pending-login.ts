@@ -17,17 +17,23 @@
  * So the pending login travels in a cookie of our own. That binds it to the browser
  * that started the login, which is the property `state` was there to prove; `state`
  * is still sent, and still checked whenever NC gives it back. Being self-contained
- * and signed, it also survives the pod restarting mid-login, which the in-memory map
- * in `oauth-state.ts` does not.
+ * and signed, it also survives the pod restarting mid-login, which an in-memory map
+ * of pending logins does not.
  *
- * Scope: **the NC identity login only**. Fitbit's OAuth keeps the in-memory state —
- * it returns `state` faithfully, and its pending entry holds a PKCE `codeVerifier`
- * that has no business in a cookie.
+ * Scope: **the NC identity login**, which is the only OAuth home does. The siblings
+ * this pattern came from keep an in-memory pending entry for providers that return
+ * `state` faithfully and hold a PKCE `codeVerifier` that has no business in a cookie.
  *
  * Residual risk, accepted deliberately: when NC returns an empty `state` the cookie
- * is the only binding, so a login-CSRF would become possible for someone who can both
- * reach this (VPN-only) host and land a callback in the victim's browser inside the
- * 10-minute window. The alternative is a login that cannot be performed at all.
+ * is the only binding, so a login-CSRF would become possible for someone who can land
+ * a callback in the victim's browser inside the 10-minute window. The alternative is a
+ * login that cannot be performed at all.
+ *
+ * ⚠ **home is on the public internet**, unlike the sibling this text came from — so
+ * "who can reach the host" narrows that window for nobody. What limits the damage here
+ * is what the session can do rather than who can reach it: every read on this host is
+ * public already, and the only thing sign-in unlocks is writing an attributed line to
+ * `POST /api/telemetry`. A forced login writes the attacker's own name into a log.
  */
 
 import * as crypto from "node:crypto";

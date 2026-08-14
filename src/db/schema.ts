@@ -62,7 +62,7 @@ const MIGRATIONS: readonly string[] = [
     seven_day_resets_at DATETIME,
     PRIMARY KEY (host)
   )`,
-	// v6: SSO sessions. home's reads stay public — this table exists so a *write*
+	// v7: SSO sessions. home's reads stay public — this table exists so a *write*
 	// can be attributed to a signed-in person, which is what makes the client
 	// telemetry endpoint safe to expose on a publicly readable host.
 	`CREATE TABLE IF NOT EXISTS sessions (

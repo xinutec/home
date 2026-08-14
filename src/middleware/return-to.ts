@@ -4,7 +4,7 @@
  *
  * The danger this guards against is the classic open-redirect: an
  * attacker emails the user a link like
- * `https://health.xinutec.org/login?return_to=//evil.com`. The user
+ * `https://home.xinutec.org/login?return_to=//evil.com`. The user
  * clicks it, authenticates normally, and the callback issues
  * `302 Location: //evil.com` — a protocol-relative URL the browser
  * follows off-site. Useful for phishing or for siphoning any state
