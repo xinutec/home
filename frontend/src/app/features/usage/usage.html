@@ -17,7 +17,13 @@
 						{{ fiveHour != null ? (fiveHour | number: '1.0-0') + '%' : '—' }}
 					</span>
 				</div>
-				<mat-progress-bar mode="determinate" [value]="fiveHour ?? 0" />
+				<app-usage-level
+					[pct]="fiveHour"
+					[resetsAt]="u.five_hour_resets_at"
+					[takenAt]="u.ts"
+					[span]="fiveHours"
+					label="5-hour window"
+				/>
 				<div class="cu-reset">{{ fmtReset(u.five_hour_resets_at) }}</div>
 			</mat-card>
 			<mat-card class="cu-card" appearance="outlined">
@@ -27,7 +33,13 @@
 						{{ sevenDay != null ? (sevenDay | number: '1.0-0') + '%' : '—' }}
 					</span>
 				</div>
-				<mat-progress-bar mode="determinate" [value]="sevenDay ?? 0" />
+				<app-usage-level
+					[pct]="sevenDay"
+					[resetsAt]="u.seven_day_resets_at"
+					[takenAt]="u.ts"
+					[span]="week"
+					label="weekly, all models"
+				/>
 				<div class="cu-reset">{{ fmtReset(u.seven_day_resets_at) }}</div>
 			</mat-card>
 			<!-- A model's own weekly ceiling, beside the all-models one. Named by
@@ -43,7 +55,16 @@
 							{{ scoped != null ? (scoped | number: '1.0-0') + '%' : '—' }}
 						</span>
 					</div>
-					<mat-progress-bar mode="determinate" [value]="scoped ?? 0" />
+					<!-- A model's allowance runs the same week, so it gets the same
+					     marks — and its own `ts`, because a scope is reported per
+					     model and need not share the row's instant. -->
+					<app-usage-level
+						[pct]="scoped"
+						[resetsAt]="m.resets_at"
+						[takenAt]="m.ts"
+						[span]="week"
+						[label]="'weekly, ' + m.model"
+					/>
 					<div class="cu-reset">{{ fmtReset(m.resets_at) }}</div>
 				</mat-card>
 			}

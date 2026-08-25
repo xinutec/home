@@ -1,0 +1,46 @@
+// The bar plus its marks. `relative` so the ticks can be placed along it.
+.level {
+	position: relative;
+	display: block;
+}
+
+// A day boundary. Drawn OVER the fill rather than under it, so the day you are
+// in stays readable once the bar has passed it.
+.day {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 1px;
+	// The tick marks a boundary, and a boundary has no width — centring it keeps
+	// it honest at both ends of the bar.
+	transform: translateX(-0.5px);
+	// ⚠ **A tick has to read against BOTH halves of the bar, and no single colour
+	// does.** A light tick vanishes into the empty track, a dark one into the
+	// fill; either way half the days go missing while a count assertion still
+	// passes. `difference` inverts whatever is behind it, so one element reads on
+	// the saturated fill and on the track.
+	// ⚠ White here is the OPERAND of the blend, not a colour: it is the identity
+	// for inversion. A themed value would invert by its own lightness instead, so
+	// a dark var over a dark bar would change nothing. Adapting to the theme is
+	// what the blend does, which is the reason it is used at all.
+	// dev-lint: allow-hardcoded-color the operand of `difference`, not a colour
+	background: #fff;
+	mix-blend-mode: difference;
+	opacity: 0.45;
+}
+
+// Where the clock stood. Taller than the bar and in the foreground: it is a
+// different KIND of fact from the fill, and reading it as a second fill would
+// invert the meaning.
+.clock {
+	position: absolute;
+	top: -3px;
+	bottom: -3px;
+	width: 2px;
+	transform: translateX(-1px);
+	border-radius: 1px;
+	background: var(--mat-sys-on-surface);
+	// Deliberately not the accent: the accent is what the fill uses, and the
+	// whole point is that these two are not the same measurement.
+	opacity: 0.7;
+}

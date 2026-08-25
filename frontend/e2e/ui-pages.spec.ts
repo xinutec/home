@@ -10,7 +10,8 @@ import {
 
 /**
  * L2 phone-width layout harness for home — a single-page household-environment
- * dashboard (no router). Render it at a Pixel viewport with the backend mocked
+ * dashboard plus a Claude-usage page. Render each at a Pixel viewport with the
+ * backend mocked
  * and BUSY data, and assert no text collides and nothing overflows the width.
  * The dense, at-risk regions are the metric-grid (4 cards), the room-grid (each
  * card packs name + type + temp + humidity + timestamp + battery), and the
@@ -18,6 +19,10 @@ import {
  *
  * No service worker in this app, but block it anyway for parity with the fleet's
  * layout specs — SW-controlled fetches would bypass page.route.
+ *
+ * There are two routed pages, not one: `/claude` renders the subscription-usage
+ * bars, whose day ticks and clock mark are absolutely positioned ON the bar and
+ * so can only be judged in a render.
  */
 test.use({ serviceWorkers: 'block' });
 
@@ -51,11 +56,31 @@ function series(device: string) {
   }));
 }
 
+/** A busy usage reading, dated off the clock so the specs never time-bomb: the
+ *  page withholds any figure whose window has already turned over, and a fixed
+ *  date would eventually withhold all of them and leave nothing to lay out. */
+function usage() {
+  const now = Date.now();
+  const week = new Date(now + 34 * 3_600_000).toISOString();
+  return {
+    host: 'mac-mini',
+    // Read 40 minutes ago — the ordinary case, since the figure comes from
+    // whenever a machine's status line last ran.
+    ts: new Date(now - 40 * 60_000).toISOString(),
+    five_hour_pct: 62,
+    five_hour_resets_at: new Date(now + 2 * 3_600_000).toISOString(),
+    seven_day_pct: 87,
+    seven_day_resets_at: week,
+    models: [{ model: 'Fable', ts: new Date(now - 40 * 60_000).toISOString(), pct: 6, resets_at: week }],
+  };
+}
+
 /** Mock every backend call. Catch-all FIRST — Playwright runs handlers
  *  last-registered-first, so the specifics below take priority. */
 async function mockApi(page: Page): Promise<void> {
   await page.route('**/api/**', (r) => r.fulfill({ json: [] }));
   await page.route('**/api/devices', (r) => r.fulfill({ json: DEVICES }));
+  await page.route('**/api/usage', (r) => r.fulfill({ json: usage() }));
   await page.route('**/api/measurements*', (r) => {
     const device = new URL(r.request().url()).searchParams.get('device') ?? '267F';
     return r.fulfill({ json: series(device) });
@@ -82,6 +107,21 @@ test('dashboard — hero + metrics + rooms + trends: lays out cleanly @ phone wi
   await page.getByText('Trends').waitFor();
   await page.getByText('Bedroom').waitFor(); // a room card rendered (its room label)
   // The toolbar's mat-icons must render as glyphs, not their ligature words.
+  await expectIconFontLoaded(page);
+  await expectNoTextOverlaps(page, testInfo);
+  await expectNoHorizontalOverflow(page, testInfo);
+});
+
+test('claude usage — bars, day ticks and clock mark: lay out cleanly @ phone width', async ({ page }, testInfo) => {
+  await mockApi(page);
+  await page.goto('/claude');
+  // The loaded page, not the "Waiting for the first usage report" empty state.
+  await page.getByText('Claude usage').waitFor();
+  await page.getByText('Weekly · Fable').waitFor();
+  // The marks are absolutely positioned inside the bar, so their presence is
+  // the thing a source read cannot settle: six boundaries in a week, and a
+  // clock on every window that has a live figure.
+  await page.locator('.cu-card').nth(1).locator('.day').nth(5).waitFor();
   await expectIconFontLoaded(page);
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo);

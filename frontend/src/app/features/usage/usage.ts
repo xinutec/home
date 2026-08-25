@@ -2,10 +2,10 @@ import { DecimalPipe } from '@angular/common';
 import { Component, type OnDestroy, type OnInit, inject, signal } from '@angular/core';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
-import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ApiService } from '../../api.service';
 import { RelativeTimePipe } from '../../relative-time.pipe';
+import { FIVE_HOURS, UsageLevel, WEEK } from './level';
 
 /**
  * The `/claude` route: Claude Code subscription-usage bars (5-hour window +
@@ -19,9 +19,9 @@ import { RelativeTimePipe } from '../../relative-time.pipe';
 		DecimalPipe,
 		MatCardModule,
 		MatIconModule,
-		MatProgressBarModule,
 		MatTooltipModule,
 		RelativeTimePipe,
+		UsageLevel,
 	],
 	templateUrl: './usage.html',
 	styleUrl: './usage.scss',
@@ -29,6 +29,10 @@ import { RelativeTimePipe } from '../../relative-time.pipe';
 export class UsagePage implements OnInit, OnDestroy {
 	private readonly api = inject(ApiService);
 	protected readonly usage = this.api.usage;
+
+	// How long each window runs, for the day ticks and the clock mark on its bar.
+	protected readonly fiveHours = FIVE_HOURS;
+	protected readonly week = WEEK;
 
 	// Ticks every 30s so the "as of" stamp and reset countdowns keep updating.
 	protected readonly now = signal(Date.now());
