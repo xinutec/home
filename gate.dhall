@@ -60,17 +60,20 @@ in  { name = "home"
         G.Check::{
         , name = "root deps match the lockfile"
         , argv = G.inDevShell [ "pnpm", "install", "--frozen-lockfile" ]
+        , env = G.nonInteractive
         , timeout_s = 900
         }
       , G.Check::{
         , name = "frontend deps match the lockfile"
         , cwd = "frontend"
         , argv = G.inDevShell [ "pnpm", "install", "--frozen-lockfile" ]
+        , env = G.nonInteractive
         , timeout_s = 900
         }
       , G.Check::{
         , name = "backend typecheck"
         , argv = G.inDevShell [ "pnpm", "exec", "tsc", "--noEmit" ]
+        , env = G.nonInteractive
         , timeout_s = 900
         }
       , G.Check::{
@@ -78,6 +81,7 @@ in  { name = "home"
         , argv =
             G.inDevShell
               [ "pnpm", "exec", "tsc", "--noEmit", "-p", "tsconfig.test.json" ]
+        , env = G.nonInteractive
         , timeout_s = 900
         }
       , G.Check::{
@@ -86,6 +90,7 @@ in  { name = "home"
         , argv =
             G.inDevShell
               [ "pnpm", "exec", "tsc", "--noEmit", "-p", "tsconfig.app.json" ]
+        , env = G.nonInteractive
         , timeout_s = 900
         }
       , G.Check::{
@@ -94,34 +99,40 @@ in  { name = "home"
         , argv =
             G.inDevShell
               [ "pnpm", "exec", "tsc", "--noEmit", "-p", "tsconfig.e2e.json" ]
+        , env = G.nonInteractive
         , timeout_s = 900
         }
       , G.Check::{
         , name = "backend lint (biome)"
         , argv = G.inDevShell [ "pnpm", "run", "lint" ]
+        , env = G.nonInteractive
         , timeout_s = 900
         }
       , G.Check::{
         , name = "frontend lint"
         , cwd = "frontend"
         , argv = G.inDevShell [ "pnpm", "run", "lint" ]
+        , env = G.nonInteractive
         , timeout_s = 900
         }
       , G.Check::{
         , name = "frontend formatting"
         , cwd = "frontend"
         , argv = G.inDevShell [ "pnpm", "run", "format:check" ]
+        , env = G.nonInteractive
         , timeout_s = 900
         }
       , G.Check::{
         , name = "backend tests (vitest)"
         , argv = G.inDevShell [ "pnpm", "test" ]
+        , env = G.nonInteractive
         , timeout_s = 1800
         }
       , G.Check::{
         , name = "frontend tests"
         , cwd = "frontend"
         , argv = G.inDevShell [ "pnpm", "test" ]
+        , env = G.nonInteractive
         , timeout_s = 1800
         }
       , {-  `../../dev-lint`, not `../dev-lint`: cwd is `home/frontend`.
@@ -134,6 +145,7 @@ in  { name = "home"
               "../../"
               [ "dist/frontend/browser" ]
               [ "pnpm", "exec", "ng", "build" ]
+        , env = G.nonInteractive
         , timeout_s = 1800
         }
       , {-  The L2 phone-width layout harness: `e2e/serve.mjs` serves the dist the
@@ -144,6 +156,7 @@ in  { name = "home"
         , name = "frontend ui-check (phone-width layout harness)"
         , cwd = "frontend"
         , argv = G.inDevShell [ "pnpm", "run", "ui-check" ]
+        , env = G.nonInteractive
         , timeout_s = 1800
         }
       , G.checkTable "../dev-lint"

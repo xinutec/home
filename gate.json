@@ -11,7 +11,9 @@
         "--frozen-lockfile"
       ],
       "cwd": ".",
-      "env": {},
+      "env": {
+        "CI": "true"
+      },
       "name": "root deps match the lockfile",
       "timeout_s": 900
     },
@@ -26,7 +28,9 @@
         "--frozen-lockfile"
       ],
       "cwd": "frontend",
-      "env": {},
+      "env": {
+        "CI": "true"
+      },
       "name": "frontend deps match the lockfile",
       "timeout_s": 900
     },
@@ -42,7 +46,9 @@
         "--noEmit"
       ],
       "cwd": ".",
-      "env": {},
+      "env": {
+        "CI": "true"
+      },
       "name": "backend typecheck",
       "timeout_s": 900
     },
@@ -60,7 +66,9 @@
         "tsconfig.test.json"
       ],
       "cwd": ".",
-      "env": {},
+      "env": {
+        "CI": "true"
+      },
       "name": "backend typecheck (tests)",
       "timeout_s": 900
     },
@@ -78,7 +86,9 @@
         "tsconfig.app.json"
       ],
       "cwd": "frontend",
-      "env": {},
+      "env": {
+        "CI": "true"
+      },
       "name": "frontend typecheck (app)",
       "timeout_s": 900
     },
@@ -96,7 +106,9 @@
         "tsconfig.e2e.json"
       ],
       "cwd": "frontend",
-      "env": {},
+      "env": {
+        "CI": "true"
+      },
       "name": "frontend typecheck (e2e)",
       "timeout_s": 900
     },
@@ -111,7 +123,9 @@
         "lint"
       ],
       "cwd": ".",
-      "env": {},
+      "env": {
+        "CI": "true"
+      },
       "name": "backend lint (biome)",
       "timeout_s": 900
     },
@@ -126,7 +140,9 @@
         "lint"
       ],
       "cwd": "frontend",
-      "env": {},
+      "env": {
+        "CI": "true"
+      },
       "name": "frontend lint",
       "timeout_s": 900
     },
@@ -141,7 +157,9 @@
         "format:check"
       ],
       "cwd": "frontend",
-      "env": {},
+      "env": {
+        "CI": "true"
+      },
       "name": "frontend formatting",
       "timeout_s": 900
     },
@@ -155,7 +173,9 @@
         "test"
       ],
       "cwd": ".",
-      "env": {},
+      "env": {
+        "CI": "true"
+      },
       "name": "backend tests (vitest)",
       "timeout_s": 1800
     },
@@ -169,7 +189,9 @@
         "test"
       ],
       "cwd": "frontend",
-      "env": {},
+      "env": {
+        "CI": "true"
+      },
       "name": "frontend tests",
       "timeout_s": 1800
     },
@@ -192,7 +214,9 @@
         "build"
       ],
       "cwd": "frontend",
-      "env": {},
+      "env": {
+        "CI": "true"
+      },
       "name": "frontend build",
       "timeout_s": 1800
     },
@@ -207,7 +231,9 @@
         "ui-check"
       ],
       "cwd": "frontend",
-      "env": {},
+      "env": {
+        "CI": "true"
+      },
       "name": "frontend ui-check (phone-width layout harness)",
       "timeout_s": 1800
     },
