@@ -32,6 +32,12 @@ export const UsageInput = z.object({
 	// account has no scoped window" and clears them. Treating absent as empty
 	// would delete the Fable figure every time the hook fired.
 	models: z.array(ScopedInput).max(16).optional(),
+	// Whether the figures are a measurement — the API's own answer at an instant
+	// the writer can date — or an echo of some process's cached rate-limit
+	// headers. The console re-ingests this row as dated truth and only a
+	// measurement may LOWER a figure, so the claim is load-bearing. Absent means
+	// echo: a writer that does not say claims the weaker kind.
+	measured: z.boolean().optional(),
 });
 
 export type ScopedInput = z.infer<typeof ScopedInput>;

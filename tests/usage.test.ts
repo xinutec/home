@@ -74,3 +74,18 @@ describe("freshestPerModel", () => {
 		expect(freshestPerModel([])).toEqual([]);
 	});
 });
+
+describe("UsageInput.measured", () => {
+	it("a writer that does not say claims the weaker kind", () => {
+		// Absent is not false-with-extra-steps at this layer: the row builder
+		// maps undefined to 0, so an old writer's push stores "echo" — the same
+		// default the console applies to readings from before the field existed.
+		const silent = UsageInput.parse({ host: "mac-mini", seven_day_pct: 87 });
+		expect(silent.measured).toBeUndefined();
+	});
+
+	it("a live probe may say so", () => {
+		const live = UsageInput.parse({ host: "mac-mini", seven_day_pct: 11, measured: true });
+		expect(live.measured).toBe(true);
+	});
+});

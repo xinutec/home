@@ -39,6 +39,8 @@ export interface ClaudeUsageTable {
 	five_hour_resets_at: Date | null;
 	seven_day_pct: number | null;
 	seven_day_resets_at: Date | null;
+	/** Measurement (1) or echo of cached headers (0). See schema v9. */
+	measured: number;
 }
 
 /** One model's own rate-limit window, keyed by (host, model). See schema v8. */

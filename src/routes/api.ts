@@ -56,6 +56,8 @@ function toUsageRow(u: UsageInput) {
 		five_hour_resets_at: u.five_hour_resets_at ? new Date(u.five_hour_resets_at) : null,
 		seven_day_pct: u.seven_day_pct ?? null,
 		seven_day_resets_at: u.seven_day_resets_at ? new Date(u.seven_day_resets_at) : null,
+		// Provenance as claimed, stored as 0/1; absent claims the weaker kind.
+		measured: u.measured ? 1 : 0,
 	};
 }
 
@@ -153,6 +155,7 @@ export function apiRoutes(ingestToken: string): Hono<AppEnv> {
 				five_hour_resets_at: row.five_hour_resets_at,
 				seven_day_pct: row.seven_day_pct,
 				seven_day_resets_at: row.seven_day_resets_at,
+				measured: row.measured,
 			})
 			.execute();
 		// ⚠ **Only when the payload speaks to them.** A pusher that cannot see
@@ -225,7 +228,8 @@ export function apiRoutes(ingestToken: string): Hono<AppEnv> {
 			.selectAll()
 			.orderBy("ts", "desc")
 			.execute();
-		return c.json({ ...row, models: freshestPerModel(scoped) });
+		// TINYINT out, boolean over the wire — readers should not learn MariaDB.
+		return c.json({ ...row, measured: row.measured === 1, models: freshestPerModel(scoped) });
 	});
 
 	// Public read: the latest reading per device, each tagged with its display

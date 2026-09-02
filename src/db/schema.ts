@@ -99,6 +99,17 @@ const MIGRATIONS: readonly string[] = [
     resets_at DATETIME,
     PRIMARY KEY (host, model)
   )`,
+	// v9: whether the snapshot is a MEASUREMENT — the API's own figure at an
+	// instant the writer can date (a fresh `get_usage` server read, a rate-limit
+	// header off a request that just completed) — or an echo of some process's
+	// cached headers, of unknowable age. The agent console re-ingests this row
+	// as dated truth and only a measurement may move a figure BOTH ways (that is
+	// how a mid-window reset is believed), so the writer's claim about
+	// provenance is load-bearing, not decoration. Default 0: a writer that does
+	// not say claims the weaker kind — the same rule the console applies to its
+	// own readings.
+	`ALTER TABLE claude_usage
+    ADD COLUMN measured TINYINT NOT NULL DEFAULT 0`,
 ];
 
 export async function migrate(conn: mariadb.Connection): Promise<void> {
