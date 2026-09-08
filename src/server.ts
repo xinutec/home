@@ -73,6 +73,24 @@ app.use("/*", async (c, next) => {
 
 // Built Angular app, with SPA fallback to index.html for client-side routes.
 app.use("/*", serveStatic({ root: "./public" }));
+
+// ⚠ **A missing FILE must 404, not be handed the page**, and the mistake is
+// invisible: the wrong answer is a 200, so a browser that asked for a woff2 and
+// got HTML renders broken icons and reports nothing anywhere. Measured
+// 2026-09-08 — /media/nope.woff2 answered 200 text/html (#1478).
+//
+// The test is a dot in the last path segment, so /devices is a route and
+// /main-ABC123.js is a file. A heuristic; the alternative, enumerating the
+// bundle's own asset names, would have to be rebuilt whenever ng build changes
+// a hash. It sits BETWEEN the two serveStatic calls deliberately: a real asset
+// has already been served by the first, so anything reaching here named a file
+// that is not there.
+app.get("/*", async (c, next) => {
+	const last = c.req.path.split("/").pop() ?? "";
+	if (last.includes(".")) return c.text("not found", 404);
+	await next();
+});
+
 app.get("/*", serveStatic({ path: "./public/index.html" }));
 
 serve({ fetch: app.fetch, port: config.port }, (info) => {
