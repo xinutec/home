@@ -4,6 +4,7 @@ import { test, type Page } from '@playwright/test';
 import {
   expectNoTextOverlaps,
   expectNoHorizontalOverflow,
+  expectNoStarvedText,
   expectViewportIsPhone,
   expectIconFontLoaded,
 } from '@xinutec/ui-harness';
@@ -110,6 +111,7 @@ test('dashboard — hero + metrics + rooms + trends: lays out cleanly @ phone wi
   await expectIconFontLoaded(page);
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo);
+  await expectNoStarvedText(page, testInfo);
 });
 
 test('claude usage — bars, day ticks and clock mark: lay out cleanly @ phone width', async ({ page }, testInfo) => {
@@ -125,4 +127,5 @@ test('claude usage — bars, day ticks and clock mark: lay out cleanly @ phone w
   await expectIconFontLoaded(page);
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo);
+  await expectNoStarvedText(page, testInfo);
 });
