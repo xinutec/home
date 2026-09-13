@@ -25,7 +25,7 @@
     "@angular/platform-browser": "^22.0.4",
     "@angular/router": "^22.0.4",
     "@fontsource/roboto": "^5.2.10",
-    "@xinutec/ui-harness": "github:xinutec/ui-harness#5e3cf0a6460068362a2687b2fd8694f75a21e7f8",
+    "@xinutec/ui-harness": "github:xinutec/ui-harness#efe5ee46bd138dee8ee195b7b4925c59d4f5c3d4",
     "chart.js": "^4.5.1",
     "chartjs-adapter-date-fns": "^3.0.0",
     "date-fns": "^4.4.0",
