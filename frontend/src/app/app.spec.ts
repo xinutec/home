@@ -1,3 +1,4 @@
+import { SwUpdate } from '@angular/service-worker';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
@@ -14,6 +15,10 @@ describe('App', () => {
 				provideRouter([]),
 				provideHttpClient(),
 				provideHttpClientTesting(),
+				// The shell starts the update policy, which injects Angular's
+				// SwUpdate. A disabled stub is what a dev build gives it too, so
+				// `start()` returns immediately and these tests stay about layout.
+				{ provide: SwUpdate, useValue: { isEnabled: false } },
 			],
 		}).compileComponents();
 	});

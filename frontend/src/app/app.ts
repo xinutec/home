@@ -6,6 +6,7 @@ import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { ApiService } from './api.service';
+import { SwUpdates } from './sw-updates';
 import { Telemetry } from './telemetry';
 import { ThemeService } from './theme.service';
 
@@ -42,6 +43,7 @@ export class App implements OnInit, OnDestroy {
 	// Instrumented from the shell alone: a trace each screen had to remember to
 	// join would have holes in exactly the screens nobody thought about.
 	private readonly telemetry = inject(Telemetry);
+	private readonly swUpdates = inject(SwUpdates);
 
 	protected readonly nav: readonly NavItem[] = [
 		{ path: '/environment', label: 'Environment', icon: 'thermostat' },
@@ -63,6 +65,8 @@ export class App implements OnInit, OnDestroy {
 
 	ngOnInit(): void {
 		this.telemetry.init();
+		// Same seam: wired once in the shell, so no view knows this exists.
+		this.swUpdates.start();
 		this.api.start();
 	}
 
