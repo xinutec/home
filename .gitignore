@@ -7,3 +7,7 @@ dist/
 frontend/node_modules/
 frontend/dist/
 *.log
+
+# nix-direnv, the cache `use flake` writes. Holds a GC root into the store,
+# so it is not just a cache: deleting it lets the dev shell be collected.
+.direnv/
