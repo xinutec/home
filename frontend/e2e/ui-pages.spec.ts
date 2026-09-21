@@ -18,14 +18,10 @@ import {
  * card packs name + type + temp + humidity + timestamp + battery), and the
  * Trends range-toggle row beside the section title.
  *
- * No service worker in this app, but block it anyway for parity with the fleet's
- * layout specs — SW-controlled fetches would bypass page.route.
- *
  * There are two routed pages, not one: `/claude` renders the subscription-usage
  * bars, whose day ticks and clock mark are absolutely positioned ON the bar and
  * so can only be judged in a render.
  */
-test.use({ serviceWorkers: 'block' });
 
 /** Two air-quality devices; the first drives the hero/AQI badge. A deliberately
  *  long room name stresses the room card's label. */
