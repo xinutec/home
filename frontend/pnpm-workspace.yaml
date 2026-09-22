@@ -33,5 +33,5 @@ allowBuilds:
 overrides:
   immutable: ^5.1.8
   piscina: ^5.2.0
-  esbuild: ^0.28.1
+  esbuild: ^0.28.2
   "@babel/core": ^7.29.6

@@ -16,4 +16,4 @@ allowBuilds:
 # imported lockfile resolved esbuild 0.27.7, under the ^0.28.1 floor it was
 # supposed to enforce, and nothing said so.
 overrides:
-  esbuild: ^0.28.1
+  esbuild: ^0.28.2
