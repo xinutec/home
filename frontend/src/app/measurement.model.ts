@@ -58,7 +58,8 @@ export interface ClaudeUsageModel {
 	resets_at: string | null;
 }
 
-/** Line colours for the per-room charts, by position; they repeat past six. */
+/** Line colours for the per-room charts, by position. Past the end they repeat,
+ *  so keep one per climate sensor. */
 export const ROOM_COLORS: readonly string[] = [
 	'#26a69a',
 	'#ef6c00',
@@ -66,6 +67,8 @@ export const ROOM_COLORS: readonly string[] = [
 	'#ec407a',
 	'#66bb6a',
 	'#8d6e63',
+	'#ab47bc',
+	'#42a5f5',
 ];
 
 /** History windows, in selector order. */
