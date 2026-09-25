@@ -20,8 +20,7 @@ import { RelativeTimePipe } from '../../relative-time.pipe';
 import { airSeries, climateSeries, rssiByReceiverSeries } from '../../series';
 import { TrendChart } from '../../trend-chart/trend-chart';
 
-// localStorage can be unavailable or non-functional (private mode, SSR, and the
-// jsdom test env, whose opaque-origin Storage lacks a callable getItem) — guard it.
+// localStorage can throw: private mode, and jsdom's opaque-origin Storage.
 function readLocal(key: string): string | null {
 	try {
 		return localStorage.getItem(key);
@@ -37,12 +36,7 @@ function writeLocal(key: string, value: string): void {
 	}
 }
 
-/**
- * The default route (`/environment`): live air-quality hero, per-room climate
- * cards, and the trend charts. The data layer (ApiService) is polled by the
- * shell, so this page only reads its signals and owns the env-specific view
- * state (calibration + show-ids prefs, chart range).
- */
+/** `/environment`: the air-quality hero, a card per room, and the trend charts. */
 @Component({
 	selector: 'app-environment',
 	imports: [
@@ -72,27 +66,20 @@ export class EnvironmentPage implements OnInit, OnDestroy {
 	protected readonly range = this.api.range;
 	protected readonly isEmpty = this.api.isEmpty;
 
-	// Ticks every 30s so the "updated … ago" labels keep counting even when no
-	// new reading arrives (a quiet sensor should visibly go stale).
+	// Ticks so "updated … ago" keeps counting: a quiet sensor must visibly age.
 	protected readonly now = signal(Date.now());
 	private nowTimer: ReturnType<typeof setInterval> | null = null;
 
-	/** Span of the active range in ms, for chart x-axis sizing. */
 	protected readonly spanMs = computed(() => rangeMs(this.range()));
 
 	protected readonly band = computed(() => aqiBand(this.airDevice()?.aqi_us));
 	protected readonly voc = computed(() => cleanVoc(this.airDevice()?.voc_ppb));
 
-	// Apply per-device calibration offsets client-side; toggleable, on by default,
-	// remembered across reloads. The DB and API are raw.
 	protected readonly calibrated = signal(readLocal('calibrated') !== 'off');
 
-	// Reveal each device's stable id on its room card. Off by default so daily
-	// viewing stays uncluttered; flipped on when correlating a moved physical
-	// sensor to the id you edit in labels.ts. Remembered across reloads.
+	// For matching a physical sensor to its entry in labels.ts.
 	protected readonly showIds = signal(readLocal('showIds') === 'on');
 
-	// Temperature & humidity: one coloured line per device, for room comparison.
 	protected readonly tempSeries = computed(() =>
 		climateSeries(
 			this.devices(),
@@ -109,7 +96,6 @@ export class EnvironmentPage implements OnInit, OnDestroy {
 			(d) => this.off(d, 'humidity'),
 		),
 	);
-	// Hero (air-quality device) calibrated temp/humidity.
 	protected readonly airTemp = computed(() => {
 		const a = this.airDevice();
 		return a ? this.calTemp(a) : null;
@@ -118,7 +104,6 @@ export class EnvironmentPage implements OnInit, OnDestroy {
 		const a = this.airDevice();
 		return a ? this.calHum(a) : null;
 	});
-	// CO₂ & PM2.5: a single line from the air-quality device only.
 	protected readonly co2Series = computed(() =>
 		airSeries(
 			this.devices(),
@@ -137,9 +122,6 @@ export class EnvironmentPage implements OnInit, OnDestroy {
 			(m) => m.pm25,
 		),
 	);
-	// Bluetooth signal (dBm): one line per (device, receiver) so a sensor heard by
-	// both the Mac and the phone shows a calm line per link, not a zig-zag between them.
-	// Empty series (e.g. the wired IQAir) are dropped inside the helper.
 	protected readonly rssiSeries = computed(() =>
 		rssiByReceiverSeries(this.devices(), this.api.historyByDevice()),
 	);
@@ -171,11 +153,7 @@ export class EnvironmentPage implements OnInit, OnDestroy {
 		writeLocal('showIds', v ? 'on' : 'off');
 	}
 
-	/**
-	 * The distinguishing part of a device id for display: the `govee-` prefix is
-	 * shared across every Govee sensor, so only the MAC suffix (e.g. `A562`) tells
-	 * them apart. Non-Govee ids (e.g. `airvisual`) are shown whole.
-	 */
+	/** A Govee id without its shared `govee-` prefix; other ids whole. */
 	protected shortId(device: string): string {
 		return device.replace(/^govee-/, '');
 	}
@@ -186,7 +164,6 @@ export class EnvironmentPage implements OnInit, OnDestroy {
 		return this.calibrated() && v != null ? v : 0;
 	}
 
-	/** A device's calibrated temperature (raw when calibration is off). */
 	protected calTemp(d: DeviceLatest): number | null {
 		return d.temp_c != null ? d.temp_c + this.off(d, 'temp_c') : null;
 	}
@@ -195,11 +172,7 @@ export class EnvironmentPage implements OnInit, OnDestroy {
 		return d.humidity != null ? d.humidity + this.off(d, 'humidity') : null;
 	}
 
-	/**
-	 * Chart line colour for the device at index `i`. The room cards iterate the
-	 * same `devices()` array in the same order as the climate charts, which colour
-	 * series `i` with `ROOM_COLORS[i]` — so a card's name matches its chart line.
-	 */
+	/** The colour of device `i`'s line in the climate charts. */
 	protected roomColor(i: number): string {
 		return ROOM_COLORS[i % ROOM_COLORS.length];
 	}

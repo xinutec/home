@@ -13,15 +13,13 @@ export interface MeasurementTable {
 	voc_ppb: number | null;
 	battery: number | null;
 	rssi: number | null;
-	// Electrical readings from the smart-plug power monitors (nullable — climate
-	// sensors leave them null). power_on is stored as 0/1 (TINYINT).
+	// power_on is 0/1.
 	power_w: number | null;
 	voltage_v: number | null;
 	current_a: number | null;
 	energy_kwh: number | null;
 	power_on: number | null;
-	// Capturing host for BLE readings ("mac" / "pixel5"); null for pre-v5 rows and
-	// the wired IQAir. Lets the RSSI chart split one line per receiver.
+	/** Receiver of a BLE reading; null for the wired IQAir and older rows. */
 	source: string | null;
 }
 
@@ -29,9 +27,7 @@ export interface SchemaVersionTable {
 	version: number;
 }
 
-// Latest Claude Code usage snapshot per capturing host. The percentages are
-// Anthropic's account-wide rate-limit utilisation (identical across hosts);
-// resets_at are DATETIMEs. One row per host, upserted — see schema.ts v6.
+/** Latest Claude Code usage per reporting host. See schema v6. */
 export interface ClaudeUsageTable {
 	host: string;
 	ts: Date;

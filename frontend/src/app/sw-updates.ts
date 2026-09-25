@@ -10,34 +10,23 @@ import { filter } from 'rxjs';
 
 export type { UpdateOutcome };
 
-/** Marks that we have already auto-reloaded out of an unrecoverable service worker
- *  state. Session-scoped so it survives that very reload. Unchanged from when this
- *  logic lived here, so a tab mid-recovery across the upgrade still sees its mark. */
+/** Set once we have reloaded out of an unrecoverable service-worker state, so
+ *  it happens once. Session storage survives that reload. */
 const RECOVERY_KEY = 'home.sw-recovery-attempted';
 
 /**
- * Self-update — the Angular wiring. The rules live in
- * `@xinutec/ui-harness/sw-updates`; this is the adapter.
- *
- * This is a dashboard left open on a phone, which is the tab ngsw never
- * re-checks on its own: it only looks at a navigation, and a resumed tab
- * performs none. ⚠ **So ngsw alone would cache a build that never learns a newer
- * one exists** — and this fleet's own argument is that stale monitoring is worse
- * than none, because it looks fine. The update path arrives in the same change
- * (dev-lint#1384).
- *
- * ⚠ The READINGS are deliberately not cached — see ngsw-config.json. Only the
- * shell is, so the app opens instantly and the numbers still come from the
- * network or not at all.
+ * Self-update: Angular's wiring for the policy in `@xinutec/ui-harness/sw-updates`.
+ * ngsw only checks for a new build on navigation, and a dashboard left open on
+ * a phone never navigates. The service worker caches the app, never the
+ * readings (ngsw-config.json has no data groups).
  */
 @Injectable({ providedIn: 'root' })
 export class SwUpdates {
 	private readonly sw = inject(SwUpdate);
 
 	private readonly serviceWorker: ServiceWorkerPort = ((sw: SwUpdate) => ({
-		// Bound to a local, not `this`: an object-literal getter does not capture the
-		// enclosing `this` lexically, and a copied boolean would freeze `isEnabled` at
-		// construction when start() must read the live value.
+		// A getter on `sw`, not a copied boolean: start() needs the live value, and
+		// `this` inside an object-literal getter is the literal.
 		get isEnabled(): boolean {
 			return sw.isEnabled;
 		},
@@ -47,9 +36,8 @@ export class SwUpdates {
 				.subscribe(() => handler());
 		},
 		onUnrecoverable: (handler: () => void): void => {
-			// The cached build is broken and the server no longer holds the files to repair
-			// it — what a roll-forward deploy of :latest leaves a client whose cache was
-			// evicted meanwhile. Nothing recovers from here except a fresh load.
+			// The cached build is broken and the server no longer has its files;
+			// only a fresh load recovers.
 			sw.unrecoverable.subscribe(() => handler());
 		},
 		checkForUpdate: () => sw.checkForUpdate(),
@@ -65,8 +53,6 @@ export class SwUpdates {
 		},
 		recoveryAttempted: () => sessionStorage.getItem(RECOVERY_KEY) !== null,
 		markRecoveryAttempted: () => sessionStorage.setItem(RECOVERY_KEY, '1'),
-		// Routed through the method below rather than called directly, so a test can
-		// assert "this would have reloaded" without navigating the test runner.
 		reload: () => this.reload(),
 		now: () => Date.now(),
 	};
@@ -77,14 +63,12 @@ export class SwUpdates {
 		this.policy.start();
 	}
 
-	/** Manual "Check for updates" (Settings). Never rejects — every failure comes back
-	 *  as `'failed'` so the caller can say so. */
+	/** Check for an update now. Never rejects: a failure resolves to `'failed'`. */
 	checkNow(): Promise<UpdateOutcome> {
 		return this.policy.checkNow();
 	}
 
-	/** The one place the page is thrown away. Its own method so tests can assert
-	 *  "this would have reloaded" without navigating the test runner. */
+	/** A method so tests can stub it instead of reloading the runner. */
 	reload(): void {
 		document.location.reload();
 	}

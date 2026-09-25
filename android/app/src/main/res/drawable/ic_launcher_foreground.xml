@@ -3,9 +3,7 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Material "device_thermostat" glyph (a thermometer — the dashboard is a
-         household-temperature dashboard), scaled and centred within the 108x108
-         adaptive-icon safe zone. -->
+    <!-- Material "device_thermostat", centred in the adaptive-icon safe zone. -->
     <group
         android:scaleX="2.7"
         android:scaleY="2.7"

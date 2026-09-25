@@ -1,5 +1,3 @@
-# See https://docs.github.com/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
-
 # Compiled output
 /dist
 /tmp
@@ -43,7 +41,7 @@ __screenshots__/
 .DS_Store
 Thumbs.db
 
-# Per-run eye-check screenshots left by the ui-harness layout checks.
+# ui-harness output.
 /ui-snapshots/
 /test-results/
 /playwright-report/

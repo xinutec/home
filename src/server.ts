@@ -21,24 +21,14 @@ app.onError((err, c) => {
 	return c.json({ error: "internal server error" }, 500);
 });
 
-// Compress before anything else runs, so it wraps the API and the static build
-// alike. Nothing in front of this pod adds it: measured 2026-08-14, a 30-day
-// history for one device answered a `gzip, br` request with 4,001,381 bytes and
-// no Content-Encoding at all. These are long runs of repetitive JSON — the
-// cheapest thing that has ever been done to this response.
+// First, so it wraps the API and the static files alike. Nothing in front of
+// this pod compresses, and a 30-day history is megabytes of repetitive JSON.
 app.use("*", compress());
 
-// Liveness/readiness probe (no auth).
 app.get("/health", (c) => c.json({ ok: true }));
 
-// Populates `session` when a valid cookie is present, and does nothing at all
-// when one is not. Every read on this host stays public — the session is only
-// consulted where a *write* has to be attributed to a person.
 app.use("*", sessionMiddleware(config.sessionSecret));
 
-// Sweep expired sessions at startup, then every six hours. The lazy path in
-// `getSession` only deletes a session when its owner comes back with the
-// cookie, so without this the table grows monotonically.
 const sweepSessions = async () => {
 	try {
 		const n = await cleanupExpiredSessions();
@@ -50,20 +40,15 @@ const sweepSessions = async () => {
 await sweepSessions();
 setInterval(sweepSessions, 6 * 60 * 60 * 1000).unref();
 
-// Sign-in, so a write can be attributed. Outside /api because the callback is a
-// top-level browser navigation, not an API call.
+// Outside /api: the callback is a top-level navigation, not an API call.
 app.route("/", nextcloudOAuthRoutes(config));
 
-// JSON API: token-gated writes (/api/ingest, /api/usage), public reads
-// (/api/devices, /api/measurements, /api/usage).
 app.route("/api", apiRoutes(config.ingestToken));
 
-// Unknown /api paths are JSON 404s — they must never fall through to the SPA
-// fallback, which would answer an API caller with 200 + index.html.
+// Never let an unknown /api path fall through to the SPA's 200 + index.html.
 app.all("/api/*", (c) => c.json({ error: "not found" }, 404));
 
-// SPA caching: HTML must always revalidate so a new deploy is picked up on a
-// normal reload; fingerprinted assets are immutable. (API responses untouched.)
+// HTML revalidates so a reload picks up a deploy; hashed assets are immutable.
 app.use("/*", async (c, next) => {
 	await next();
 	if (c.req.path.startsWith("/api")) return;
@@ -71,26 +56,19 @@ app.use("/*", async (c, next) => {
 	c.header("Cache-Control", hashed ? "public, max-age=31536000, immutable" : "no-cache");
 });
 
-// Built Angular app, with SPA fallback to index.html for client-side routes.
 app.use("/*", serveStatic({ root: "./public" }));
 
-// ⚠ **A missing FILE must 404, not be handed the page**, and the mistake is
-// invisible: the wrong answer is a 200, so a browser that asked for a woff2 and
-// got HTML renders broken icons and reports nothing anywhere. Measured
-// 2026-09-08 — /media/nope.woff2 answered 200 text/html (#1478).
-//
-// The test is a dot in the last path segment, so /devices is a route and
-// /main-ABC123.js is a file. A heuristic; the alternative, enumerating the
-// bundle's own asset names, would have to be rebuilt whenever ng build changes
-// a hash. It sits BETWEEN the two serveStatic calls deliberately: a real asset
-// has already been served by the first, so anything reaching here named a file
-// that is not there.
+// A missing file must 404, not get index.html: a woff2 answered with a 200 page
+// renders as broken icons and nothing reports it. A dot in the last segment
+// means a file. Between the two serveStatic calls, so any real file has already
+// been served.
 app.get("/*", async (c, next) => {
 	const last = c.req.path.split("/").pop() ?? "";
 	if (last.includes(".")) return c.text("not found", 404);
 	await next();
 });
 
+// Every other path is a client-side route.
 app.get("/*", serveStatic({ path: "./public/index.html" }));
 
 serve({ fetch: app.fetch, port: config.port }, (info) => {

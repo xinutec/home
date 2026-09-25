@@ -1,18 +1,7 @@
-// Per-device sensor-calibration offsets. Served as metadata (per device, in
-// /api/devices) and applied in the client, so the correction can be toggled on
-// and off without touching the stored data — which is always raw.
-//
-// Re-derived 2026-07-03 by xinutec-infra/mac-mini/sensor-calibrate.py from the
-// past 24 h of co-located, steady points, anchored to the duplicate-collapsed
-// *type* consensus (each sensor type — IQAir, H5075, H5103 — gets one vote, so
-// the three identical H5075s can't out-vote the rest). Model: a single additive
-// offset per device; blocked-CV model selection still showed gain/curve terms
-// overfit the narrow (~22–23 °C) range. See doc/calibration.md.
-//
-// The sensors have since self-recalibrated into near-agreement: raw, they now
-// concur to ~0.07 °C (they used to differ by ~0.8 °C), so the corrections are
-// all sub-0.1 °C. The earlier ±0.4 °C offsets had drifted out from under the
-// hardware and were widening the spread rather than closing it.
+// Per-device temperature offsets, served in /api/devices and applied by the
+// client so they can be toggled; stored readings stay raw. Output of
+// xinutec-infra/mac-mini/sensor-calibrate.py — the model, the anchor and how to
+// re-derive them are in doc/calibration.md. A device with no entry is uncorrected.
 
 export interface Calibration {
 	temp_c?: number;

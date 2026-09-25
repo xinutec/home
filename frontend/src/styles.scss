@@ -1,6 +1,4 @@
-// Angular Material 3 theming via the modern `mat.theme()` Sass API.
-// A calm teal primary suits a home air-quality dashboard; light + dark are
-// both emitted and switched by `color-scheme` (driven by ThemeService).
+// Light and dark are both emitted; ThemeService picks via `color-scheme`.
 @use '@angular/material' as mat;
 
 html {
@@ -19,10 +17,8 @@ html {
 	);
 }
 
-// Universal border-box reset (fleet convention, DL-ANGULAR-BOX-SIZING-RESET):
-// without it `width: 100%` + side padding renders wider than the viewport and
-// the page scrolls sideways on a phone. Previously patched per-element (the
-// hero-card badge comment below documents exactly that bug biting).
+// Without it `width: 100%` plus padding overflows and the page scrolls sideways
+// (DL-ANGULAR-BOX-SIZING-RESET).
 *,
 *::before,
 *::after {
@@ -38,14 +34,10 @@ body {
 	-webkit-font-smoothing: antialiased;
 }
 
-// App-level palette tokens used by charts and the AQI badge.
 :root {
-	// Status-bar / notch inset at the top (with viewport-fit=cover: edge-to-edge on
-	// Android, the notch on iOS). The sticky top bar pads by this so it isn't drawn
-	// under the system status bar. 0 in a normal browser tab.
+	// The status bar or notch under viewport-fit=cover; 0 in a browser tab.
 	--safe-top: env(safe-area-inset-top, 0px);
 
-	// US-AQI band colours (EPA scale).
 	// dev-lint: allow-hardcoded-color EPA US-AQI band colour — a fixed external scale
 	--aqi-good: #2e9e5b;
 	// dev-lint: allow-hardcoded-color EPA US-AQI band colour — a fixed external scale
@@ -59,7 +51,6 @@ body {
 	// dev-lint: allow-hardcoded-color EPA US-AQI band colour — a fixed external scale
 	--aqi-hazardous: #7e0023;
 
-	// Chart accents (the temperature chart uses --mat-sys-primary directly).
 	// dev-lint: allow-hardcoded-color chart accent — deliberate data-viz colour
 	--chart-co2: #ef6c00;
 	// dev-lint: allow-hardcoded-color chart accent — deliberate data-viz colour
@@ -67,9 +58,7 @@ body {
 	// dev-lint: allow-hardcoded-color chart accent — deliberate data-viz colour
 	--chart-pm: #8e44ad;
 
-	// Data-viz display scale — hero/numeral sizes the M3 type roles don't
-	// cover (a dashboard's big readings). One source of truth; components
-	// reference these instead of inventing per-element rem sizes.
+	// Big-number sizes the M3 type roles lack.
 	--display-hero: clamp(3.25rem, 12vw, 5rem);
 	--display-numeral-lg: clamp(2.25rem, 8vw, 3rem);
 	--display-numeral: 2rem;
@@ -77,9 +66,7 @@ body {
 	--display-na: 1.25rem;
 }
 
-// Shared across the routed pages (Environment + Claude usage): a section
-// heading and the centred "waiting for data" placeholder. Global — not
-// component-scoped — because both pages use them.
+// Used by both pages.
 .section-title {
 	font: var(--mat-sys-title-large);
 	margin: 0;
@@ -114,13 +101,8 @@ body {
 	max-width: 28rem;
 }
 
-/* An icon has exactly one correct size, so it must never absorb flex shrink.
- * Material ships `mat-icon` with `overflow: hidden`, which costs a flex/grid item
- * its `min-width: auto` floor — the floor becomes 0, and a squeezed icon is then
- * CLIPPED rather than scaled, showing a fragment of a glyph. Said once here
- * rather than per component: it is unconditionally correct, so repeating it in
- * every stylesheet that happens to flex an icon is noise that also rots
- * (DL-ANGULAR-ICON-SHRINK). */
+/* mat-icon's `overflow: hidden` drops its flex min-width to 0, so a squeezed
+ * icon is clipped to a fragment (DL-ANGULAR-ICON-SHRINK). */
 mat-icon {
 	flex-shrink: 0;
 }

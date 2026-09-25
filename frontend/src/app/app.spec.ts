@@ -15,9 +15,7 @@ describe('App', () => {
 				provideRouter([]),
 				provideHttpClient(),
 				provideHttpClientTesting(),
-				// The shell starts the update policy, which injects Angular's
-				// SwUpdate. A disabled stub is what a dev build gives it too, so
-				// `start()` returns immediately and these tests stay about layout.
+				// Disabled, as in a dev build: start() then does nothing.
 				{ provide: SwUpdate, useValue: { isEnabled: false } },
 			],
 		}).compileComponents();

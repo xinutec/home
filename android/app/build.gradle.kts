@@ -6,14 +6,12 @@ plugins {
 android {
     namespace = "org.xinutec.home"
     compileSdk = 36
-    // Pin to the build-tools the nix SDK provides (AGP would otherwise pick a
-    // version that isn't in the read-only SDK).
+    // The nix SDK is read-only and has only this one; AGP would pick another.
     buildToolsVersion = "36.0.0"
 
     defaultConfig {
         applicationId = "org.xinutec.home"
-        // minSdk 26 (Android 8): the system WebView is Chromium on any such device,
-        // so the Angular dashboard renders as it does in Chrome.
+        // From Android 8 the system WebView is Chromium.
         minSdk = 26
         targetSdk = 36
         versionCode = 1
@@ -21,7 +19,6 @@ android {
     }
 
     buildTypes {
-        // Sideloaded build — no shrinking, signed with the debug key for simplicity.
         release {
             isMinifyEnabled = false
         }
@@ -39,18 +36,14 @@ kotlin {
     }
 }
 
-// Say so in a sentence rather than a stacktrace when the shell isn't beside us.
-// Resolved against rootDir (android/), so this is the same path settings.gradle.kts
-// includes — file() here would resolve against app/ and never match.
+// A sentence instead of a stack trace when the shell is missing. rootDir, not
+// file(): the path must match settings.gradle.kts, which resolves from android/.
 require(rootDir.resolve("../../ui-harness/android").isDirectory) {
     "ui-harness must be checked out beside this repo (~/Code/ui-harness)"
 }
 
 dependencies {
-    // The shared WebView shell (ui-harness/android), substituted to a project by
-    // settings.gradle.kts. No version, ever: it resolves by path.
+    // Substituted by the path in settings.gradle.kts; no version.
     implementation("org.xinutec:shell")
-    // WebView is part of the framework — the only dependency is core-ktx. No
-    // Compose, no AppCompat: this app is a single WebView.
     implementation(libs.androidx.core.ktx)
 }

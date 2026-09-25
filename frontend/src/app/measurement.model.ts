@@ -1,4 +1,3 @@
-/** A single environmental reading as returned by the backend API. */
 export interface Measurement {
 	ts: string;
 	device: string;
@@ -17,36 +16,29 @@ export interface Measurement {
 	current_a: number | null;
 	energy_kwh: number | null;
 	power_on: number | null;
-	/** Capturing host ("mac" / "pixel5") for BLE readings; null for the wired IQAir
-	 *  and pre-v5 rows. Splits the RSSI chart into one line per receiver. */
+	/** Receiver of a BLE reading; null for the wired IQAir and older rows. */
 	source: string | null;
 }
 
-/** Display overlay for a device, as returned alongside its latest reading. */
+/** Mirrors `DeviceLabel` in src/labels.ts. */
 export interface DeviceLabel {
 	name: string;
-	/** Physical location; absent until the sensor is sited (UI falls back to name). */
+	/** Absent until the sensor is sited; then show `name`. */
 	room?: string;
 	airQuality: boolean;
-	/** True for the smart-plug power monitors (W/V/A/kWh), not climate sensors. */
 	power?: boolean;
 	order: number;
 	type: string;
 }
 
-/** A device's most recent reading plus its display label (from `/api/devices`). */
+/** A row of `/api/devices`. */
 export interface DeviceLatest extends Measurement {
 	label: DeviceLabel;
-	/** Per-device calibration offsets, applied client-side when calibration is on. */
+	/** Added to the raw reading while "Calibrated" is on. */
 	offset: { temp_c?: number; humidity?: number };
 }
 
-/**
- * The freshest Claude Code usage snapshot from `/api/usage` (or `null` when no
- * machine has pushed yet). The percentages are Anthropic's account-wide
- * rate-limit utilisation; `ts` is when a machine's statusLine last captured
- * them, and `host` which machine. Windows are independently nullable.
- */
+/** `/api/usage`: the freshest report, from `host` at `ts`. */
 export interface ClaudeUsage {
 	host: string;
 	ts: string;
@@ -54,25 +46,19 @@ export interface ClaudeUsage {
 	five_hour_resets_at: string | null;
 	seven_day_pct: number | null;
 	seven_day_resets_at: string | null;
-	/**
-	 * The windows belonging to one model rather than to the plan. Optional
-	 * because a browser holding this build can be served by an API that predates
-	 * the column — and because the list is whatever Anthropic scopes today, which
-	 * is why the model is a field rather than a name in this type.
-	 */
+	/** Models with a weekly allowance of their own. */
 	models?: ClaudeUsageModel[];
 }
 
-/** One model's own weekly allowance, as `/api/usage` reports it. */
 export interface ClaudeUsageModel {
-	/** Display name from the CLI — "Fable". Shown verbatim. */
+	/** The CLI's display name, shown verbatim. */
 	model: string;
 	ts: string;
 	pct: number | null;
 	resets_at: string | null;
 }
 
-/** Distinct line colours for the per-room comparison charts, assigned by order. */
+/** Line colours for the per-room charts, by position; they repeat past six. */
 export const ROOM_COLORS: readonly string[] = [
 	'#26a69a',
 	'#ef6c00',
@@ -82,17 +68,12 @@ export const ROOM_COLORS: readonly string[] = [
 	'#8d6e63',
 ];
 
-/** Selectable history windows for the charts, in the order the selector shows. */
+/** History windows, in selector order. */
 export const RANGE_KEYS = ['4h', '24h', '7d', '30d'] as const;
 
 export type RangeKey = (typeof RANGE_KEYS)[number];
 
-/**
- * How long each window is. `Record<RangeKey, …>` is what keeps the two lists
- * honest: a window listed above and missing here, or an entry here that no
- * selector offers, is a compile error rather than a lookup that quietly
- * substitutes some other window at runtime.
- */
+/** A `Record` so a window missing here is a compile error. */
 const RANGE_HOURS: Record<RangeKey, number> = {
 	'4h': 4,
 	'24h': 24,
@@ -103,7 +84,6 @@ const RANGE_HOURS: Record<RangeKey, number> = {
 /** The window shown before anyone touches the selector. */
 export const DEFAULT_RANGE: RangeKey = '24h';
 
-/** A window's span in ms — the one place its hours become milliseconds. */
 export function rangeMs(key: RangeKey): number {
 	return RANGE_HOURS[key] * 3_600_000;
 }
@@ -128,7 +108,6 @@ export const AQI_BANDS: readonly AqiBand[] = [
 	{ min: 301, max: Number.POSITIVE_INFINITY, label: 'Hazardous', cssVar: '--aqi-hazardous' },
 ];
 
-/** Returns the AQI band for a given index, or `null` when no value is known. */
 export function aqiBand(aqi: number | null | undefined): AqiBand | null {
 	if (aqi == null || aqi < 0) {
 		return null;
@@ -136,10 +115,7 @@ export function aqiBand(aqi: number | null | undefined): AqiBand | null {
 	return AQI_BANDS.find((b) => aqi >= b.min && aqi <= b.max) ?? null;
 }
 
-/**
- * VOC is reported as -1 (or null) when the sensor has no reading.
- * Returns a clean number, or `null` when unavailable.
- */
+/** The IQAir reports a missing VOC reading as -1. */
 export function cleanVoc(voc: number | null | undefined): number | null {
 	if (voc == null || voc < 0) {
 		return null;

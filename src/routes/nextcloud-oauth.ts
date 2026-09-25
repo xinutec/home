@@ -1,16 +1,9 @@
 /**
- * Nextcloud OAuth, identity-only.
+ * Nextcloud OAuth, for identity only: the access token is used once to learn
+ * who signed in, then dropped.
  *
- * Used solely to establish *who the user is* and create a session cookie. The
- * access token is thrown away after the user-info lookup: home has nothing to
- * fetch from Nextcloud, it only needs a name.
- *
- * **Why home has sign-in at all**, given every reading it holds is public: so a
- * write can be attributed. `POST /api/telemetry` records what a person did, and
- * on a host anyone can read that would otherwise be an open write into the pod
- * log — a flood nobody could attribute, and a channel that stops being evidence
- * the moment a stranger can forge entries in it. Sign-in gates the write and
- * leaves every read exactly as public as it was.
+ * Every read on home is public. Sign-in exists so `POST /api/telemetry` can
+ * name who wrote each line, instead of being an anonymous write into the log.
  */
 
 import { Hono } from "hono";
@@ -29,8 +22,6 @@ import type { UserSession } from "../types.js";
 
 const ncTokenSchema = z.object({
 	access_token: z.string().min(1),
-	// refresh_token + expires_in are present in the response but we
-	// don't use them — identity-only flow.
 });
 
 const ncUserSchema = z.object({
@@ -45,20 +36,12 @@ const ncUserSchema = z.object({
 export function nextcloudOAuthRoutes(config: Config): Hono<AppEnv> {
 	const app = new Hono<AppEnv>();
 	const nc = config.nextcloud;
-	// OAuth credentials are not part of the runtime Config schema
-	// anymore (Login Flow v2 doesn't need them) but `/login` still
-	// requires them. Read directly from env.
 	const ncClientId = process.env.NC_CLIENT_ID ?? "";
 	const ncClientSecret = process.env.NC_CLIENT_SECRET ?? "";
 	const ncRedirectUri = process.env.NC_REDIRECT_URI ?? "https://home.xinutec.org/auth/callback";
 
 	app.get("/login", (c) => {
-		// Optional return_to lets a banner-driven reconnect from
-		// /your-day?date=... land back there instead of the home page.
 		const returnTo = c.req.query("return_to");
-		// The pending login rides in a signed cookie, not the in-memory state map:
-		// NC's Login Flow drops `state` entirely for a cookie-less browser. See
-		// middleware/pending-login.ts.
 		const state = issuePendingLogin(c, config.sessionSecret, returnTo, Date.now());
 		const url = new URL(`${nc.baseUrl}/index.php/apps/oauth2/authorize`);
 		url.searchParams.set("client_id", ncClientId);
@@ -101,18 +84,13 @@ export function nextcloudOAuthRoutes(config: Config): Hono<AppEnv> {
 			return c.text("Authentication failed. Please try again.", 500);
 		}
 
-		// safeParse, not parse: a Nextcloud that answers 200 with a shape we do not
-		// recognise is the same failure to the person signing in as one that answers
-		// 500, and it deserves the same sentence rather than a stack trace turned
-		// into a generic error page.
+		// safeParse: an unexpected 200 body is a failed sign-in, not a stack trace.
 		const tokens = ncTokenSchema.safeParse(await tokenRes.json().catch(() => null));
 		if (!tokens.success) {
 			console.error("Nextcloud token response did not parse:", tokens.error.flatten());
 			return c.text("Authentication failed. Please try again.", 500);
 		}
 
-		// Use the access token exactly once to look up who this is, then discard:
-		// home reads nothing from Nextcloud and stores no Nextcloud credential.
 		const userRes = await fetch(`${nc.baseUrl}/ocs/v2.php/cloud/user?format=json`, {
 			headers: {
 				Authorization: `Bearer ${tokens.data.access_token}`,
@@ -138,7 +116,6 @@ export function nextcloudOAuthRoutes(config: Config): Hono<AppEnv> {
 
 		const signedId = await createSession(config.sessionSecret, user);
 		setSessionCookie(c, signedId);
-		// The login is over: drop its cookie so a stale one can't be replayed.
 		clearPendingLogin(c);
 		return c.redirect(validateReturnTo(pending.returnTo));
 	});

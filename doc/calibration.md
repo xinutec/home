@@ -1,8 +1,7 @@
 # Sensor calibration
 
-The dashboard shows several thermometers that read the same room slightly
-differently — a cheap hygrometer's bias is typically a few tenths of a degree.
-This describes how we make them agree, and the decisions behind it.
+Several thermometers reading the same air disagree by a few tenths of a
+degree. This is how they are made to agree, and why that way.
 
 ## What we do
 
@@ -24,9 +23,9 @@ The offset is static per-device metadata — like the device label and model
 
 ## How the offsets were derived
 
-By the pipeline in `xinutec-infra/mac-mini/sensor-calibrate.py`, run while all
-five sensors sat co-located. Its non-obvious parts are *which points it keeps*
-and *letting the data choose the model*, not the fit itself:
+By `xinutec-infra/mac-mini/sensor-calibrate.py`, run while the sensors sit
+together. The non-obvious parts are *which points it keeps* and *letting the
+data choose the model*, not the fit itself:
 
 1. **Resample** every sensor onto one 5-min grid (the IQAir's clock, nearest
    within ±2.5 min) — the devices never share an exact timestamp.
@@ -57,12 +56,11 @@ The relative offsets between devices are fixed by the data; the anchor only
 shifts everyone by a constant. We anchor to the **duplicate-collapsed type
 consensus**: each sensor *type* (IQAir, Govee H5075, Govee H5103) gets one vote.
 
-This matters because three of the Govee are the **same model (H5075)** and so
-share a systematic bias — averaging them reduces random noise but not that shared
-bias. In a naive 5-way median they cast three correlated votes and drag the
-consensus ~0.2 °C toward themselves purely by headcount. Collapsing each type to
-one vote removes that. (Anchoring to the IQAir alone, or collapsing further to
-brand — IQAir vs Govee, one vote each — were the alternatives considered.)
+Sensors of one model share a systematic bias, which averaging them does not
+remove. In a plain median, three H5075s cast three correlated votes and pull the
+consensus toward themselves by headcount (~0.2 °C when it was measured). One
+vote per type removes that. The alternatives were the IQAir alone, or one vote
+per brand.
 
 There is no ground-truth thermometer, so the anchor is a deliberate choice, not a
 measured truth.
@@ -73,7 +71,8 @@ measured truth.
    derives from the **past 24 h** by default; `--hours N` or `--from/--to` widen
    the window (a longer window gives more steady points and a firmer fit).
 2. Copy the chosen anchor's offsets into `OFFSETS` in `src/calibration.ts`.
-3. Deploy. Offsets travel with the sensor, so they stay valid after a unit is
-   moved to its room.
+3. Deploy. An offset belongs to the sensor, so it stays valid when the sensor
+   moves rooms.
 
-Humidity uses the same pipeline (`--field humidity`) but is not yet corrected.
+Humidity goes through the same pipeline (`--field humidity`) but no humidity
+offsets are applied.

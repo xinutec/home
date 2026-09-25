@@ -1,7 +1,5 @@
 import { z } from "zod";
 
-// Environment is validated once at startup; a missing/invalid var fails fast
-// rather than surfacing as a confusing runtime error later.
 const Env = z.object({
 	PORT: z.coerce.number().default(3000),
 	DB_HOST: z.string().default("home-db"),

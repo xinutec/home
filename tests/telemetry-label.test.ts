@@ -4,9 +4,6 @@ import { oneLine } from "../src/routes/api.js";
 
 describe("oneLine", () => {
 	it("stops a label forging a log line", () => {
-		// The attack this exists for: the label is written into the log as
-		// `label=…`, so a newline inside it appends lines of the sender's
-		// choosing — here a second client-event that never happened.
 		const forged = "ok\nclient-event kind=tap path=/admin label=Delete everything";
 		const flat = oneLine(forged, 160);
 		expect(flat).not.toContain("\n");
@@ -18,9 +15,7 @@ describe("oneLine", () => {
 	});
 
 	it("stops a bidi override disguising what the line says", () => {
-		// U+202E flips the rendering of everything after it, so a label can be
-		// made to *display* as something other than its content — Trojan Source,
-		// aimed at the record rather than at source code.
+		// U+202E reverses how the rest of the line displays.
 		expect(oneLine("Save\u202e\u202dDelete", 160)).toBe("Save Delete");
 	});
 

@@ -19,9 +19,6 @@ describe('aqiBand', () => {
 	});
 });
 
-// Coverage of RANGE_HOURS and the type of DEFAULT_RANGE are compile-time facts,
-// so there is nothing here to assert about them. What the compiler cannot say is
-// the order the selector shows, and what a window is worth in milliseconds.
 describe('history windows', () => {
 	it('offers the windows shortest first', () => {
 		expect([...RANGE_KEYS]).toEqual(['4h', '24h', '7d', '30d']);

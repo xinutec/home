@@ -1,6 +1,4 @@
 import { test, type Page } from '@playwright/test';
-// The fleet-shared harness, published as @xinutec/ui-harness (source repo
-// ~/Code/ui-harness). Ships compiled JS, so it loads straight from node_modules.
 import {
   expectNoTextOverlaps,
   expectNoHorizontalOverflow,
@@ -10,21 +8,11 @@ import {
 } from '@xinutec/ui-harness';
 
 /**
- * L2 phone-width layout harness for home — a single-page household-environment
- * dashboard plus a Claude-usage page. Render each at a Pixel viewport with the
- * backend mocked
- * and BUSY data, and assert no text collides and nothing overflows the width.
- * The dense, at-risk regions are the metric-grid (4 cards), the room-grid (each
- * card packs name + type + temp + humidity + timestamp + battery), and the
- * Trends range-toggle row beside the section title.
- *
- * There are two routed pages, not one: `/claude` renders the subscription-usage
- * bars, whose day ticks and clock mark are absolutely positioned ON the bar and
- * so can only be judged in a render.
+ * Both pages at phone width, backend mocked with busy data: no text collides,
+ * nothing overflows, no text is starved of room.
  */
 
-/** Two air-quality devices; the first drives the hero/AQI badge. A deliberately
- *  long room name stresses the room card's label. */
+/** The first drives the hero; the second's long name stresses a room card. */
 const DEVICES = [
   {
     ts: '2026-07-01T09:14:00Z', device: '267F', temp_c: 21.4, humidity: 48, co2_ppm: 820,
@@ -40,7 +28,6 @@ const DEVICES = [
   },
 ];
 
-/** A short measurement series for the trend charts (any device). */
 function series(device: string) {
   const base = Date.UTC(2026, 6, 1, 0, 0, 0);
   return Array.from({ length: 8 }, (_, i) => ({
@@ -53,16 +40,13 @@ function series(device: string) {
   }));
 }
 
-/** A busy usage reading, dated off the clock so the specs never time-bomb: the
- *  page withholds any figure whose window has already turned over, and a fixed
- *  date would eventually withhold all of them and leave nothing to lay out. */
+/** Dated from now: the page hides figures whose window has passed, so a fixed
+ *  date would eventually leave nothing to lay out. */
 function usage() {
   const now = Date.now();
   const week = new Date(now + 34 * 3_600_000).toISOString();
   return {
     host: 'mac-mini',
-    // Read 40 minutes ago — the ordinary case, since the figure comes from
-    // whenever a machine's status line last ran.
     ts: new Date(now - 40 * 60_000).toISOString(),
     five_hour_pct: 62,
     five_hour_resets_at: new Date(now + 2 * 3_600_000).toISOString(),
@@ -72,8 +56,7 @@ function usage() {
   };
 }
 
-/** Mock every backend call. Catch-all FIRST — Playwright runs handlers
- *  last-registered-first, so the specifics below take priority. */
+/** Catch-all first: Playwright tries the last-registered handler first. */
 async function mockApi(page: Page): Promise<void> {
   await page.route('**/api/**', (r) => r.fulfill({ json: [] }));
   await page.route('**/api/devices', (r) => r.fulfill({ json: DEVICES }));
@@ -84,8 +67,7 @@ async function mockApi(page: Page): Promise<void> {
   });
 }
 
-// The checker-checker: fail loudly here if the device preset is ever lost and
-// the "phone width" suite silently runs at desktop width (defect 2).
+// Without the device preset every check below would pass at desktop width.
 test('the suite really runs at phone geometry', async ({ page }) => {
   await mockApi(page);
   await page.goto('/');
@@ -95,15 +77,13 @@ test('the suite really runs at phone geometry', async ({ page }) => {
 test('dashboard — hero + metrics + rooms + trends: lays out cleanly @ phone width', async ({ page }, testInfo) => {
   await mockApi(page);
   await page.goto('/');
-  // Wait for the loaded dashboard (not the "Waiting for the first reading" empty
-  // state) — the hero, metric cards, rooms and trends must all have laid out.
+  // The loaded dashboard, not the empty state.
   await page.getByText('Indoor air & climate').waitFor();
   await page.getByText('US AQI').waitFor();
-  await page.getByText('PM2.5').first().waitFor(); // a metric card ("PM2.5" also titles a chart below)
+  await page.getByText('PM2.5').first().waitFor(); // also a chart title
   await page.getByText('Rooms').waitFor();
   await page.getByText('Trends').waitFor();
-  await page.getByText('Bedroom').waitFor(); // a room card rendered (its room label)
-  // The toolbar's mat-icons must render as glyphs, not their ligature words.
+  await page.getByText('Bedroom').waitFor();
   await expectIconFontLoaded(page);
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo);
@@ -113,12 +93,10 @@ test('dashboard — hero + metrics + rooms + trends: lays out cleanly @ phone wi
 test('claude usage — bars, day ticks and clock mark: lay out cleanly @ phone width', async ({ page }, testInfo) => {
   await mockApi(page);
   await page.goto('/claude');
-  // The loaded page, not the "Waiting for the first usage report" empty state.
+  // The loaded page, not the empty state.
   await page.getByText('Claude usage').waitFor();
   await page.getByText('Weekly · Fable').waitFor();
-  // The marks are absolutely positioned inside the bar, so their presence is
-  // the thing a source read cannot settle: six boundaries in a week, and a
-  // clock on every window that has a live figure.
+  // The week bar's sixth day tick.
   await page.locator('.cu-card').nth(1).locator('.day').nth(5).waitFor();
   await expectIconFontLoaded(page);
   await expectNoTextOverlaps(page, testInfo);

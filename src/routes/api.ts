@@ -7,14 +7,12 @@ import { decorateDevices } from "../labels.js";
 import { MeasurementBatch, MeasurementInput } from "../measurement.js";
 import { UsageInput } from "../usage.js";
 
-// How far back /api/receivers looks when listing the devices a receiver still
-// hears. Comfortably wider than the slowest receiver's 10-minute push cadence, so
-// a healthy-but-slow receiver never looks like it has gone deaf to a sensor.
+// How far back /api/receivers looks for the devices a receiver hears. Well past
+// the slowest receiver's 10-minute push, so slow never reads as deaf.
 const HEARD_WINDOW_MS = 60 * 60 * 1000;
 
-// Query parameters for /api/measurements. Validated like the write path — a
-// malformed `from`/`to` must 400, not silently return an unfiltered range
-// (`new Date("garbage")` is an Invalid Date the driver won't filter on).
+// A malformed `from`/`to` must 400: an Invalid Date reaching the query filters
+// nothing and returns the unfiltered range.
 export const MeasurementsQuery = z.object({
 	from: z.coerce.date().optional(),
 	to: z.coerce.date().optional(),
@@ -38,7 +36,6 @@ function sensorValues(m: MeasurementInput) {
 		voltage_v: m.voltage_v ?? null,
 		current_a: m.current_a ?? null,
 		energy_kwh: m.energy_kwh ?? null,
-		// Boolean relay state stored as 0/1; MariaDB TINYINT round-trips as a number.
 		power_on: m.power_on == null ? null : m.power_on ? 1 : 0,
 		source: m.source ?? null,
 	};
@@ -56,35 +53,22 @@ function toUsageRow(u: UsageInput) {
 		five_hour_resets_at: u.five_hour_resets_at ? new Date(u.five_hour_resets_at) : null,
 		seven_day_pct: u.seven_day_pct ?? null,
 		seven_day_resets_at: u.seven_day_resets_at ? new Date(u.seven_day_resets_at) : null,
-		// Provenance as claimed, stored as 0/1; absent claims the weaker kind.
 		measured: u.measured ? 1 : 0,
 	};
 }
 
-/** Flatten a client-supplied label to a single harmless log field.
- *
- *  The security boundary of the telemetry endpoint, not tidiness. A label is
- *  verbatim UI text written into a log line as `label=…`, so a newline inside it
- *  forges *whole log lines* — including further `client-event` lines attributed
- *  to someone else. The log stops being the evidence it exists to be.
- *
- *  Also flattens the format characters that deceive rather than break: the
- *  zero-width ones (a label of them reads as empty while occupying the cap) and
- *  the bidi overrides (they reorder the *rendering* of a line, so it displays as
- *  something other than what it says). Capped by code point so a multi-byte
- *  glyph is never split down the middle. */
+/** Flatten client text to one log field. This is the telemetry endpoint's
+ *  security boundary: a newline would let a client forge whole `client-event`
+ *  lines under someone else's name, and zero-width or bidi characters would make
+ *  a line display as something other than what it says. Capped by code point,
+ *  so a glyph is never split. */
 export function oneLine(raw: string, max: number): string {
 	const unbroken = raw.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, " ");
 	return [...unbroken.replace(/\s+/g, " ").trim()].slice(0, max).join("");
 }
 
-/** One row per model, keeping the first seen — so pass them freshest first.
- *
- *  ⚠ Written as a first-wins loop rather than `new Map(rows.map(…))`, which was
- *  the bug: a Map takes the LAST value for a repeated key, so folding rows that
- *  arrive newest-first kept the OLDEST reading of each model. Two hosts
- *  reporting the same scope is all it takes, and a stale percentage looks
- *  exactly like a current one. */
+/** One row per model, the first seen — so pass them freshest first. Not
+ *  `new Map(rows.map(…))`: that keeps the last, i.e. the oldest. */
 export function freshestPerModel<T extends { model: string }>(rows: readonly T[]): T[] {
 	const byModel = new Map<string, T>();
 	for (const row of rows) {
@@ -100,7 +84,6 @@ export function apiRoutes(ingestToken: string): Hono<AppEnv> {
 
 	const authed = (auth: string | undefined) => auth === `Bearer ${ingestToken}`;
 
-	// Token-gated write: the Mac poller POSTs one reading here.
 	api.post("/ingest", async (c) => {
 		if (!authed(c.req.header("Authorization"))) {
 			return c.json({ error: "unauthorized" }, 401);
@@ -118,9 +101,7 @@ export function apiRoutes(ingestToken: string): Hono<AppEnv> {
 		return c.json({ ok: true });
 	});
 
-	// Token-gated bulk write: the backfill importer POSTs arrays of readings.
-	// INSERT IGNORE — historical rows are immutable, so an existing (device, ts)
-	// key is skipped, making re-runs idempotent.
+	// INSERT IGNORE: an existing (device, ts) is kept, so a re-sent batch is harmless.
 	api.post("/ingest/batch", async (c) => {
 		if (!authed(c.req.header("Authorization"))) {
 			return c.json({ error: "unauthorized" }, 401);
@@ -134,9 +115,7 @@ export function apiRoutes(ingestToken: string): Hono<AppEnv> {
 		return c.json({ ok: true, received: rows.length });
 	});
 
-	// Token-gated write: a machine's Claude Code statusLine hook POSTs its latest
-	// usage snapshot here. Upsert on host — this is current state, not history, so
-	// a re-push just overwrites the host's row.
+	// A host's latest Claude Code usage, from the statusLine hook or the console.
 	api.post("/usage", async (c) => {
 		if (!authed(c.req.header("Authorization"))) {
 			return c.json({ error: "unauthorized" }, 401);
@@ -158,22 +137,16 @@ export function apiRoutes(ingestToken: string): Hono<AppEnv> {
 				measured: row.measured,
 			})
 			.execute();
-		// ⚠ **Only when the payload speaks to them.** A pusher that cannot see
-		// model scopes omits the key entirely, and its push must leave this host's
-		// scoped rows exactly as they were — see `UsageInput.models`. An empty
-		// array is a statement and does clear them.
+		// Absent `models` leaves the scoped rows alone; `[]` clears them. See
+		// `UsageInput.models`.
 		const models = parsed.data.models;
 		if (models) {
-			// In one transaction, because the delete below and the writes after it
-			// are one statement about this host: between them the account looks
-			// like it has fewer scoped windows than it does, and `GET /api/usage`
-			// is public and polled — it would read that gap and blank a card.
+			// One transaction: a `GET /api/usage` between the delete and the
+			// inserts would find the cards gone.
 			await db()
 				.transaction()
 				.execute(async (trx) => {
-					// A scope the account no longer has must go, and an upsert can only
-					// ever add — so this host's rows for models NOT in the push are
-					// dropped first. With an empty push that is all of them.
+					// Drop the scopes the push no longer names; the upsert only adds.
 					let drop = trx.deleteFrom("claude_usage_model").where("host", "=", row.host);
 					if (models.length > 0) {
 						drop = drop.where(
@@ -206,10 +179,7 @@ export function apiRoutes(ingestToken: string): Hono<AppEnv> {
 		return c.json({ ok: true });
 	});
 
-	// Public read: the freshest usage snapshot. The figures are account-wide, so
-	// the most recently captured row (across all hosts) is the current truth; the
-	// host + ts it carries let the UI show which machine reported it and how long
-	// ago — a stale snapshot just means no active session has pushed lately.
+	// The freshest row across hosts: the figures are account-wide.
 	api.get("/usage", async (c) => {
 		const row = await db()
 			.selectFrom("claude_usage")
@@ -220,24 +190,19 @@ export function apiRoutes(ingestToken: string): Hono<AppEnv> {
 		if (!row) {
 			return c.json(null);
 		}
-		// The model-scoped windows, freshest first. Account-wide like the rest, so
-		// they are gathered across hosts rather than from the host whose snapshot
-		// won above — that host may be one whose pusher cannot see scopes at all.
+		// Across all hosts, not just the one above: its pusher may not see scopes.
 		const scoped = await db()
 			.selectFrom("claude_usage_model")
 			.selectAll()
 			.orderBy("ts", "desc")
 			.execute();
-		// TINYINT out, boolean over the wire — readers should not learn MariaDB.
 		return c.json({ ...row, measured: row.measured === 1, models: freshestPerModel(scoped) });
 	});
 
-	// Public read: the latest reading per device, each tagged with its display
-	// label and ordered for the UI. Drives the per-room tiles.
+	// The latest reading per device, labelled and in UI order.
 	api.get("/devices", async (c) => {
-		// One query, not one per device: joining each device's newest instant back
-		// to its row. `(device, ts)` is the primary key, so the join matches
-		// exactly one row per device and the group-by reads the index.
+		// Each device's newest ts joined back to its row; (device, ts) is the
+		// primary key, so that is one row each, read off the index.
 		const rows = await db()
 			.selectFrom("measurement as m")
 			.innerJoin(
@@ -251,20 +216,12 @@ export function apiRoutes(ingestToken: string): Hono<AppEnv> {
 			)
 			.selectAll("m")
 			.execute();
-		// Serve raw + each device's calibration offset; the client applies it so
-		// the correction can be toggled.
 		const out = decorateDevices(rows).map((d) => ({ ...d, offset: offsetFor(d.device) }));
 		return c.json(out);
 	});
 
-	// Public read: per-RECEIVER liveness — when each capturing host (`source`) last
-	// pushed, and which devices it currently hears.
-	//
-	// Keyed by source, not device, and that distinction is the whole point: a sensor
-	// stays fresh as long as ANY receiver hears it, so device freshness cannot see a
-	// single receiver going deaf. When the pixel5 receiver went silent for 7 hours the
-	// other receivers still covered all four sensors, so every device — and the whole
-	// dashboard — stayed green. This is the view that makes a dead receiver visible.
+	// Per receiver: when it last pushed and which devices it hears. A sensor stays
+	// fresh while ANY receiver hears it, so only this view shows one receiver dying.
 	api.get("/receivers", async (c) => {
 		const rows = await db()
 			.selectFrom("measurement")
@@ -273,10 +230,8 @@ export function apiRoutes(ingestToken: string): Hono<AppEnv> {
 			.groupBy("source")
 			.execute();
 
-		// Devices each receiver has heard recently. A receiver that is up but has gone
-		// deaf to one sensor (a real, separate failure) shows a shrunken list here
-		// rather than a stale `last_seen`, since the sensors it still hears keep it
-		// looking alive.
+		// A receiver deaf to one sensor still has a fresh `last_seen`; its list
+		// shrinks instead.
 		const since = new Date(Date.now() - HEARD_WINDOW_MS);
 		const heard = await db()
 			.selectFrom("measurement")
@@ -298,20 +253,15 @@ export function apiRoutes(ingestToken: string): Hono<AppEnv> {
 		return c.json(out);
 	});
 
-	// Public read: a time range, oldest first, for charting.
+	// One device's readings in a range, oldest first.
 	api.get("/measurements", async (c) => {
 		const parsed = MeasurementsQuery.safeParse(c.req.query());
 		if (!parsed.success) {
 			return c.json({ error: "invalid query", detail: parsed.error.flatten() }, 400);
 		}
 		const { from, to, device, limit } = parsed.data;
-		// ⚠ Selected NEWEST first and reversed, though the response is oldest
-		// first. The order decides which end `limit` throws away, and asking for
-		// them oldest-first threw away the recent ones: past the cap a chart
-		// stopped part-way, which reads as every sensor dying at once rather than
-		// as a truncated answer. Measured 2026-08-14: 13,767 rows over 30 days on
-		// the busiest device against the client's 20,000 — one more receiver
-		// crosses it.
+		// Newest first, then reversed: `limit` must cut the old end. Cutting the
+		// new end stops every chart part-way, which reads as the sensors dying.
 		let q = db()
 			.selectFrom("measurement")
 			.selectAll()
@@ -324,29 +274,16 @@ export function apiRoutes(ingestToken: string): Hono<AppEnv> {
 		return c.json(rows);
 	});
 
-	// Client activity trace: what the browser sees and the API does not. A tap
-	// that hits a cache, a control that was disabled, a chart that rendered
-	// wrong — none of it reaches the server otherwise, so "I looked and it was
-	// blank" is undiagnosable.
-	//
-	// **Session-gated, unlike every read on this host.** home is publicly
-	// readable, and an ungated write here would be an open log-write on the
-	// internet: a flood nobody could attribute, on a node whose disk is shared
-	// with every other app, and a channel that stops being evidence the moment a
-	// stranger can forge entries in it. The Bearer token that guards /ingest is
-	// no help — a public page cannot hold a secret.
-	//
-	// Same `client-event` line shape as the rest of the fleet, deliberately: the
-	// value is grepping one word anywhere and getting the same fields. No
-	// storage — these are logs, not data.
+	// The browser's activity trace (taps, navigations), written to the pod log
+	// as the fleet's `client-event` lines; nothing is stored. Session-gated: an
+	// ungated write on a public host is an open log-write, and a public page
+	// cannot hold the ingest token.
 	api.post("/telemetry", async (c) => {
 		const session = c.get("session");
 		if (!session) {
 			return c.json({ error: "not authenticated" }, 401);
 		}
 
-		// A per-batch cap so a buggy client cannot turn one POST into a log
-		// flood, and a label cap so a pathological one cannot bloat a line.
 		const MAX_EVENTS = 100;
 		const MAX_LABEL = 160;
 
@@ -370,8 +307,7 @@ export function apiRoutes(ingestToken: string): Hono<AppEnv> {
 				`client-event user=${session.userId} kind=${kind} path=${path} label=${label} at=${at}`,
 			);
 		}
-		// Always 204: telemetry is best-effort and the client neither reads the
-		// response nor retries.
+		// Best-effort: the client neither reads this nor retries.
 		return c.body(null, 204);
 	});
 

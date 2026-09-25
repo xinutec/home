@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { apiRoutes, MeasurementsQuery } from "../src/routes/api.js";
 
-// Route-level tests for the request-validation edges: auth and payload/query
-// rejection. Success paths need a live MariaDB and are exercised by the
-// deployed service, not here.
+// Auth and validation only: the success paths need a MariaDB.
 const TOKEN = "test-token-0123456789";
 const app = apiRoutes(TOKEN);
 
@@ -91,10 +89,6 @@ describe("POST /usage auth + validation", () => {
 	});
 
 	it("rejects a model-scoped window that is missing a part of itself", async () => {
-		// A scoped window is all three or none: the name is what the card is
-		// labelled with, and the reset is what says the figure still describes a
-		// window that exists. Half of one would be drawn as a bar for a model
-		// nobody can name.
 		for (const models of [
 			[{ pct: 6, resets_at: "2026-08-14T01:59:59.000Z" }],
 			[{ model: "Fable", resets_at: "2026-08-14T01:59:59.000Z" }],

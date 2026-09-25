@@ -1,35 +1,16 @@
 /**
- * Validate an optional `return_to` redirect target supplied by the
- * client to an OAuth flow.
+ * The `return_to` of a sign-in, or `/` if it is anything but a same-site path.
  *
- * The danger this guards against is the classic open-redirect: an
- * attacker emails the user a link like
- * `https://home.xinutec.org/login?return_to=//evil.com`. The user
- * clicks it, authenticates normally, and the callback issues
- * `302 Location: //evil.com` — a protocol-relative URL the browser
- * follows off-site. Useful for phishing or for siphoning any state
- * exposed in the redirect chain.
- *
- * The accepted shape is intentionally narrow:
- *
- *   - Must start with a single `/` followed by a non-`/` character.
- *     `//evil.com` and `/\evil.com` (some browsers normalise `\` to
- *     `/`) both get rejected.
- *   - May contain ASCII alphanumerics, the URL-safe punctuation
- *     `?=&%-._/+`, but no whitespace, control chars, or anything
- *     unusual that could break a renderer or smuggle an injection.
- *   - Anything else falls back to `/`.
- *
- * Returning `/` on any rejection keeps callers branch-free — they can
- * always redirect to the result, whether the input was valid or not.
+ * Guards the open redirect: `/login?return_to=//evil.com` would otherwise end
+ * in `302 Location: //evil.com`, which the browser follows off-site. So the
+ * value must be `/` then a non-`/` (`/\evil.com` is refused too: browsers read
+ * `\` as `/`), and only URL-safe characters after that.
  */
 
 const SAFE_PATH = /^\/[a-zA-Z0-9_\-.~+/?=&%]*$/;
 
 export function validateReturnTo(raw: string | undefined): string {
 	if (!raw) return "/";
-	// Single-leading-slash followed by a non-slash. This explicitly
-	// rejects `//foo` (protocol-relative) and `/\foo` (backslash trick).
 	if (raw === "/") return "/";
 	if (raw.length < 2 || raw[0] !== "/" || raw[1] === "/" || raw[1] === "\\") return "/";
 	if (!SAFE_PATH.test(raw)) return "/";

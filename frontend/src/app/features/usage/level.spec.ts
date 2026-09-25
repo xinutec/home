@@ -2,17 +2,6 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { FIVE_HOURS, UsageLevel, WEEK } from './level';
 
-/**
- * A percentage says how much is gone, never whether that is a lot for how far
- * in the window is. These two marks supply the missing half: the day ticks give
- * the bar a unit, and the clock mark says where the window's own clock stood at
- * the moment the figure was captured.
- *
- * The instant is the part worth testing. Both halves have to come from one
- * reading — placing the mark from the browser's clock would make a stale bar
- * appear to fall further behind pace the longer the page sat open, which is the
- * same false reading `live()` exists to prevent one level up.
- */
 describe('UsageLevel', () => {
 	beforeEach(async () => {
 		await TestBed.configureTestingModule({
@@ -36,8 +25,7 @@ describe('UsageLevel', () => {
 	}
 
 	it('marks the six day boundaries inside a week', () => {
-		// Six, not seven or eight: the ends are the bar's own edges, and a tick
-		// drawn on them would say a boundary is there twice.
+		// The ends are the bar's own edges.
 		const marks = level({ pct: 40, span: WEEK })['days']();
 		expect(marks.length).toBe(6);
 		expect(marks[0]).toBeCloseTo(100 / 7, 6);
@@ -45,14 +33,11 @@ describe('UsageLevel', () => {
 	});
 
 	it('leaves the five-hour window unmarked', () => {
-		// Ticks are for judging pace across a week. Five hours has no unit a
-		// person tracks, so marks there would be decoration.
 		expect(level({ pct: 40, span: FIVE_HOURS })['days']()).toEqual([]);
 	});
 
 	it('places the clock from the reading, not from the browser', () => {
-		// Read two days into the week: the mark belongs at 2/7, whenever this
-		// test happens to run.
+		// Two days into the week: 2/7, whenever the test runs.
 		const level2d = level({
 			pct: 40,
 			takenAt: '2026-08-03T00:00:00.000Z',
@@ -63,8 +48,6 @@ describe('UsageLevel', () => {
 	});
 
 	it('clamps a reading that outlived its own window', () => {
-		// A machine reporting just after a turnover carries a reset further out
-		// than the window is long. Off the bar is worse than nowhere.
 		const early = level({
 			pct: 3,
 			takenAt: '2026-08-03T00:00:00.000Z',
@@ -75,9 +58,6 @@ describe('UsageLevel', () => {
 	});
 
 	it('draws no marks when there is no figure behind them', () => {
-		// The page withholds a percentage whose window has turned over. A clock
-		// mark over an empty bar would invite exactly the comparison that
-		// withholding exists to prevent.
 		const dead = level({
 			pct: null,
 			takenAt: '2026-08-03T00:00:00.000Z',

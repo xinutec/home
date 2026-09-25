@@ -1,42 +1,29 @@
 import { z } from "zod";
 
-// One Claude Code usage snapshot, pushed by a machine's statusLine hook. The
-// five-hour and seven-day figures are Anthropic's own rate-limit utilisation
-// (0-100 %) as surfaced to the statusLine JSON — account-wide, so every host
-// reports the same numbers; `host` only records which machine's session
-// captured this one (for freshness/provenance). Each window may be absent early
-// in a session, so its percentage and reset instant are independently nullable.
-// One model's own weekly allowance — a ceiling separate from the two windows
-// above. The model is named rather than enumerated: the CLI sends these in a
-// `model_scoped` array carrying a `display_name`, and which models are scoped is
-// Anthropic's business, not this schema's.
+// One model's own weekly allowance. The model is free text: which ones are
+// scoped is Anthropic's to change.
 export const ScopedInput = z.object({
 	model: z.string().min(1).max(64),
 	pct: z.number().min(0).max(100),
 	resets_at: z.string().datetime(),
 });
 
+// One Claude Code usage report: account-wide rate-limit utilisation, 0–100 %.
+// Either window may be missing early in a session.
 export const UsageInput = z.object({
 	host: z.string().min(1).max(64),
-	// ISO-8601 capture instant; the server defaults to "now" if omitted.
+	// Defaults to the time of receipt.
 	ts: z.string().datetime().optional(),
 	five_hour_pct: z.number().min(0).max(100).nullable().optional(),
 	five_hour_resets_at: z.string().datetime().nullable().optional(),
 	seven_day_pct: z.number().min(0).max(100).nullable().optional(),
 	seven_day_resets_at: z.string().datetime().nullable().optional(),
-	// ⚠ **Absent and empty mean different things, and the difference is the
-	// whole reason this is optional.** Two pushers write this endpoint and only
-	// one of them can see model scopes: the statusLine hook's payload carries
-	// `five_hour` and `seven_day` alone. Absent therefore means "this pusher
-	// cannot say" and leaves the host's scoped rows alone, while `[]` means "this
-	// account has no scoped window" and clears them. Treating absent as empty
-	// would delete the Fable figure every time the hook fired.
+	// Absent means "this pusher cannot see scopes" (the statusLine hook), and
+	// leaves the stored ones; `[]` means "there are none", and clears them.
+	// Treating absent as empty would wipe them on every hook push.
 	models: z.array(ScopedInput).max(16).optional(),
-	// Whether the figures are a measurement — the API's own answer at an instant
-	// the writer can date — or an echo of some process's cached rate-limit
-	// headers. The console re-ingests this row as dated truth and only a
-	// measurement may LOWER a figure, so the claim is load-bearing. Absent means
-	// echo: a writer that does not say claims the weaker kind.
+	// True for a measurement the writer can date; false or absent for an echo of
+	// cached headers. See schema v9.
 	measured: z.boolean().optional(),
 });
 

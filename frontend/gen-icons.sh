@@ -1,9 +1,7 @@
 #!/usr/bin/env nix-shell
 #!nix-shell -i bash -p librsvg imagemagick python3 python3Packages.pillow
-# Regenerate the home app's raster icons from the SVG sources in public/.
-# Source of truth: public/icon.svg (+ public/icon-maskable.svg). Edit those,
-# then run ./gen-icons.sh from the frontend/ directory. The PNG/ICO outputs are
-# git-tracked (the Angular build copies public/** verbatim), so commit them too.
+# Render public/'s PNG and ICO icons from public/icon.svg and
+# public/icon-maskable.svg. The outputs are tracked: commit them too.
 set -euo pipefail
 cd "$(dirname "$0")/public"
 
@@ -22,12 +20,9 @@ render icon.svg          192 icon-192.png
 render icon.svg          512 icon-512.png
 render icon-maskable.svg 512 icon-512-maskable.png
 
-# A maskable icon is cropped by the launcher, not by us: everything outside the
-# centred circle of 80% diameter can be cut off, and which shape is used is the
-# launcher's choice. Eyeballing the square PNG cannot show that — this icon
-# shipped for months reaching r=210 against a 204.8 limit, with a round mask
-# clipping the base of the house. The stroke's outer edge, not the path, is what
-# the mask bites into. So assert it.
+# A launcher may crop a maskable icon to the centred circle of 80% diameter,
+# which the square PNG does not show. Check the rendered pixels, since the
+# stroke's outer edge is what gets cut.
 python3 - <<'PY'
 import math, sys
 from PIL import Image

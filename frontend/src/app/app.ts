@@ -18,9 +18,8 @@ interface NavItem {
 }
 
 /**
- * App shell: the toolbar (brand, view menu, theme toggle) and the router outlet.
- * The data layer is polled here — once for the app's lifetime — so switching
- * routes doesn't restart it and both pages read the same warm signals.
+ * App shell. Starts the data polling, telemetry and self-update once, here, so
+ * no page has to and switching pages restarts nothing.
  */
 @Component({
 	selector: 'app-root',
@@ -40,8 +39,6 @@ interface NavItem {
 export class App implements OnInit, OnDestroy {
 	private readonly api = inject(ApiService);
 	protected readonly theme = inject(ThemeService);
-	// Instrumented from the shell alone: a trace each screen had to remember to
-	// join would have holes in exactly the screens nobody thought about.
 	private readonly telemetry = inject(Telemetry);
 	private readonly swUpdates = inject(SwUpdates);
 
@@ -65,7 +62,6 @@ export class App implements OnInit, OnDestroy {
 
 	ngOnInit(): void {
 		this.telemetry.init();
-		// Same seam: wired once in the shell, so no view knows this exists.
 		this.swUpdates.start();
 		this.api.start();
 	}

@@ -1,34 +1,21 @@
-// Read-time device overlay: maps a stored device id to its display label and
-// role. Keyed by the STABLE device id (a sensor's room is never stored), so a
-// unit can be relabelled or moved with a one-line edit here and no DB migration.
-// An unmapped device falls back to showing its raw id, so a newly-added sensor
-// appears on the dashboard immediately, just unnamed.
+// Display label and role per stored device id, applied at read time: a room is
+// never stored, so moving a sensor is an edit here, not a migration. An unmapped
+// device still shows, under its raw id.
 
 export interface DeviceLabel {
-	/** Human name shown in the UI — the device's own name (e.g. "IQAir"). */
 	name: string;
-	/**
-	 * Physical location, once the sensor is sited. Orthogonal to the device id:
-	 * moving a unit to another room is a one-line edit here (and its calibration
-	 * offset travels with it), no DB migration. Optional — an unsited sensor has
-	 * none and the UI falls back to its name/id.
-	 */
+	/** Absent until the sensor is sited; the UI then shows `name`. */
 	room?: string;
-	/** True for the whole-home air-quality sensor (CO₂/PM/AQI/VOC). */
+	/** The sensor behind the CO₂/PM/AQI/VOC readings. */
 	airQuality: boolean;
-	/**
-	 * True for the smart-plug power monitors (W/V/A/kWh, not climate). Keeps them
-	 * out of the temperature/humidity room views and into their own power section.
-	 */
+	/** A smart-plug power monitor: kept out of the climate views. */
 	power?: boolean;
-	/** UI sort order; lower sorts first. */
+	/** Lower sorts first. */
 	order: number;
-	/** Hardware model — static per device (the BLE-reported model / device type). */
+	/** Hardware model. */
 	type: string;
 }
 
-// The air-quality sensor first, then the four Govee climate sensors. Set each
-// sensor's `room` once it's placed; until then the UI shows its name/device id.
 const LABELS: Record<string, DeviceLabel> = {
 	airvisual: {
 		name: "IQAir",
@@ -86,9 +73,7 @@ const LABELS: Record<string, DeviceLabel> = {
 		order: 7,
 		type: "Govee H5103",
 	},
-	// Smart-plug power monitors (Tasmota-flashed sockets). `power: true` routes
-	// them to the power section instead of the climate room views. Named by the
-	// appliance they meter; `room` is set once each is sited.
+	// Smart plugs, named by the appliance they meter. Not reporting yet: doc/energy-sockets.md.
 	"socket-fan": { name: "Fan", airQuality: false, power: true, order: 10, type: "Smart plug" },
 	"socket-coffee": {
 		name: "Coffee Machine",
@@ -107,12 +92,11 @@ const LABELS: Record<string, DeviceLabel> = {
 	"socket-tv": { name: "TV", airQuality: false, power: true, order: 13, type: "Smart plug" },
 };
 
-/** Label for a device id, falling back to the raw id for unmapped sensors. */
 export function labelFor(device: string): DeviceLabel {
 	return LABELS[device] ?? { name: device, airQuality: false, order: 99, type: "Unknown" };
 }
 
-/** Attach a label to each latest-per-device row and order them for the UI. */
+/** Label each row and sort for the UI. */
 export function decorateDevices<T extends { device: string }>(
 	rows: T[],
 ): (T & { label: DeviceLabel })[] {

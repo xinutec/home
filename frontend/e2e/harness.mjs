@@ -1,14 +1,11 @@
-// The app-specific half of the shared phone-width harness (@xinutec/ui-harness).
-// Read by BOTH playwright.config.ts and the harness's static server, so there is
-// one place to say what this app is and no port to keep in step — the port is
-// allocated from `app`.
+// This app's half of the phone-width harness (@xinutec/ui-harness), read by
+// playwright.config.ts and the harness's static server. The port derives from `app`.
 
 /** @type {import('@xinutec/ui-harness/config').HarnessSpec} */
 export default {
   app: 'home',
   dist: 'dist/frontend/browser',
-  // Fallback stub only — the specs page.route everything. Real prod is the Hono
-  // backend. One air-quality device so an un-mocked run still leaves the shell.
+  // Fallback for an un-mocked request; the specs route everything themselves.
   api: {
     '/api/devices': [
       {

@@ -5,11 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SwUpdates } from './sw-updates';
 
-// The rules live in `@xinutec/ui-harness/sw-updates` and are unit-tested there
-// against a fake. What these cover is what a fake cannot reach: that Angular's
-// `SwUpdate.versionUpdates` really feeds the policy, filtered to VERSION_READY,
-// and that a reload really happens. Only the NAVIGATION is stubbed, so
-// applyUpdate() runs for real — including its failure path.
+// The policy is tested in @xinutec/ui-harness. These test the Angular wiring;
+// only the reload itself is stubbed.
 function setup(isEnabled: boolean) {
 	const versionUpdates = new Subject<VersionEvent>();
 	const unrecoverable = new Subject<UnrecoverableStateEvent>();
@@ -29,10 +26,7 @@ function setup(isEnabled: boolean) {
 	return { svc, versionUpdates, unrecoverable, checkForUpdate, activateUpdate, reload };
 }
 
-// Built whole rather than asserted from a `{ type }` stub: `as VersionEvent`
-// silences the compiler about the fields Angular really sends, so the day the
-// service reads one of them the test still passes on a shape the browser never
-// produces.
+// Whole events, not `{ type } as VersionEvent`, so the compiler checks them.
 const ready: VersionEvent = {
 	type: 'VERSION_READY',
 	currentVersion: { hash: 'old' },

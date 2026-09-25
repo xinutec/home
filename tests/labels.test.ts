@@ -28,10 +28,8 @@ describe("labelFor", () => {
 		expect(l.name).toBe("Coffee Machine");
 	});
 
-	it("sites the three H5103s added in August", () => {
-		// Each is a distinct room, and each sorts after the four that were here
-		// first — a new sensor should join the end of the list, not displace the
-		// rooms somebody is used to reading in order.
+	it("sites each H5103 in its own room, after the rooms already listed", () => {
+		// A new sensor joins the end rather than reordering familiar rooms.
 		const sited: [device: string, room: string][] = [
 			["govee-0345", "Hallway"],
 			["govee-251B", "Bathroom"],

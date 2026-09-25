@@ -6,7 +6,7 @@ import { db } from "../db/pool.js";
 import type { AppEnv } from "../env.js";
 import type { UserSession } from "../types.js";
 
-const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const COOKIE_NAME = "session";
 
 export async function createSession(secret: string, user: UserSession): Promise<string> {
@@ -69,7 +69,6 @@ export function verifyValue(secret: string, signed: string): string | null {
 	return value;
 }
 
-// Hono middleware: extracts session from cookie, sets c.get("session")
 export function sessionMiddleware(secret: string) {
 	return createMiddleware<AppEnv>(async (c, next) => {
 		const cookie = getCookie(c, COOKIE_NAME);
@@ -99,10 +98,8 @@ export async function clearSessionCookie(c: Context, secret: string): Promise<vo
 	deleteCookie(c, COOKIE_NAME, { path: "/" });
 }
 
-/** Sweep expired session rows. The lazy-on-access path in `getSession`
- *  only touches sessions whose owner returns; dormant users never trigger
- *  it, so without this sweep the table grows monotonically. Returns the
- *  number of rows deleted (for logging). */
+/** Delete expired sessions; returns how many. `getSession` only deletes the
+ *  ones whose owner comes back. */
 export async function cleanupExpiredSessions(): Promise<number> {
 	const result = await db()
 		.deleteFrom("sessions")

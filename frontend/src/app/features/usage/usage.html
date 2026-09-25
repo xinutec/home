@@ -42,10 +42,7 @@
 				/>
 				<div class="cu-reset">{{ fmtReset(u.seven_day_resets_at) }}</div>
 			</mat-card>
-			<!-- A model's own weekly ceiling, beside the all-models one. Named by
-			     the model rather than by a heading this template chose: which
-			     models are scoped is Anthropic's business and changes without
-			     notice, so the card list follows the data. -->
+			<!-- One card per model with its own weekly allowance, named from the data. -->
 			@for (m of u.models ?? []; track m.model) {
 				@let scoped = live(m.pct, m.resets_at);
 				<mat-card class="cu-card" appearance="outlined">
@@ -55,9 +52,7 @@
 							{{ scoped != null ? (scoped | number: '1.0-0') + '%' : '—' }}
 						</span>
 					</div>
-					<!-- A model's allowance runs the same week, so it gets the same
-					     marks — and its own `ts`, because a scope is reported per
-					     model and need not share the row's instant. -->
+					<!-- Its own `ts`: a scope need not be read when the row was. -->
 					<app-usage-level
 						[pct]="scoped"
 						[resetsAt]="m.resets_at"

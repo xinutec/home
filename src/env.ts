@@ -1,9 +1,7 @@
 import type { UserSession } from "./types.js";
 
-/** Hono environment — what is available via `c.get()` / `c.set()`.
- *
- *  `session` is optional in practice: it is set only when a valid cookie is
- *  present, and most of this app's routes are public and never look at it. */
+/** Hono context variables. `session` is set only when a valid cookie came with
+ *  the request, so `c.get("session")` can be undefined despite the type. */
 export type AppEnv = {
 	Variables: {
 		session: UserSession;

@@ -5,9 +5,6 @@
 	gap: 1.5rem;
 }
 
-// Page-level action row (right-aligned): the calibration toggle affects the
-// hero, room cards and charts, so it lives at the top of the view rather than
-// the shell toolbar (which is page-agnostic).
 .env-actions {
 	display: flex;
 	justify-content: flex-end;
@@ -107,9 +104,6 @@
 /* AQI badge --------------------------------------------------------- */
 .aqi-badge {
 	display: flex;
-	/* width:100% on mobile must include the padding, or the badge is ~40px too
-	   wide and spills off the right of the hero card. */
-	box-sizing: border-box;
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
@@ -117,10 +111,10 @@
 	min-width: 148px;
 	padding: 1.1rem 1.25rem;
 	border-radius: 24px;
-	// dev-lint: allow-hardcoded-color white-on-band — EPA band colours are fixed, theme-independent
+	// dev-lint: allow-hardcoded-color white on a fixed EPA band colour
 	color: #fff;
 	background: var(--band-color);
-	/* small, contained lift — a larger glow bled past the hero card's edge */
+	// A larger glow bleeds past the hero card.
 	box-shadow: 0 2px 8px -2px var(--band-color);
 }
 
@@ -257,8 +251,6 @@
 	user-select: all;
 }
 
-// A middle-dot separates the id from the model name, so the type line reads
-// "Govee H5075 · A562" without inventing a box that could wrap or widen the card.
 .room-id::before {
 	content: '·';
 	margin: 0 0.35rem;
@@ -331,9 +323,6 @@
 	flex-wrap: wrap;
 }
 
-// Header row for the Rooms section: title on the left, the "Show IDs" toggle on
-// the right. The toggle lives here — not the shell toolbar — because it only
-// affects the room cards.
 .rooms-head {
 	display: flex;
 	align-items: center;

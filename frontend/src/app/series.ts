@@ -1,7 +1,7 @@
 import { type DeviceLatest, type Measurement, ROOM_COLORS } from './measurement.model';
 import type { ChartSeries, TrendPoint } from './trend-chart/trend-chart';
 
-/** Project history rows onto chart points, dropping null values and bad timestamps. */
+/** Chart points, skipping nulls and unparseable timestamps. */
 export function toTrendPoints(
 	rows: Measurement[],
 	pick: (m: Measurement) => number | null,
@@ -20,7 +20,7 @@ export function toTrendPoints(
 	return out;
 }
 
-/** One coloured line per device (in the given order) for a climate metric. */
+/** One line per device, coloured by position. */
 export function climateSeries(
 	devices: DeviceLatest[],
 	history: Record<string, Measurement[]>,
@@ -38,14 +38,9 @@ export function climateSeries(
 }
 
 /**
- * RSSI split into one line per receiver (`source`). A sensor two boxes hear
- * (e.g. the Mac + the phone) otherwise draws as a single line zig-zagging between
- * the two links' strengths; grouping by source gives one calm line per link. Every
- * line is suffixed with its receiver (` · mac` / ` · pixel5`) so the legend is
- * unambiguous even when a sensor has only one line. Rows captured before source
- * tagging (null source; also the wired IQAir) group under ` · untagged` — a
- * transient bucket that ages out as the window scrolls past the tagging deploy.
- * Empty lines are dropped.
+ * RSSI, one line per (device, receiver): one line per device would zig-zag
+ * between two receivers' readings of it. Labelled `Room · receiver`; rows with
+ * no receiver are `untagged`.
  */
 export function rssiByReceiverSeries(
 	devices: DeviceLatest[],
@@ -53,7 +48,6 @@ export function rssiByReceiverSeries(
 ): ChartSeries[] {
 	const out: ChartSeries[] = [];
 	for (const d of devices) {
-		// Group this device's rows by capturing receiver, preserving first-seen order.
 		const bySource = new Map<string, Measurement[]>();
 		for (const m of history[d.device] ?? []) {
 			const key = m.source ?? 'untagged';
@@ -80,7 +74,7 @@ export function rssiByReceiverSeries(
 	return out;
 }
 
-/** A single line from the air-quality device, or none if there isn't one. */
+/** One line from the air-quality device, if there is one. */
 export function airSeries(
 	devices: DeviceLatest[],
 	history: Record<string, Measurement[]>,

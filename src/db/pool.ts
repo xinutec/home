@@ -14,9 +14,8 @@ export function initPool(config: Config["db"]): mariadb.Pool {
 		user: config.user,
 		password: config.password,
 		database: config.database,
-		// Low-traffic single-replica service; a handful of connections is plenty.
 		connectionLimit: 5,
-		// DECIMAL columns (temp/humidity/pm) come back as JS numbers, not strings.
+		// DECIMAL columns come back as numbers, not strings.
 		decimalAsNumber: true,
 	});
 
@@ -37,7 +36,7 @@ export function db(): Kysely<Database> {
 	return kyselyInstance;
 }
 
-// Raw connection for migrations (DDL, not Kysely).
+// A raw connection, for the migrations' DDL.
 export async function withConnection<T>(fn: (conn: mariadb.Connection) => Promise<T>): Promise<T> {
 	const conn = await getPool().getConnection();
 	try {
@@ -49,7 +48,7 @@ export async function withConnection<T>(fn: (conn: mariadb.Connection) => Promis
 
 export async function destroyPool(): Promise<void> {
 	if (kyselyInstance) {
-		await kyselyInstance.destroy(); // also closes the underlying pool
+		await kyselyInstance.destroy(); // closes the pool too
 	} else {
 		await pool?.end();
 	}

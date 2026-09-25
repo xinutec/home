@@ -4,9 +4,7 @@
 	@for (mark of days(); track mark) {
 		<i class="day" [style.left.%]="mark" aria-hidden="true"></i>
 	}
-	<!-- Compared against `null` rather than truth-tested: a window in its first
-	     minutes is genuinely at 0%, and dropping the mark there would hide it in
-	     the one case where the fill being ahead of it matters most. -->
+	<!-- Not truth-tested: 0 is a real position, a window's first minutes. -->
 	@if (at !== null) {
 		<i
 			class="clock"

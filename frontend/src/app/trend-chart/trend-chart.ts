@@ -52,10 +52,8 @@ export interface ChartSeries {
 }
 
 /**
- * Standalone wrapper around a Chart.js line chart that draws one or more series.
- * A single series keeps the filled-gradient look; multiple series drop the fill
- * and show a legend, for room-to-room comparison. Colours resolve from the
- * Material 3 system CSS variables so the chart tracks the active theme.
+ * A Chart.js line chart. One series is drawn filled; several get a legend and
+ * no fill. CSS colours are resolved at render, so the chart follows the theme.
  */
 @Component({
 	selector: 'app-trend-chart',
@@ -68,9 +66,8 @@ export class TrendChart implements AfterViewInit, OnDestroy {
 
 	readonly title = input.required<string>();
 	readonly unit = input<string>('');
-	/** One or more series to plot. */
 	readonly series = input.required<ChartSeries[]>();
-	/** Number of decimal places to show in the tooltip. */
+	/** Decimal places in the tooltip. */
 	readonly decimals = input<number>(0);
 	readonly spanMs = input<number>(24 * 3_600_000);
 
@@ -80,9 +77,7 @@ export class TrendChart implements AfterViewInit, OnDestroy {
 	readonly hasData = computed(() => this.series().some((s) => s.points.length > 0));
 
 	constructor() {
-		// Redraw on data, theme, or range changes.
 		effect(() => {
-			// Track dependencies.
 			this.series();
 			this.theme.effective();
 			this.spanMs();
@@ -171,28 +166,19 @@ export class TrendChart implements AfterViewInit, OnDestroy {
 			options: {
 				responsive: true,
 				maintainAspectRatio: false,
-				// The points arrive already in Chart.js's internal shape ({x, y},
-				// ascending, one per instant), which is what lets the decimation below
-				// run at all — it declines to touch a chart that still has parsing to
-				// do. `normalized` says the same thing about the ordering.
+				// Points arrive as sorted {x, y}. Decimation refuses to run on a chart
+				// that still parses.
 				parsing: false,
 				normalized: true,
-				// Debounce transient resizes (e.g. a backgrounded tab re-measuring at
-				// 0px) so a brief bad size doesn't trigger a shrink.
+				// A backgrounded tab briefly measures 0px; don't shrink to it.
 				resizeDelay: 200,
 				animation: { duration: 350 },
 				interaction: { mode: 'index', intersect: false },
 				plugins: {
-					// ⚠ **min-max, not lttb, and not an average.** A month of readings is
-					// ~13,700 points per line on a canvas ~350 px wide, and drawing them
-					// all froze the main thread for 3.6 s on a phone (measured 2026-08-14,
-					// summed long tasks while switching to 30d). Every way of thinning
-					// them loses something, so the question is what: an averaged bucket
-					// flattens a peak, and on the CO₂ chart the peak is the reading that
-					// matters. min-max keeps the highest AND lowest point of each pixel
-					// column, so a spike cannot be averaged away — it survives as the
-					// column it happened in. Below 4× the canvas width Chart.js leaves the
-					// data alone, so the short ranges draw every point as before.
+					// A month is thousands of points per line, which freezes a phone for
+					// seconds. min-max, not lttb or an average: it keeps each pixel
+					// column's extremes, so a CO₂ spike survives. Under 4× the canvas
+					// width Chart.js leaves the data alone.
 					decimation: { enabled: true, algorithm: 'min-max' },
 					legend: {
 						display: multi,
@@ -218,9 +204,7 @@ export class TrendChart implements AfterViewInit, OnDestroy {
 				scales: {
 					x: {
 						type: 'time',
-						// Pin the axis to the selected range (now − span … now) so a
-						// "30 d" chart spans 30 days even when the data is sparse,
-						// instead of auto-fitting the data extent.
+						// The whole range, even where data is sparse.
 						min: now - this.spanMs(),
 						max: now,
 						time: { tooltipFormat: 'PPp' },

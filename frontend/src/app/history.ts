@@ -4,10 +4,8 @@ import type { Measurement } from './measurement.model';
  * Fold freshly-fetched rows into the ones already held: oldest first, one row
  * per instant, nothing older than the window.
  *
- * The fetched copy wins a tie, because it is the newer read of the same row —
- * a reading the server has since corrected must not be pinned by a cached one.
- * A row whose `ts` will not parse is dropped rather than sorted to the front,
- * where `NaN` would put it.
+ * On a tie the fetched copy wins: it is the newer read of the row. An
+ * unparseable `ts` is dropped.
  */
 export function mergeWindow(
 	prev: readonly Measurement[],

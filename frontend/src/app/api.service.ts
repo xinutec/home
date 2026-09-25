@@ -13,23 +13,18 @@ import {
 
 const LATEST_REFRESH_MS = 60_000;
 
-// How far back before the newest row held a refresh asks anyway. A receiver
-// that pushes late writes a row behind the newest one already shown, which a
-// query starting at that row would never see.
+// A refresh re-reads this far behind the newest row held: a late receiver
+// writes rows older than that one.
 const DELTA_OVERLAP_MS = 10 * 60_000;
 
-// How often the window is re-read whole instead of extended. The overlap above
-// only covers ordinary lateness; geb spools while the network is down and can
-// flush hours of readings at once, and nothing anchored to the newest row would
-// ever notice those. Cheap enough at this interval, and it also repairs a
-// window that drifted for any reason nobody has thought of.
+// How often the whole window is re-read. A receiver that spooled through an
+// outage flushes hours of rows at once, further back than the overlap reaches.
 const RECONCILE_MS = 15 * 60_000;
 
 /**
- * Single data layer for the dashboard. Holds the latest reading per device and
- * the per-device history for the selected range as signals, drives a 60s
- * auto-refresh of `/api/devices`, and extends the history with what has arrived
- * since — reading the window whole on a range change, and periodically after.
+ * The app's data: latest reading per device, history for the selected range,
+ * and Claude usage, refreshed every minute. History is extended with what is
+ * new, and read whole on a range change and every `RECONCILE_MS`.
  */
 @Injectable({ providedIn: 'root' })
 export class ApiService {
@@ -49,12 +44,9 @@ export class ApiService {
 	/** Freshest Claude Code usage snapshot, or null until one is pushed. */
 	readonly usage = this._usage.asReadonly();
 
-	/**
-	 * Latest reading per climate/air device, UI-ordered. Power-monitor plugs are
-	 * excluded here so they don't render as empty room cards; see `powerDevices`.
-	 */
+	/** Latest reading per climate/air device, UI-ordered. */
 	readonly devices = computed(() => this._devices().filter((d) => !d.label.power));
-	/** Latest reading per smart-plug power monitor, for the power section. */
+	/** Latest reading per smart plug; nothing renders these yet. */
 	readonly powerDevices = computed(() => this._devices().filter((d) => d.label.power));
 	/** True once the first `/api/devices` response has been handled. */
 	readonly devicesLoaded = this._devicesLoaded.asReadonly();
@@ -75,15 +67,12 @@ export class ApiService {
 
 	private timer: ReturnType<typeof setInterval> | null = null;
 
-	// Guards against out-of-order history responses: a slow in-flight fetch for
-	// the previous range must not overwrite the newer range's data when it lands.
+	// A slower, older fetch must not overwrite a newer one's result.
 	private historyGeneration = 0;
 
-	// When the window was last read whole. Zero forces the next refresh to do so,
-	// which is how a range change gets the rows a delta could not reach back for.
+	// When the window was last read whole; 0 forces the next refresh to.
 	private lastFullFetch = 0;
 
-	/** Load devices + history, then auto-refresh both on a timer. */
 	start(): void {
 		void this.init();
 		this.timer ??= setInterval(() => {
@@ -101,7 +90,6 @@ export class ApiService {
 		}
 	}
 
-	/** Change the active history window and refetch. */
 	setRange(range: RangeKey): void {
 		if (range === this._range()) {
 			return;
@@ -147,11 +135,8 @@ export class ApiService {
 		}
 		const to = new Date();
 		const windowStart = to.getTime() - rangeMs(this._range());
-		// ⚠ **A refresh asks for what it does not already hold.** Re-reading the
-		// whole window each minute is what this used to do, and it cost 1.0 MiB a
-		// minute on the default range and 17.9 MiB on 30 days (measured
-		// 2026-08-14, 65,007 rows across eight devices) to learn a handful of new
-		// readings. The rows already held do not change; only the recent end grows.
+		// Only what is not already held: re-reading a 30-day window every minute
+		// costs megabytes to learn a handful of rows.
 		const whole = to.getTime() - this.lastFullFetch >= RECONCILE_MS;
 		const held = this._historyByDevice();
 
@@ -177,7 +162,7 @@ export class ApiService {
 				}),
 			);
 			if (generation !== this.historyGeneration) {
-				return; // A newer refresh superseded this one; drop the stale result.
+				return;
 			}
 			this._historyByDevice.set(Object.fromEntries(entries));
 			this._historyError.set(null);

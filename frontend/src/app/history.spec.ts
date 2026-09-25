@@ -44,8 +44,6 @@ describe('mergeWindow', () => {
 		expect(merged.map((m) => m.temp_c)).toEqual([21]);
 	});
 
-	// NaN sorts to neither end reliably, so an unparseable row would land
-	// somewhere arbitrary and draw a line to it.
 	it('drops a row whose timestamp will not parse', () => {
 		const merged = mergeWindow([], [row('not a date', 5), row('2026-08-14T01:00:00Z', 21)], start);
 		expect(merged.map((m) => m.temp_c)).toEqual([21]);

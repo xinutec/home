@@ -9,9 +9,8 @@ module.exports = defineConfig([
     files: ['src/**/*.ts'],
     extends: [
       eslint.configs.recommended,
-      // Type-aware: without a project the rules that need types — notably
-      // no-base-to-string / restrict-template-expressions, the ones that stop a
-      // value rendering as `[object Object]` — load but never fire.
+      // Type-aware: without it no-base-to-string and friends, which stop an
+      // `[object Object]` reaching the screen, load but never fire.
       tseslint.configs.recommendedTypeChecked,
       tseslint.configs.stylisticTypeChecked,
       angular.configs.tsRecommended,
@@ -21,11 +20,7 @@ module.exports = defineConfig([
     },
     processor: angular.processInlineTemplates,
     rules: {
-      // `x as Shape` is a claim, not a check — and it is the one hole left in
-      // the protection against a value reaching the screen in the wrong shape.
-      // The type-aware rules above, and dev-lint's DL-ANGULAR-STRINGIFIED-OBJECT
-      // over the templates, both reason from the declared types; the only way to
-      // fool them is with a type we manufactured ourselves.
+      // `x as Shape` is a claim, not a check, and the type-aware rules trust it.
       '@typescript-eslint/no-unsafe-type-assertion': 'error',
       '@angular-eslint/directive-selector': [
         'error',
@@ -46,43 +41,29 @@ module.exports = defineConfig([
     },
   },
   {
-    // A spec reaches a component's protected members the only way TypeScript
-    // permits from outside the class — `app['showIds']()`. That is the testing
-    // idiom, not a style slip: dot notation there is a compile error.
+    // Specs reach protected members as `app['showIds']()`; dot notation would
+    // not compile.
     files: ['src/**/*.spec.ts'],
     rules: {
       '@typescript-eslint/dot-notation': ['error', { allowProtectedClassPropertyAccess: true }],
     },
   },
   {
-    // A double asserted into the interface it stands in for is the whole point
-    // of a double; getting it wrong fails a test, it never reaches a user. App
-    // code stays strict.
+    // Test doubles are asserted into the type they stand in for.
     files: ['src/**/*.spec.ts'],
     rules: {
       '@typescript-eslint/no-unsafe-type-assertion': 'off',
     },
   },
   {
-    // The layout harness and its specs. The blocks above say `src`, so until
-    // this existed the e2e tree was linted by nothing, on top of being
-    // type-checked by nothing (see tsconfig.e2e.json). It is the only gate that
-    // can see what a phone actually suffers, which makes "nobody checks it" the
-    // wrong property for it to have.
+    // The layout harness. Type-aware for no-floating-promises: an unawaited
+    // `route.fulfill(...)` still passes the test.
     //
-    // Type-aware, and that is the point: the rule that pays here is
-    // no-floating-promises. A `route.fulfill(...)` dropped inside a route
-    // handler still mocks the request, so the test passes and nothing says the
-    // handler returned before the fulfilment finished.
+    // `ng lint` reads the files named by angular.json's lintFilePatterns;
+    // this list alone changes nothing.
     //
-    // ⚠ `ng lint` decides what it reads from angular.json's lintFilePatterns,
-    // not from this file — widening one without the other changes nothing.
-    //
-    // ⚠ `project`, not `projectService`, and only here. The service finds a
-    // file's project by walking up to the nearest tsconfig.json — and this
-    // one is solution-style, `"files": []`, so it claims nothing and the specs
-    // bind to no project at all. Naming tsconfig.e2e.json is the honest answer:
-    // it is the config that actually covers these files.
+    // `project`, not `projectService`: the service would bind these files to
+    // tsconfig.json, which is solution-style and covers nothing.
     files: ['e2e/**/*.ts', 'playwright.config.ts'],
     extends: [
       eslint.configs.recommended,
@@ -97,8 +78,7 @@ module.exports = defineConfig([
     files: ['**/*.html'],
     extends: [angular.configs.templateRecommended, angular.configs.templateAccessibility],
     rules: {
-      // Allow `x == null` / `x != null` as a deliberate null-or-undefined check;
-      // strict equality is still required everywhere else.
+      // `x == null` checks null and undefined at once.
       '@angular-eslint/template/eqeqeq': ['error', { allowNullOrUndefined: true }],
     },
   },

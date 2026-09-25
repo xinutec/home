@@ -1,10 +1,9 @@
 import { z } from "zod";
 
-// One environmental reading pushed by the Mac's airvisual poller. Every sensor
-// field is optional/nullable — a sensor may not report (e.g. the AirVisual VOC
-// channel returns -1, which the poller maps to null).
+// One reading, as the pushers send it. Every sensor field is optional: each
+// device reports its own subset.
 export const MeasurementInput = z.object({
-	// ISO-8601 instant; the server defaults to "now" if omitted.
+	// Defaults to the time of receipt.
 	ts: z.string().datetime().optional(),
 	device: z.string().min(1).max(64).default("airvisual"),
 	temp_c: z.number().nullable().optional(),
@@ -15,33 +14,26 @@ export const MeasurementInput = z.object({
 	pm10: z.number().min(0).nullable().optional(),
 	aqi_us: z.number().int().min(0).nullable().optional(),
 	voc_ppb: z.number().int().nullable().optional(),
-	// Device health from the Govee BLE sensors: battery % and BLE signal (dBm).
 	battery: z.number().int().min(0).max(100).nullable().optional(),
-	// RSSI is always negative dBm; 127 (0x7F) is the BLE "not available" sentinel
-	// bleak can emit. Coerce any non-negative value to null, never a bogus signal.
+	// Non-negative is the BLE "not available" sentinel (127), not a signal.
 	rssi: z
 		.number()
 		.int()
 		.nullable()
 		.optional()
 		.transform((v) => (v != null && v >= 0 ? null : v)),
-	// Electrical readings from the smart-plug power monitors. power_on is the
-	// relay state (true = on); stored as 0/1. energy_kwh is the plug's own
-	// cumulative counter (monotonic), the rest are instantaneous.
 	power_w: z.number().min(0).nullable().optional(),
 	voltage_v: z.number().min(0).nullable().optional(),
 	current_a: z.number().min(0).nullable().optional(),
 	energy_kwh: z.number().min(0).nullable().optional(),
 	power_on: z.boolean().nullable().optional(),
-	// Which host captured the reading ("mac" / "pixel5" for the Govee BLE
-	// receivers). Lets the RSSI chart draw one line per receiver.
+	// The BLE receiver that heard it.
 	source: z.string().min(1).max(16).nullable().optional(),
 });
 
 export type MeasurementInput = z.infer<typeof MeasurementInput>;
 
-// Bulk ingest (the backfill importer): an array of readings in one request.
-// Capped so a single request stays well within MariaDB's max_allowed_packet.
+// Bulk ingest. Capped to stay inside MariaDB's max_allowed_packet.
 export const MeasurementBatch = z.object({
 	measurements: z.array(MeasurementInput).min(1).max(5000),
 });

@@ -1,39 +1,20 @@
 /**
- * The pending half of a Nextcloud SSO login, carried in a signed cookie.
+ * The pending half of a Nextcloud sign-in, carried in a signed cookie rather
+ * than looked up by `state`.
  *
- * **Why not the `state` parameter alone.** When the browser holds no Nextcloud
- * session, NC's `oauth2/authorize` does not redirect back to us — it bounces to its
- * own Login Flow, and drops every query parameter on the way:
+ * A browser with no Nextcloud session is sent through NC's Login Flow, which
+ * drops every query parameter and returns to the callback with `state` empty:
  *
  *     GET …/oauth2/authorize?client_id=…&redirect_uri=…&state=f360a3be…
  *      → 303 …/login/flow?providedRedirectUri=&clientIdentifier=…
  *
- * After the sign-in it returns to the registered callback with `state=`, **empty**.
- * A server that looks the pending login up by `state` therefore cannot complete a
- * login from a cookie-less browser at all — found 2026-07-28 in the sibling
- * fleetwatch service, whose Android WebView lost its NC cookie and could never sign
- * in again.
+ * So `state` cannot find the pending login. The cookie can, binds it to the
+ * browser that started it, and survives a pod restart mid-login. `state` is
+ * still sent, and checked whenever NC returns it.
  *
- * So the pending login travels in a cookie of our own. That binds it to the browser
- * that started the login, which is the property `state` was there to prove; `state`
- * is still sent, and still checked whenever NC gives it back. Being self-contained
- * and signed, it also survives the pod restarting mid-login, which an in-memory map
- * of pending logins does not.
- *
- * Scope: **the NC identity login**, which is the only OAuth home does. The siblings
- * this pattern came from keep an in-memory pending entry for providers that return
- * `state` faithfully and hold a PKCE `codeVerifier` that has no business in a cookie.
- *
- * Residual risk, accepted deliberately: when NC returns an empty `state` the cookie
- * is the only binding, so a login-CSRF would become possible for someone who can land
- * a callback in the victim's browser inside the 10-minute window. The alternative is a
- * login that cannot be performed at all.
- *
- * ⚠ **home is on the public internet**, unlike the sibling this text came from — so
- * "who can reach the host" narrows that window for nobody. What limits the damage here
- * is what the session can do rather than who can reach it: every read on this host is
- * public already, and the only thing sign-in unlocks is writing an attributed line to
- * `POST /api/telemetry`. A forced login writes the attacker's own name into a log.
+ * Accepted risk: with `state` empty the cookie is the only binding, so a
+ * login-CSRF is possible for 10 minutes. On this host that can only sign a
+ * victim in as the attacker, whose name then goes on `POST /api/telemetry` lines.
  */
 
 import * as crypto from "node:crypto";
@@ -48,7 +29,7 @@ export const PENDING_TTL_MS = 10 * 60 * 1000;
 export interface PendingLogin {
 	/** Echoed to NC as `state`; compared back when NC bothers to return it. */
 	nonce: string;
-	/** Optional internal path to land on afterwards; allowlist-validated when used. */
+	/** Where to land afterwards; validated when used. */
 	returnTo?: string;
 	expiresAt: number;
 }

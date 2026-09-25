@@ -4,19 +4,10 @@ import { TelemetryCore } from '@xinutec/ui-harness/telemetry';
 import { filter } from 'rxjs';
 
 /**
- * The Angular binding for the fleet's activity trace.
- *
- * The queue, the flush policy, the transport and the label rules are shared —
- * `@xinutec/ui-harness/telemetry`, tested once there. What has to stay here is
- * the framework binding: an `@Injectable` cannot be shipped from that package,
- * because it is built by plain `tsc` and Angular's decorators need the Angular
- * compiler to emit their Ivy definitions. A decorated class crossing that
- * boundary carries only inert metadata, and a production build fails on `JIT
- * compiler unavailable` — which is exactly how this was found.
- *
- * So the split is: the two capture seams and the DI wiring here, everything
- * else there. Instrumented once, from the app shell, so no screen knows the
- * trace exists and no new control can be missed by forgetting to annotate it.
+ * Angular binding for the fleet's activity trace; the rest is
+ * `@xinutec/ui-harness/telemetry`. It cannot ship this class: the package is
+ * built with plain `tsc`, and an `@Injectable` compiled that way fails a
+ * production build with "JIT compiler unavailable".
  */
 @Injectable({ providedIn: 'root' })
 export class Telemetry {
@@ -24,7 +15,7 @@ export class Telemetry {
 	private readonly doc = inject(DOCUMENT);
 	private readonly core = new TelemetryCore(this.doc);
 
-	/** Wire the two capture points. Called once from the app shell; idempotent. */
+	/** Idempotent. */
 	init(): void {
 		if (this.core.started) return;
 

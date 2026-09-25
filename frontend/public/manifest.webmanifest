@@ -1,7 +1,7 @@
 {
   "name": "Home · Indoor Air & Climate",
   "short_name": "Home Air",
-  "description": "Live indoor air quality and climate from an IQAir AirVisual Pro.",
+  "description": "Live indoor air quality and climate, room by room.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#00695c",

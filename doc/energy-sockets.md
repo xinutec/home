@@ -1,11 +1,11 @@
-# Smart-plug energy monitoring (POSTPONED — resume notes)
+# Smart-plug energy monitoring (postponed — resume notes)
 
 Goal: monitor four smart plugs' electrical data (power, voltage, current,
 cumulative energy) in the home dashboard, by **reflashing them to open firmware**
 so they report to us directly — no Tuya cloud, no Tuya app, no rotating keys.
 
-Status as of 2026-07-08: **backend scaffolding done and committed; hardware
-reflash + poller + UI not started.** Paused at the user's request.
+Status: **the backend is ready; the reflash, the poller and the UI are not
+started.**
 
 ## The devices
 
@@ -36,9 +36,9 @@ Mirrors the existing IQAir/Govee pushers: a Mac launchd poller HTTP-GETs each
 plug's energy JSON every 5 min and pushes it through `spool.deliver`. Tasmota
 keeps its own cumulative kWh counter, so we get real energy natively.
 
-## What is DONE (committed 71950e8)
+## What is done
 
-Firmware-agnostic backend, ready and waiting (NOT deployed — no data flows yet):
+A firmware-agnostic backend. No data flows yet.
 - **Migration v4** (`src/db/schema.ts`): `power_w`, `voltage_v`, `current_a`,
   `energy_kwh`, `power_on` columns on `measurement` (all nullable).
 - **Ingest** (`src/measurement.ts`, `src/routes/api.ts`): validates + stores the
@@ -48,9 +48,8 @@ Firmware-agnostic backend, ready and waiting (NOT deployed — no data flows yet
 - **Frontend guard** (`frontend/.../measurement.model.ts`, `api.service.ts`):
   power plugs filtered out of the climate room views, exposed as a separate
   `powerDevices` computed for the future power section.
-- Tests added; full verify green.
 
-## What is PENDING
+## What is pending
 
 1. Buy a 3.3 V USB-TTL serial adapter (FT232RL — candidate: DORHEA FT232RL
    Type-C 2-pack). **Must be set to 3.3 V** — ESP/Beken are not 5 V-tolerant.
@@ -68,7 +67,6 @@ Firmware-agnostic backend, ready and waiting (NOT deployed — no data flows yet
 5. **Calibrate** the BL0937/HLW8012 metering (GPIO template + voltage/current/
    power multipliers against a known load).
 6. **Frontend power section**: render `powerDevices` (live W + kWh history).
-7. **Deploy** home (migration applies on startup).
 
 Alternative flashing route not taken: OTA via `tuya-cloudcutter` on a
 Raspberry Pi (borrows the Pi's Wi-Fi radio for ~30 min — non-destructive to the
