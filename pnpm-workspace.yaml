@@ -17,3 +17,8 @@ allowBuilds:
 # supposed to enforce, and nothing said so.
 overrides:
   esbuild: ^0.28.2
+
+# The catalog names only versions a day old (dev-lint tables/deps.dhall);
+# strict, so a younger install fails instead of writing itself an exclusion.
+minimumReleaseAge: 1440
+minimumReleaseAgeStrict: true
