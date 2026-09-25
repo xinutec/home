@@ -1,14 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Maskable variant of icon.svg: full-bleed square (no rounded corners) so a
-     launcher's own mask applies cleanly; the house sits inside the safe zone.
-     Generated PNG: icon-512-maskable.png (see frontend/gen-icons.sh).
-
-     The house is drawn smaller than looks necessary, because the safe zone
-     bounds the STROKE and not the path. At 30px wide the outer edge of a
-     mitred bottom corner sits ~21px diagonally beyond its own coordinate, so
-     the previous house — corners at (118,394) — reached r=210 against a 204.8
-     limit and a round launcher mask clipped its base. Corners now sit at
-     r≈177. gen-icons.sh measures the rendered PNG and fails if this regresses. -->
+<!-- Maskable variant of icon.svg: full bleed, for the launcher's own mask. The
+     house is smaller than it looks like it needs to be: the safe zone bounds the
+     stroke's outer edge, not the path. gen-icons.sh checks the rendered PNG. -->
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
   <rect width="512" height="512" fill="#00695c"/>
   <g fill="none" stroke="#ffffff" stroke-width="30"
