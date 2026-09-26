@@ -87,6 +87,34 @@ in  { name = "home"
         , env = G.nonInteractive
         , timeout_s = 1800
         }
+      , {-  Port 3323: every test database in the fleet has its own port.
+        -}
+        G.Check::{
+        , name = "backend tests against a real MariaDB"
+        , argv =
+            G.withTestDb
+              "../"
+              [ "--database"
+              , "home"
+              , "--user"
+              , "home"
+              , "--password"
+              , "home"
+              , "--port"
+              , "3323"
+              , "--url-env"
+              , "HOME_TEST_DATABASE_URL"
+              , "--"
+              , "pnpm"
+              , "exec"
+              , "vitest"
+              , "run"
+              , "--config"
+              , "vitest.db.config.ts"
+              ]
+        , env = G.nonInteractive
+        , timeout_s = 1800
+        }
       , G.Check::{
         , name = "frontend tests"
         , cwd = "frontend"

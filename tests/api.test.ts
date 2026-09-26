@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { apiRoutes, MeasurementsQuery } from "../src/routes/api.js";
 
-// Auth and validation only: the success paths need a MariaDB.
+// Auth and validation. The success paths are in tests/db/.
 const TOKEN = "test-token-0123456789";
 const app = apiRoutes(TOKEN);
 

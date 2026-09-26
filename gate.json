@@ -195,6 +195,42 @@
         "develop",
         "--no-warn-dirty",
         "--command",
+        "nix",
+        "run",
+        "git+file:../dev-lint?ref=HEAD#with-test-db",
+        "--",
+        "--database",
+        "home",
+        "--user",
+        "home",
+        "--password",
+        "home",
+        "--port",
+        "3323",
+        "--url-env",
+        "HOME_TEST_DATABASE_URL",
+        "--",
+        "pnpm",
+        "exec",
+        "vitest",
+        "run",
+        "--config",
+        "vitest.db.config.ts"
+      ],
+      "artifacts": [],
+      "cwd": ".",
+      "env": {
+        "CI": "true"
+      },
+      "name": "backend tests against a real MariaDB",
+      "timeout_s": 1800
+    },
+    {
+      "argv": [
+        "nix",
+        "develop",
+        "--no-warn-dirty",
+        "--command",
         "pnpm",
         "test"
       ],

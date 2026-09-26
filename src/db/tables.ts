@@ -13,12 +13,11 @@ export interface MeasurementTable {
 	voc_ppb: number | null;
 	battery: number | null;
 	rssi: number | null;
-	// power_on is 0/1.
 	power_w: number | null;
 	voltage_v: number | null;
 	current_a: number | null;
 	energy_kwh: number | null;
-	power_on: number | null;
+	power_on: 0 | 1 | null;
 	/** Receiver of a BLE reading; null for the wired IQAir and older rows. */
 	source: string | null;
 }
@@ -36,7 +35,7 @@ export interface ClaudeUsageTable {
 	seven_day_pct: number | null;
 	seven_day_resets_at: Date | null;
 	/** Measurement (1) or echo of cached headers (0). See schema v9. */
-	measured: number;
+	measured: 0 | 1;
 }
 
 /** One model's own rate-limit window, keyed by (host, model). See schema v8. */

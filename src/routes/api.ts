@@ -2,9 +2,11 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { offsetFor } from "../calibration.js";
 import { db } from "../db/pool.js";
+import type { ClaudeUsageTable, MeasurementTable } from "../db/tables.js";
 import type { AppEnv } from "../env.js";
 import { decorateDevices } from "../labels.js";
 import { MeasurementBatch, MeasurementInput } from "../measurement.js";
+import { TelemetryBatch, TelemetryEvent } from "../telemetry.js";
 import { UsageInput } from "../usage.js";
 
 // How far back /api/receivers looks for the devices a receiver hears. Well past
@@ -20,7 +22,7 @@ export const MeasurementsQuery = z.object({
 	limit: z.coerce.number().int().positive().max(20000).default(5000),
 });
 
-function sensorValues(m: MeasurementInput) {
+function sensorValues(m: MeasurementInput): Omit<MeasurementTable, "device" | "ts"> {
 	return {
 		temp_c: m.temp_c ?? null,
 		humidity: m.humidity ?? null,
@@ -41,11 +43,11 @@ function sensorValues(m: MeasurementInput) {
 	};
 }
 
-function toRow(m: MeasurementInput) {
+function toRow(m: MeasurementInput): MeasurementTable {
 	return { device: m.device, ts: m.ts ? new Date(m.ts) : new Date(), ...sensorValues(m) };
 }
 
-function toUsageRow(u: UsageInput) {
+function toUsageRow(u: UsageInput): ClaudeUsageTable {
 	return {
 		host: u.host,
 		ts: u.ts ? new Date(u.ts) : new Date(),
@@ -284,27 +286,20 @@ export function apiRoutes(ingestToken: string): Hono<AppEnv> {
 			return c.json({ error: "not authenticated" }, 401);
 		}
 
-		const MAX_EVENTS = 100;
 		const MAX_LABEL = 160;
 
-		let body: unknown;
-		try {
-			body = await c.req.json();
-		} catch {
-			return c.json({ error: "invalid json" }, 400);
+		const batch = TelemetryBatch.safeParse(await c.req.json().catch(() => null));
+		if (!batch.success) {
+			return c.json({ error: "invalid payload", detail: batch.error.flatten() }, 400);
 		}
-		if (!Array.isArray(body)) {
-			return c.json({ error: "expected array" }, 400);
-		}
-		for (const raw of body.slice(0, MAX_EVENTS)) {
-			if (!raw || typeof raw !== "object") continue;
-			const e = raw as { kind?: unknown; path?: unknown; label?: unknown; at?: unknown };
-			const kind = oneLine(String(e.kind ?? ""), 32);
-			const path = oneLine(String(e.path ?? ""), MAX_LABEL);
-			const label = oneLine(String(e.label ?? ""), MAX_LABEL);
-			const at = Number(e.at ?? 0);
+		for (const raw of batch.data) {
+			const e = TelemetryEvent.safeParse(raw);
+			if (!e.success) continue;
+			const kind = oneLine(e.data.kind, 32);
+			const path = oneLine(e.data.path, MAX_LABEL);
+			const label = oneLine(e.data.label ?? "", MAX_LABEL);
 			console.log(
-				`client-event user=${session.userId} kind=${kind} path=${path} label=${label} at=${at}`,
+				`client-event user=${session.userId} kind=${kind} path=${path} label=${label} at=${e.data.at}`,
 			);
 		}
 		// Best-effort: the client neither reads this nor retries.
