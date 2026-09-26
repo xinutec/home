@@ -14,7 +14,6 @@
 	// No single colour shows on both the fill and the empty track; `difference`
 	// against white inverts whatever is behind it. White is the blend's operand,
 	// not a theme colour: a themed value would not invert.
-	// dev-lint: allow-hardcoded-color the operand of `difference`, not a colour
 	background: #fff;
 	mix-blend-mode: difference;
 	opacity: 0.45;
