@@ -102,3 +102,15 @@ describe("MeasurementBatch", () => {
 		expect(MeasurementBatch.safeParse({ measurements: [{ humidity: 250 }] }).success).toBe(false);
 	});
 });
+
+describe("no-reading codes", () => {
+	it("become null, and the rest of the reading is kept", () => {
+		const r = MeasurementInput.parse({ temp_c: 21, voc_ppb: -1, aqi_us: -1 });
+		expect([r.voc_ppb, r.aqi_us, r.temp_c]).toEqual([null, null, 21]);
+	});
+
+	it("leave real zeroes alone", () => {
+		const r = MeasurementInput.parse({ voc_ppb: 0, aqi_us: 0 });
+		expect([r.voc_ppb, r.aqi_us]).toEqual([0, 0]);
+	});
+});

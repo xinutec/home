@@ -28,7 +28,7 @@ function reading(over: Partial<Measurement>): Measurement {
 function dev(device: string, airQuality: boolean, order: number): DeviceLatest {
 	return {
 		...reading({ device }),
-		label: { name: device, airQuality, order, type: 'test' },
+		label: { name: device, airQuality, order, type: 'test', color: `colour of ${device}` },
 		offset: {},
 	};
 }
@@ -46,7 +46,7 @@ describe('toTrendPoints', () => {
 });
 
 describe('climateSeries', () => {
-	it('builds one series per device, in order, with distinct colours', () => {
+	it('builds one series per device, in order, in its own colour', () => {
 		const devices = [dev('airvisual', true, 0), dev('govee-A562', false, 1)];
 		const history = {
 			airvisual: [reading({ device: 'airvisual', temp_c: 25 })],
@@ -56,7 +56,7 @@ describe('climateSeries', () => {
 		expect(s.map((x) => x.label)).toEqual(['airvisual', 'govee-A562']);
 		expect(s[0].points[0].y).toBe(25);
 		expect(s[1].points[0].y).toBe(24);
-		expect(s[0].color).not.toBe(s[1].color);
+		expect(s.map((x) => x.color)).toEqual(['colour of airvisual', 'colour of govee-A562']);
 	});
 
 	it('labels a sited device by its room, falling back to the id when unsited', () => {

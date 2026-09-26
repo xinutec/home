@@ -11,7 +11,7 @@ export default {
       {
         ts: '2026-07-01T09:00:00Z', device: 'STUB', temp_c: 21, humidity: 48, co2_ppm: 700,
         pm01: 2, pm25: 5, pm10: 7, aqi_us: 21, voc_ppb: 90, battery: 90, rssi: -60,
-        label: { name: 'Stub', room: 'Stub', airQuality: true, order: 0, type: 'stub' },
+        label: { name: 'Stub', room: 'Stub', airQuality: true, order: 0, type: 'stub', color: '#26a69a' },
         offset: {},
       },
     ],

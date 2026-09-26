@@ -19,8 +19,19 @@ refuses to run.
 the same checks minus the build and the layout harness, as one `&&` chain.
 
 Only `ng build` (or `ng test`) runs Angular's strictTemplates. `tsc -p
-tsconfig.app.json` passes template type errors, such as a field missing from
-the frontend's own `DeviceLabel`.
+tsconfig.app.json` passes template type errors.
+
+`tests/db/` runs against a throwaway MariaDB and only under the gate: it checks
+`src/db/tables.ts` against what the migrations build, and the API's success
+paths.
+
+## The API's types
+
+`src/wire.ts` is the JSON the API serves, imported by the backend's handlers
+and by the frontend (hence the frontend's `rootDir: ".."`, and the Dockerfile
+copying that one file into the frontend stage). It imports nothing, so the
+frontend needs none of the backend's packages. The frontend parses every
+instant to epoch ms once, in `ApiService`.
 
 ## Deploy
 
@@ -38,7 +49,7 @@ notes: `doc/energy-sockets.md`.
 - Temperature offsets: `src/calibration.ts`, applied client-side and
   toggleable; the DB is raw. Derived by
   `xinutec-infra/mac-mini/sensor-calibrate.py`; see `doc/calibration.md`.
-- Rooms and display labels: `src/labels.ts`, mirrored by `DeviceLabel` in
-  `frontend/src/app/measurement.model.ts`. Keyed by the stable device id and
-  never stored, so moving a sensor is a one-line edit, and its offset moves
-  with it.
+- Rooms, display labels and chart colours: `src/labels.ts`. Keyed by the
+  stable device id and never stored, so moving a sensor is a one-line edit,
+  and its offset moves with it. A new sensor needs a colour no other climate
+  sensor has; a test checks.

@@ -1,5 +1,11 @@
 import { z } from "zod";
 
+// A negative count is a sensor's "no reading" code: store null, so null is the
+// only way a missing value reaches a reader. The rest of the reading still counts.
+function noReading(v: number | null | undefined): number | null | undefined {
+	return v != null && v < 0 ? null : v;
+}
+
 // One reading, as the pushers send it. Every sensor field is optional: each
 // device reports its own subset.
 export const MeasurementInput = z.object({
@@ -12,8 +18,9 @@ export const MeasurementInput = z.object({
 	pm01: z.number().min(0).nullable().optional(),
 	pm25: z.number().min(0).nullable().optional(),
 	pm10: z.number().min(0).nullable().optional(),
-	aqi_us: z.number().int().min(0).nullable().optional(),
-	voc_ppb: z.number().int().nullable().optional(),
+	aqi_us: z.number().int().nullable().optional().transform(noReading),
+	// The IQAir reports a missing VOC reading as -1.
+	voc_ppb: z.number().int().nullable().optional().transform(noReading),
 	battery: z.number().int().min(0).max(100).nullable().optional(),
 	// Non-negative is the BLE "not available" sentinel (127), not a signal.
 	rssi: z

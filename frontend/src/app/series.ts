@@ -1,4 +1,4 @@
-import { type DeviceLatest, type Measurement, ROOM_COLORS } from './measurement.model';
+import { type DeviceLatest, type Measurement, RECEIVER_COLORS } from './measurement.model';
 import type { ChartSeries, TrendPoint } from './trend-chart/trend-chart';
 
 /** Chart points, skipping nulls. */
@@ -17,18 +17,18 @@ export function toTrendPoints(
 	return out;
 }
 
-/** One line per device, coloured by position. */
+/** One line per device, in the device's colour. */
 export function climateSeries(
 	devices: DeviceLatest[],
 	history: Record<string, Measurement[]>,
 	pick: (m: Measurement) => number | null,
 	offsetOf: (d: DeviceLatest) => number = () => 0,
 ): ChartSeries[] {
-	return devices.map((d, i) => {
+	return devices.map((d) => {
 		const off = offsetOf(d);
 		return {
 			label: d.label.room ?? d.label.name,
-			color: ROOM_COLORS[i % ROOM_COLORS.length],
+			color: d.label.color,
 			points: toTrendPoints(history[d.device] ?? [], pick).map((p) => ({ x: p.x, y: p.y + off })),
 		};
 	});
@@ -63,7 +63,7 @@ export function rssiByReceiverSeries(
 			}
 			out.push({
 				label: `${name} · ${source}`,
-				color: ROOM_COLORS[out.length % ROOM_COLORS.length],
+				color: RECEIVER_COLORS[out.length % RECEIVER_COLORS.length],
 				points,
 			});
 		}

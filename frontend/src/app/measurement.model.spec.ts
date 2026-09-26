@@ -1,11 +1,4 @@
-import {
-	RANGE_KEYS,
-	aqiBand,
-	cleanVoc,
-	parseMeasurement,
-	parseUsage,
-	rangeMs,
-} from './measurement.model';
+import { RANGE_KEYS, aqiBand, parseMeasurement, parseUsage, rangeMs } from './measurement.model';
 
 describe('aqiBand', () => {
 	it('classifies values into the correct US-AQI band', () => {
@@ -19,10 +12,9 @@ describe('aqiBand', () => {
 		expect(aqiBand(400)?.label).toBe('Hazardous');
 	});
 
-	it('returns null for missing or sentinel values', () => {
+	it('returns null for a missing value', () => {
 		expect(aqiBand(null)).toBeNull();
 		expect(aqiBand(undefined)).toBeNull();
-		expect(aqiBand(-1)).toBeNull();
 	});
 });
 
@@ -34,19 +26,6 @@ describe('history windows', () => {
 	it('converts each window to its span in ms', () => {
 		expect(rangeMs('4h')).toBe(4 * 3_600_000);
 		expect(rangeMs('30d')).toBe(30 * 24 * 3_600_000);
-	});
-});
-
-describe('cleanVoc', () => {
-	it('passes through valid readings', () => {
-		expect(cleanVoc(0)).toBe(0);
-		expect(cleanVoc(120)).toBe(120);
-	});
-
-	it('treats null and -1 as not available', () => {
-		expect(cleanVoc(null)).toBeNull();
-		expect(cleanVoc(undefined)).toBeNull();
-		expect(cleanVoc(-1)).toBeNull();
 	});
 });
 

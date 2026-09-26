@@ -41,9 +41,8 @@ export function parseUsage(u: Wire.ClaudeUsage<string>): ClaudeUsage {
 	};
 }
 
-/** Line colours for the per-room charts, by position. Past the end they repeat,
- *  so keep one per climate sensor. */
-export const ROOM_COLORS: readonly string[] = [
+/** Colours for the signal chart, which has a line per (device, receiver). */
+export const RECEIVER_COLORS: readonly string[] = [
 	'#26a69a',
 	'#ef6c00',
 	'#5c6bc0',
@@ -95,16 +94,8 @@ export const AQI_BANDS: readonly AqiBand[] = [
 ];
 
 export function aqiBand(aqi: number | null | undefined): AqiBand | null {
-	if (aqi == null || aqi < 0) {
+	if (aqi == null) {
 		return null;
 	}
 	return AQI_BANDS.find((b) => aqi >= b.min && aqi <= b.max) ?? null;
-}
-
-/** The IQAir reports a missing VOC reading as -1. */
-export function cleanVoc(voc: number | null | undefined): number | null {
-	if (voc == null || voc < 0) {
-		return null;
-	}
-	return voc;
 }

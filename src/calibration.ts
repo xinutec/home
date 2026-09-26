@@ -1,3 +1,4 @@
+import type { DeviceId } from "./labels.js";
 import type { Calibration } from "./wire.js";
 
 // Per-device temperature offsets, served in /api/devices and applied by the
@@ -5,7 +6,7 @@ import type { Calibration } from "./wire.js";
 // xinutec-infra/mac-mini/sensor-calibrate.py — the model, the anchor and how to
 // re-derive them are in doc/calibration.md. A device with no entry is uncorrected.
 
-const OFFSETS: Record<string, Calibration> = {
+const OFFSETS: Partial<Record<DeviceId, Calibration>> = {
 	airvisual: { temp_c: -0.02 },
 	"govee-A562": { temp_c: -0.05 },
 	"govee-525D": { temp_c: -0.01 },
@@ -15,5 +16,6 @@ const OFFSETS: Record<string, Calibration> = {
 
 /** Calibration offsets for a device — empty if none. */
 export function offsetFor(device: string): Calibration {
-	return OFFSETS[device] ?? {};
+	const byId: Readonly<Record<string, Calibration | undefined>> = OFFSETS;
+	return byId[device] ?? {};
 }

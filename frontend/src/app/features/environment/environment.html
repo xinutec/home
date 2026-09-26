@@ -63,7 +63,7 @@
 		>
 			<span class="aqi-label">US AQI</span>
 			<span class="aqi-number">
-				{{ airDevice()?.aqi_us != null && airDevice()!.aqi_us! >= 0 ? airDevice()!.aqi_us : '—' }}
+				{{ airDevice()?.aqi_us ?? '—' }}
 			</span>
 			<span class="aqi-band">{{ band()?.label ?? 'No reading' }}</span>
 		</div>
@@ -133,10 +133,10 @@
 			</mat-slide-toggle>
 		</div>
 		<div class="room-grid">
-			@for (d of devices(); track d.device; let i = $index) {
+			@for (d of devices(); track d.device) {
 				<mat-card class="room-card" appearance="outlined">
 					<div class="room-name">
-						<span [style.color]="roomColor(i)">{{ d.label.room ?? d.label.name }}</span>
+						<span [style.color]="d.label.color">{{ d.label.room ?? d.label.name }}</span>
 						@if (d.label.airQuality) {
 							<mat-icon class="room-air" matTooltip="Air-quality sensor">air</mat-icon>
 						}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decorateDevices, labelFor } from "../src/labels.js";
+import { decorateDevices, LABELS, labelFor } from "../src/labels.js";
 
 describe("labelFor", () => {
 	it("marks the IQAir as the air-quality sensor and sorts it first", () => {
@@ -72,5 +72,12 @@ describe("decorateDevices", () => {
 
 	it("returns an empty list unchanged", () => {
 		expect(decorateDevices([])).toEqual([]);
+	});
+});
+
+describe("colours", () => {
+	it("differ between every two climate sensors, which share a chart", () => {
+		const climate = Object.values(LABELS).filter((l) => !("power" in l && l.power));
+		expect(new Set(climate.map((l) => l.color)).size).toBe(climate.length);
 	});
 });

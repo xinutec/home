@@ -10,10 +10,8 @@ import { ApiService } from '../../api.service';
 import {
 	type DeviceLatest,
 	RANGE_KEYS,
-	ROOM_COLORS,
 	type RangeKey,
 	aqiBand,
-	cleanVoc,
 	rangeMs,
 } from '../../measurement.model';
 import { RelativeTimePipe } from '../../relative-time.pipe';
@@ -73,7 +71,7 @@ export class EnvironmentPage implements OnInit, OnDestroy {
 	protected readonly spanMs = computed(() => rangeMs(this.range()));
 
 	protected readonly band = computed(() => aqiBand(this.airDevice()?.aqi_us));
-	protected readonly voc = computed(() => cleanVoc(this.airDevice()?.voc_ppb));
+	protected readonly voc = computed(() => this.airDevice()?.voc_ppb ?? null);
 
 	protected readonly calibrated = signal(readLocal('calibrated') !== 'off');
 
@@ -170,10 +168,5 @@ export class EnvironmentPage implements OnInit, OnDestroy {
 
 	protected calHum(d: DeviceLatest): number | null {
 		return d.humidity != null ? d.humidity + this.off(d, 'humidity') : null;
-	}
-
-	/** The colour of device `i`'s line in the climate charts. */
-	protected roomColor(i: number): string {
-		return ROOM_COLORS[i % ROOM_COLORS.length];
 	}
 }

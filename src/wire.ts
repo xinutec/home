@@ -36,6 +36,8 @@ export interface DeviceLabel {
 	order: number;
 	/** Hardware model. */
 	type: string;
+	/** The device's line in the charts, and its name on its room card. */
+	color: string;
 }
 
 /** Added to a raw reading when calibration is on. */
