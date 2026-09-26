@@ -1,61 +1,44 @@
-export interface Measurement {
-	ts: string;
-	device: string;
-	temp_c: number | null;
-	humidity: number | null;
-	co2_ppm: number | null;
-	pm01: number | null;
-	pm25: number | null;
-	pm10: number | null;
-	aqi_us: number | null;
-	voc_ppb: number | null;
-	battery: number | null;
-	rssi: number | null;
-	power_w: number | null;
-	voltage_v: number | null;
-	current_a: number | null;
-	energy_kwh: number | null;
-	power_on: number | null;
-	/** Receiver of a BLE reading; null for the wired IQAir and older rows. */
-	source: string | null;
+import type * as Wire from '../../../src/wire';
+
+export type { DeviceLabel } from '../../../src/wire';
+
+// The API's types with every instant parsed to epoch ms, which `ApiService`
+// does as each response arrives.
+export type Measurement = Wire.Measurement<number>;
+export type DeviceLatest = Wire.DeviceLatest<number>;
+export type ClaudeUsage = Wire.ClaudeUsage<number>;
+export type ClaudeUsageModel = Wire.ClaudeUsageModel<number>;
+
+/** Epoch ms. The server writes every instant from a `Date`, so one that will
+ *  not parse means the response is not the API's: throw, don't guess. */
+function at(iso: string): number {
+	const ms = Date.parse(iso);
+	if (Number.isNaN(ms)) {
+		throw new Error(`not an instant: ${JSON.stringify(iso)}`);
+	}
+	return ms;
 }
 
-/** Mirrors `DeviceLabel` in src/labels.ts. */
-export interface DeviceLabel {
-	name: string;
-	/** Absent until the sensor is sited; then show `name`. */
-	room?: string;
-	airQuality: boolean;
-	power?: boolean;
-	order: number;
-	type: string;
+function atOrNull(iso: string | null): number | null {
+	return iso === null ? null : at(iso);
 }
 
-/** A row of `/api/devices`. */
-export interface DeviceLatest extends Measurement {
-	label: DeviceLabel;
-	/** Added to the raw reading while "Calibrated" is on. */
-	offset: { temp_c?: number; humidity?: number };
+export function parseMeasurement(m: Wire.Measurement<string>): Measurement {
+	return { ...m, ts: at(m.ts) };
 }
 
-/** `/api/usage`: the freshest report, from `host` at `ts`. */
-export interface ClaudeUsage {
-	host: string;
-	ts: string;
-	five_hour_pct: number | null;
-	five_hour_resets_at: string | null;
-	seven_day_pct: number | null;
-	seven_day_resets_at: string | null;
-	/** Models with a weekly allowance of their own. */
-	models?: ClaudeUsageModel[];
+export function parseDevice(d: Wire.DeviceLatest<string>): DeviceLatest {
+	return { ...d, ts: at(d.ts) };
 }
 
-export interface ClaudeUsageModel {
-	/** The CLI's display name, shown verbatim. */
-	model: string;
-	ts: string;
-	pct: number | null;
-	resets_at: string | null;
+export function parseUsage(u: Wire.ClaudeUsage<string>): ClaudeUsage {
+	return {
+		...u,
+		ts: at(u.ts),
+		five_hour_resets_at: atOrNull(u.five_hour_resets_at),
+		seven_day_resets_at: atOrNull(u.seven_day_resets_at),
+		models: u.models.map((m) => ({ ...m, ts: at(m.ts), resets_at: atOrNull(m.resets_at) })),
+	};
 }
 
 /** Line colours for the per-room charts, by position. Past the end they repeat,

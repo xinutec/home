@@ -43,7 +43,7 @@
 				<div class="cu-reset">{{ fmtReset(u.seven_day_resets_at) }}</div>
 			</mat-card>
 			<!-- One card per model with its own weekly allowance, named from the data. -->
-			@for (m of u.models ?? []; track m.model) {
+			@for (m of u.models; track m.model) {
 				@let scoped = live(m.pct, m.resets_at);
 				<mat-card class="cu-card" appearance="outlined">
 					<div class="cu-top">

@@ -20,6 +20,8 @@ RUN apk add --no-cache git ca-certificates \
     && npm install -g pnpm \
     && pnpm install --frozen-lockfile
 COPY frontend/ ./
+# The API's types, which the frontend imports from the backend's tree.
+COPY src/wire.ts /app/src/wire.ts
 RUN pnpm run build
 
 # --- runtime -------------------------------------------------------------

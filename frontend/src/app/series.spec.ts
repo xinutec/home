@@ -3,7 +3,7 @@ import { airSeries, climateSeries, rssiByReceiverSeries, toTrendPoints } from '.
 
 function reading(over: Partial<Measurement>): Measurement {
 	return {
-		ts: '2026-06-27T00:00:00.000Z',
+		ts: Date.parse('2026-06-27T00:00:00.000Z'),
 		device: 'x',
 		temp_c: null,
 		humidity: null,
@@ -36,17 +36,12 @@ function dev(device: string, airQuality: boolean, order: number): DeviceLatest {
 describe('toTrendPoints', () => {
 	it('drops null values and keeps valid points', () => {
 		const rows = [
-			reading({ ts: '2026-06-27T00:00:00.000Z', temp_c: 20 }),
-			reading({ ts: '2026-06-27T01:00:00.000Z', temp_c: null }),
-			reading({ ts: '2026-06-27T02:00:00.000Z', temp_c: 22 }),
+			reading({ ts: Date.parse('2026-06-27T00:00:00.000Z'), temp_c: 20 }),
+			reading({ ts: Date.parse('2026-06-27T01:00:00.000Z'), temp_c: null }),
+			reading({ ts: Date.parse('2026-06-27T02:00:00.000Z'), temp_c: 22 }),
 		];
 		const pts = toTrendPoints(rows, (m) => m.temp_c);
 		expect(pts.map((p) => p.y)).toEqual([20, 22]);
-	});
-
-	it('drops points with an unparseable timestamp', () => {
-		const rows = [reading({ ts: 'not-a-date', temp_c: 20 })];
-		expect(toTrendPoints(rows, (m) => m.temp_c)).toEqual([]);
 	});
 });
 
@@ -98,9 +93,9 @@ describe('rssiByReceiverSeries', () => {
 		const devices = [dev('govee-267F', false, 0)];
 		const history = {
 			'govee-267F': [
-				reading({ ts: '2026-06-27T00:00:00.000Z', rssi: -69, source: 'pixel5' }),
-				reading({ ts: '2026-06-27T00:05:00.000Z', rssi: -81, source: 'mac' }),
-				reading({ ts: '2026-06-27T00:10:00.000Z', rssi: -68, source: 'pixel5' }),
+				reading({ ts: Date.parse('2026-06-27T00:00:00.000Z'), rssi: -69, source: 'pixel5' }),
+				reading({ ts: Date.parse('2026-06-27T00:05:00.000Z'), rssi: -81, source: 'mac' }),
+				reading({ ts: Date.parse('2026-06-27T00:10:00.000Z'), rssi: -68, source: 'pixel5' }),
 			],
 		};
 		const s = rssiByReceiverSeries(devices, history);

@@ -1,8 +1,8 @@
 import { mergeWindow, newestTs } from './history';
 import type { Measurement } from './measurement.model';
 
-function row(ts: string, temp: number): Measurement {
-	return { device: 'govee-A562', ts, temp_c: temp } as Measurement;
+function row(iso: string, temp: number): Measurement {
+	return { device: 'govee-A562', ts: Date.parse(iso), temp_c: temp } as Measurement;
 }
 
 describe('mergeWindow', () => {
@@ -43,21 +43,10 @@ describe('mergeWindow', () => {
 		);
 		expect(merged.map((m) => m.temp_c)).toEqual([21]);
 	});
-
-	it('drops a row whose timestamp will not parse', () => {
-		const merged = mergeWindow([], [row('not a date', 5), row('2026-08-14T01:00:00Z', 21)], start);
-		expect(merged.map((m) => m.temp_c)).toEqual([21]);
-	});
 });
 
 describe('newestTs', () => {
 	it('is null when nothing is held', () => {
 		expect(newestTs([])).toBeNull();
-	});
-
-	it('ignores a row it cannot read the time of', () => {
-		expect(newestTs([row('2026-08-14T01:00:00Z', 21), row('rubbish', 5)])).toBe(
-			Date.parse('2026-08-14T01:00:00Z'),
-		);
 	});
 });

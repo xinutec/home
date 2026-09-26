@@ -4,8 +4,7 @@ import type { Measurement } from './measurement.model';
  * Fold freshly-fetched rows into the ones already held: oldest first, one row
  * per instant, nothing older than the window.
  *
- * On a tie the fetched copy wins: it is the newer read of the row. An
- * unparseable `ts` is dropped.
+ * On a tie the fetched copy wins: it is the newer read of the row.
  */
 export function mergeWindow(
 	prev: readonly Measurement[],
@@ -14,9 +13,8 @@ export function mergeWindow(
 ): Measurement[] {
 	const byTs = new Map<number, Measurement>();
 	for (const row of [...prev, ...fetched]) {
-		const at = Date.parse(row.ts);
-		if (at >= windowStart) {
-			byTs.set(at, row);
+		if (row.ts >= windowStart) {
+			byTs.set(row.ts, row);
 		}
 	}
 	return [...byTs.entries()].sort(([a], [b]) => a - b).map(([, row]) => row);
@@ -26,9 +24,8 @@ export function mergeWindow(
 export function newestTs(rows: readonly Measurement[]): number | null {
 	let newest: number | null = null;
 	for (const row of rows) {
-		const at = Date.parse(row.ts);
-		if (!Number.isNaN(at) && (newest === null || at > newest)) {
-			newest = at;
+		if (newest === null || row.ts > newest) {
+			newest = row.ts;
 		}
 	}
 	return newest;

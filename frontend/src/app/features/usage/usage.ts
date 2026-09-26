@@ -49,19 +49,19 @@ export class UsagePage implements OnInit, OnDestroy {
 	 * reporting machine may have gone quiet hours ago. Judged per window, since
 	 * the five hours can be over while the week is still running.
 	 */
-	protected live(pct: number | null, iso: string | null): number | null {
-		if (pct == null || !iso) {
+	protected live(pct: number | null, resetsAt: number | null): number | null {
+		if (pct === null || resetsAt === null) {
 			return null;
 		}
-		return new Date(iso).getTime() > this.now() ? pct : null;
+		return resetsAt > this.now() ? pct : null;
 	}
 
 	/** "resets in 2h 5m", or "window has reset" once it has; empty with no reset time. */
-	protected fmtReset(iso: string | null): string {
-		if (!iso) {
+	protected fmtReset(resetsAt: number | null): string {
+		if (resetsAt === null) {
 			return '';
 		}
-		const ms = new Date(iso).getTime() - this.now();
+		const ms = resetsAt - this.now();
 		if (ms <= 0) {
 			return 'window has reset';
 		}

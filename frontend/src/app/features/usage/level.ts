@@ -24,14 +24,14 @@ export class UsageLevel {
 	readonly pct = input<number | null>(null);
 
 	/** When this window turns over. */
-	readonly resetsAt = input<string | null>(null);
+	readonly resetsAt = input<number | null>(null);
 
 	/**
 	 * When `pct` was read. The clock mark is placed at this instant, not the
 	 * browser's now: against an hours-old figure, now would show a pace that
 	 * worsens just because the page stays open.
 	 */
-	readonly takenAt = input<string | null>(null);
+	readonly takenAt = input<number | null>(null);
 
 	readonly span = input.required<number>();
 
@@ -52,13 +52,10 @@ export class UsageLevel {
 	protected readonly clock = computed<number | null>(() => {
 		const resets = this.resetsAt();
 		const taken = this.takenAt();
-		if (this.pct() == null || !resets || !taken) {
+		if (this.pct() == null || resets === null || taken === null) {
 			return null;
 		}
-		const left = new Date(resets).getTime() - new Date(taken).getTime();
-		if (!Number.isFinite(left)) {
-			return null;
-		}
+		const left = resets - taken;
 		const span = this.span();
 		// Clamped: a reading just after a turnover can carry a reset further out
 		// than the window is long.

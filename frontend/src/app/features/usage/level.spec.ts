@@ -2,6 +2,8 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { FIVE_HOURS, UsageLevel, WEEK } from './level';
 
+const t = Date.parse;
+
 describe('UsageLevel', () => {
 	beforeEach(async () => {
 		await TestBed.configureTestingModule({
@@ -12,8 +14,8 @@ describe('UsageLevel', () => {
 
 	function level(inputs: {
 		pct?: number | null;
-		resetsAt?: string | null;
-		takenAt?: string | null;
+		resetsAt?: number | null;
+		takenAt?: number | null;
 		span: number;
 	}): UsageLevel {
 		const fixture = TestBed.createComponent(UsageLevel);
@@ -40,8 +42,8 @@ describe('UsageLevel', () => {
 		// Two days into the week: 2/7, whenever the test runs.
 		const level2d = level({
 			pct: 40,
-			takenAt: '2026-08-03T00:00:00.000Z',
-			resetsAt: '2026-08-08T00:00:00.000Z',
+			takenAt: t('2026-08-03T00:00:00.000Z'),
+			resetsAt: t('2026-08-08T00:00:00.000Z'),
 			span: WEEK,
 		});
 		expect(level2d['clock']()).toBeCloseTo(200 / 7, 6);
@@ -50,8 +52,8 @@ describe('UsageLevel', () => {
 	it('clamps a reading that outlived its own window', () => {
 		const early = level({
 			pct: 3,
-			takenAt: '2026-08-03T00:00:00.000Z',
-			resetsAt: '2026-08-11T00:00:00.000Z',
+			takenAt: t('2026-08-03T00:00:00.000Z'),
+			resetsAt: t('2026-08-11T00:00:00.000Z'),
 			span: WEEK,
 		});
 		expect(early['clock']()).toBe(0);
@@ -60,8 +62,8 @@ describe('UsageLevel', () => {
 	it('draws no marks when there is no figure behind them', () => {
 		const dead = level({
 			pct: null,
-			takenAt: '2026-08-03T00:00:00.000Z',
-			resetsAt: '2026-08-08T00:00:00.000Z',
+			takenAt: t('2026-08-03T00:00:00.000Z'),
+			resetsAt: t('2026-08-08T00:00:00.000Z'),
 			span: WEEK,
 		});
 		expect(dead['clock']()).toBeNull();
@@ -70,12 +72,12 @@ describe('UsageLevel', () => {
 
 	it('has no clock when the reading carries no instant to place it at', () => {
 		expect(
-			level({ pct: 40, resetsAt: null, takenAt: '2026-08-03T00:00:00.000Z', span: WEEK })[
+			level({ pct: 40, resetsAt: null, takenAt: t('2026-08-03T00:00:00.000Z'), span: WEEK })[
 				'clock'
 			](),
 		).toBeNull();
 		expect(
-			level({ pct: 40, resetsAt: '2026-08-08T00:00:00.000Z', takenAt: null, span: WEEK })[
+			level({ pct: 40, resetsAt: t('2026-08-08T00:00:00.000Z'), takenAt: null, span: WEEK })[
 				'clock'
 			](),
 		).toBeNull();
@@ -84,8 +86,8 @@ describe('UsageLevel', () => {
 	it('renders a tick per boundary plus the clock', async () => {
 		const fixture = TestBed.createComponent(UsageLevel);
 		fixture.componentRef.setInput('pct', 40);
-		fixture.componentRef.setInput('takenAt', '2026-08-03T00:00:00.000Z');
-		fixture.componentRef.setInput('resetsAt', '2026-08-08T00:00:00.000Z');
+		fixture.componentRef.setInput('takenAt', t('2026-08-03T00:00:00.000Z'));
+		fixture.componentRef.setInput('resetsAt', t('2026-08-08T00:00:00.000Z'));
 		fixture.componentRef.setInput('span', WEEK);
 		await fixture.whenStable();
 		const host: unknown = fixture.nativeElement;

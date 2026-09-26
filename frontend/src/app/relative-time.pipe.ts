@@ -1,18 +1,14 @@
 import { Pipe, type PipeTransform } from '@angular/core';
 
 /**
- * "3 min ago". Pass a ticking `now`: a pure pipe re-runs only when an argument
+ * An epoch-ms instant as "3 min ago". Pass a ticking `now`: a pure pipe re-runs only when an argument
  * changes, so without it the label freezes and a quiet sensor looks fresh.
  */
 @Pipe({ name: 'relativeTime' })
 export class RelativeTimePipe implements PipeTransform {
-	transform(iso: string | null | undefined, now: number): string {
-		if (!iso) {
+	transform(then: number | null | undefined, now: number): string {
+		if (then == null) {
 			return 'never';
-		}
-		const then = new Date(iso).getTime();
-		if (Number.isNaN(then)) {
-			return 'unknown';
 		}
 		const seconds = Math.round((now - then) / 1000);
 		if (seconds < 5) {

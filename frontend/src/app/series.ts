@@ -1,7 +1,7 @@
 import { type DeviceLatest, type Measurement, ROOM_COLORS } from './measurement.model';
 import type { ChartSeries, TrendPoint } from './trend-chart/trend-chart';
 
-/** Chart points, skipping nulls and unparseable timestamps. */
+/** Chart points, skipping nulls. */
 export function toTrendPoints(
 	rows: Measurement[],
 	pick: (m: Measurement) => number | null,
@@ -12,10 +12,7 @@ export function toTrendPoints(
 		if (y == null) {
 			continue;
 		}
-		const x = new Date(m.ts).getTime();
-		if (!Number.isNaN(x)) {
-			out.push({ x, y });
-		}
+		out.push({ x: m.ts, y });
 	}
 	return out;
 }

@@ -3,12 +3,11 @@ import { RelativeTimePipe } from './relative-time.pipe';
 describe('RelativeTimePipe', () => {
 	const pipe = new RelativeTimePipe();
 	const now = Date.parse('2026-07-03T12:00:00.000Z');
-	const at = (iso: string) => pipe.transform(iso, now);
+	const at = (iso: string) => pipe.transform(Date.parse(iso), now);
 
-	it('handles missing and malformed input', () => {
+	it('says never for no instant', () => {
 		expect(pipe.transform(null, now)).toBe('never');
 		expect(pipe.transform(undefined, now)).toBe('never');
-		expect(pipe.transform('yesterday', now)).toBe('unknown');
 	});
 
 	it('scales through the units', () => {
@@ -20,7 +19,7 @@ describe('RelativeTimePipe', () => {
 	});
 
 	it('counts against the supplied now, so a stale reading keeps aging', () => {
-		const reading = '2026-07-03T11:00:00.000Z';
+		const reading = Date.parse('2026-07-03T11:00:00.000Z');
 		expect(pipe.transform(reading, now)).toBe('1 h ago');
 		expect(pipe.transform(reading, now + 2 * 3_600_000)).toBe('3 h ago');
 	});

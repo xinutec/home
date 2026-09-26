@@ -2,12 +2,16 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { mergeWindow, newestTs } from './history';
+import type * as Wire from '../../../src/wire';
 import {
 	type ClaudeUsage,
 	DEFAULT_RANGE,
 	type DeviceLatest,
 	type Measurement,
 	type RangeKey,
+	parseDevice,
+	parseMeasurement,
+	parseUsage,
 	rangeMs,
 } from './measurement.model';
 
@@ -107,8 +111,10 @@ export class ApiService {
 
 	async refreshUsage(): Promise<void> {
 		try {
-			const row = await firstValueFrom(this.http.get<ClaudeUsage | null>('/api/usage'));
-			this._usage.set(row ?? null);
+			const row = await firstValueFrom(
+				this.http.get<Wire.ClaudeUsage<string> | null>('/api/usage'),
+			);
+			this._usage.set(row === null ? null : parseUsage(row));
 		} catch {
 			// Leave the last snapshot in place; a transient miss shouldn't blank it.
 		}
@@ -116,8 +122,8 @@ export class ApiService {
 
 	async refreshDevices(): Promise<void> {
 		try {
-			const rows = await firstValueFrom(this.http.get<DeviceLatest[]>('/api/devices'));
-			this._devices.set(rows ?? []);
+			const rows = await firstValueFrom(this.http.get<Wire.DeviceLatest<string>[]>('/api/devices'));
+			this._devices.set(rows.map(parseDevice));
 			this._devicesError.set(null);
 		} catch {
 			this._devicesError.set('Could not reach the sensor service.');
@@ -156,9 +162,9 @@ export class ApiService {
 						.set('device', device)
 						.set('limit', '20000');
 					const rows = await firstValueFrom(
-						this.http.get<Measurement[]>('/api/measurements', { params }),
+						this.http.get<Wire.Measurement<string>[]>('/api/measurements', { params }),
 					);
-					return [device, mergeWindow(prev, rows ?? [], windowStart)] as const;
+					return [device, mergeWindow(prev, rows.map(parseMeasurement), windowStart)] as const;
 				}),
 			);
 			if (generation !== this.historyGeneration) {

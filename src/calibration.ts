@@ -1,12 +1,9 @@
+import type { Calibration } from "./wire.js";
+
 // Per-device temperature offsets, served in /api/devices and applied by the
 // client so they can be toggled; stored readings stay raw. Output of
 // xinutec-infra/mac-mini/sensor-calibrate.py — the model, the anchor and how to
 // re-derive them are in doc/calibration.md. A device with no entry is uncorrected.
-
-export interface Calibration {
-	temp_c?: number;
-	humidity?: number;
-}
 
 const OFFSETS: Record<string, Calibration> = {
 	airvisual: { temp_c: -0.02 },

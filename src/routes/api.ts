@@ -8,6 +8,7 @@ import { decorateDevices } from "../labels.js";
 import { MeasurementBatch, MeasurementInput } from "../measurement.js";
 import { TelemetryBatch, TelemetryEvent } from "../telemetry.js";
 import { UsageInput } from "../usage.js";
+import type { ClaudeUsage, DeviceLatest, Measurement, Receiver } from "../wire.js";
 
 // How far back /api/receivers looks for the devices a receiver hears. Well past
 // the slowest receiver's 10-minute push, so slow never reads as deaf.
@@ -198,7 +199,12 @@ export function apiRoutes(ingestToken: string): Hono<AppEnv> {
 			.selectAll()
 			.orderBy("ts", "desc")
 			.execute();
-		return c.json({ ...row, measured: row.measured === 1, models: freshestPerModel(scoped) });
+		const usage: ClaudeUsage<Date> = {
+			...row,
+			measured: row.measured === 1,
+			models: freshestPerModel(scoped),
+		};
+		return c.json(usage);
 	});
 
 	// The latest reading per device, labelled and in UI order.
@@ -218,7 +224,10 @@ export function apiRoutes(ingestToken: string): Hono<AppEnv> {
 			)
 			.selectAll("m")
 			.execute();
-		const out = decorateDevices(rows).map((d) => ({ ...d, offset: offsetFor(d.device) }));
+		const out: DeviceLatest<Date>[] = decorateDevices(rows).map((d) => ({
+			...d,
+			offset: offsetFor(d.device),
+		}));
 		return c.json(out);
 	});
 
@@ -243,7 +252,7 @@ export function apiRoutes(ingestToken: string): Hono<AppEnv> {
 			.where("ts", ">=", since)
 			.execute();
 
-		const out = rows.map((r) => ({
+		const out: Receiver<Date>[] = rows.map((r) => ({
 			source: r.source,
 			last_seen: r.last_seen,
 			devices: heard
@@ -271,7 +280,7 @@ export function apiRoutes(ingestToken: string): Hono<AppEnv> {
 			.orderBy("ts", "desc");
 		if (from) q = q.where("ts", ">=", from);
 		if (to) q = q.where("ts", "<=", to);
-		const rows = await q.limit(limit).execute();
+		const rows: Measurement<Date>[] = await q.limit(limit).execute();
 		rows.reverse();
 		return c.json(rows);
 	});

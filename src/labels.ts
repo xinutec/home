@@ -1,20 +1,8 @@
+import type { DeviceLabel } from "./wire.js";
+
 // Display label and role per stored device id, applied at read time: a room is
 // never stored, so moving a sensor is an edit here, not a migration. An unmapped
 // device still shows, under its raw id.
-
-export interface DeviceLabel {
-	name: string;
-	/** Absent until the sensor is sited; the UI then shows `name`. */
-	room?: string;
-	/** The sensor behind the CO₂/PM/AQI/VOC readings. */
-	airQuality: boolean;
-	/** A smart-plug power monitor: kept out of the climate views. */
-	power?: boolean;
-	/** Lower sorts first. */
-	order: number;
-	/** Hardware model. */
-	type: string;
-}
 
 const LABELS: Record<string, DeviceLabel> = {
 	airvisual: {
