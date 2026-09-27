@@ -2,9 +2,9 @@ import { Component, type OnDestroy, type OnInit, computed, inject } from '@angul
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
-import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { Scaffold } from '@xinutec/ui-scaffold';
 import { ApiService } from './api.service';
 import { SwUpdates } from './sw-updates';
 import { Telemetry } from './telemetry';
@@ -24,7 +24,7 @@ interface NavItem {
 @Component({
 	selector: 'app-root',
 	imports: [
-		MatToolbarModule,
+		Scaffold,
 		MatButtonModule,
 		MatIconModule,
 		MatMenuModule,

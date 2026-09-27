@@ -26,12 +26,12 @@ describe('App', () => {
 		expect(fixture.componentInstance).toBeTruthy();
 	});
 
-	it('renders the brand title in the toolbar', async () => {
+	it('names the app in the bar', async () => {
 		const fixture = TestBed.createComponent(App);
 		fixture.detectChanges();
 		await fixture.whenStable();
 		const compiled = fixture.nativeElement as HTMLElement;
-		expect(compiled.querySelector('.brand-title')?.textContent).toContain('Home');
+		expect(compiled.querySelector('ui-scaffold h1')?.textContent).toContain('Home');
 	});
 
 	it('lists the two views in the nav menu', () => {

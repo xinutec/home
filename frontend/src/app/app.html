@@ -1,21 +1,6 @@
-<mat-toolbar class="topbar">
-	<button
-		matIconButton
-		type="button"
-		[matMenuTriggerFor]="viewMenu"
-		matTooltip="Switch view"
-		aria-label="Switch view"
-	>
-		<mat-icon>menu</mat-icon>
-	</button>
-	<div class="brand">
-		<mat-icon class="brand-icon">energy_savings_leaf</mat-icon>
-		<div class="brand-text">
-			<span class="brand-title">Home</span>
-			<span class="brand-sub">Indoor air &amp; climate</span>
-		</div>
-	</div>
-	<span class="spacer"></span>
+<!-- The bar every app draws (`@xinutec/ui-scaffold`): the view menu and the app's
+     name. What it holds is on every screen. -->
+<ui-scaffold title="Home" [menu]="viewMenu" menuLabel="Switch view">
 	<button
 		matIconButton
 		type="button"
@@ -25,7 +10,7 @@
 	>
 		<mat-icon>{{ themeIcon() }}</mat-icon>
 	</button>
-</mat-toolbar>
+</ui-scaffold>
 
 <mat-menu #viewMenu="matMenu">
 	@for (n of nav; track n.path) {
