@@ -5,6 +5,7 @@ import {
 	expectNoStarvedText,
 	expectViewportIsPhone,
 	expectIconFontLoaded,
+	expectRecoversFromMissingBundle,
 } from '@xinutec/ui-harness';
 import type * as Wire from '../../src/wire';
 
@@ -129,6 +130,14 @@ test('the suite really runs at phone geometry', async ({ page }) => {
 	await mockApi(page);
 	await page.goto('/');
 	await expectViewportIsPhone(page);
+});
+
+// A service worker can serve an index naming a bundle a later deploy removed, and
+// the app's own update handling is inside that bundle. The recovery is inline in
+// `src/index.html`; this is the check that it is there and works.
+test('a bundle a deploy removed reloads into the app, not a blank screen', async ({ page }) => {
+	await mockApi(page);
+	await expectRecoversFromMissingBundle(page, '/', 'text=Rooms');
 });
 
 test('dashboard — hero + metrics + rooms + trends: lays out cleanly @ phone width', async ({
