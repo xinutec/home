@@ -205,8 +205,6 @@
         "home",
         "--password",
         "home",
-        "--port",
-        "3323",
         "--url-env",
         "HOME_TEST_DATABASE_URL",
         "--",
