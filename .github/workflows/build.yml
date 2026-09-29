@@ -4,7 +4,7 @@ name: build
 # home (Node/Hono backend + Angular frontend) — gate the image on `pnpm run
 # verify` (tsc + biome + angular-eslint + backend/frontend unit tests), then
 # build + push xinutec/home:latest to Docker Hub. The k8s manifests + deploy live
-# in the home monorepo (xinutec/pippijn code/kubes/home/k8s); the image tag is the
+# in the home monorepo (code/kubes/home/k8s); the image tag is the
 # only contract between this repo and the deploy.
 
 concurrency:

@@ -29,8 +29,8 @@ A full-screen WebView onto the dashboard: [`android/README.md`](android/README.m
   `/api/receivers`, `/api/usage`.
 
 ## Deploy (isis k3s, namespace `home`)
-The `k8s/…` manifests live in the home monorepo (`xinutec/pippijn`
-`code/kubes/home/k8s/`); run the manifest steps from that checkout.
+The `k8s/…` manifests live in the home monorepo
+(`code/kubes/home/k8s/`); run the manifest steps from that checkout.
 
 First time:
 
