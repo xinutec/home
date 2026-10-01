@@ -5,6 +5,8 @@ const tseslint = require('typescript-eslint');
 const angular = require('angular-eslint');
 
 module.exports = defineConfig([
+  // An eslint-disable that disables nothing is dead debt; ESLint only warns by default.
+  { linterOptions: { reportUnusedDisableDirectives: 'error' } },
   {
     files: ['src/**/*.ts'],
     extends: [
