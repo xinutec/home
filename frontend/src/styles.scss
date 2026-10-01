@@ -38,24 +38,15 @@ body {
 	// The status bar or notch under viewport-fit=cover; 0 in a browser tab.
 	--safe-top: env(safe-area-inset-top, 0px);
 
-	// dev-lint: allow-hardcoded-color EPA US-AQI band colour — a fixed external scale
 	--aqi-good: #2e9e5b;
-	// dev-lint: allow-hardcoded-color EPA US-AQI band colour — a fixed external scale
 	--aqi-moderate: #d6b400;
-	// dev-lint: allow-hardcoded-color EPA US-AQI band colour — a fixed external scale
 	--aqi-usg: #e8830c;
-	// dev-lint: allow-hardcoded-color EPA US-AQI band colour — a fixed external scale
 	--aqi-unhealthy: #d93434;
-	// dev-lint: allow-hardcoded-color EPA US-AQI band colour — a fixed external scale
 	--aqi-very-unhealthy: #8e44ad;
-	// dev-lint: allow-hardcoded-color EPA US-AQI band colour — a fixed external scale
 	--aqi-hazardous: #7e0023;
 
-	// dev-lint: allow-hardcoded-color chart accent — deliberate data-viz colour
 	--chart-co2: #ef6c00;
-	// dev-lint: allow-hardcoded-color chart accent — deliberate data-viz colour
 	--chart-humidity: #2f80ed;
-	// dev-lint: allow-hardcoded-color chart accent — deliberate data-viz colour
 	--chart-pm: #8e44ad;
 
 	// Big-number sizes the M3 type roles lack.
