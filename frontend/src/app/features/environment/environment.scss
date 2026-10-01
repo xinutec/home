@@ -111,8 +111,8 @@
 	min-width: 148px;
 	padding: 1.1rem 1.25rem;
 	border-radius: 24px;
-	// dev-lint: allow-hardcoded-color white on a fixed EPA band colour
-	color: #fff;
+	// white on a fixed EPA band colour
+	color: var(--on-media);
 	background: var(--band-color);
 	// A larger glow bleeds past the hero card.
 	box-shadow: 0 2px 8px -2px var(--band-color);

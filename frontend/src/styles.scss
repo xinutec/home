@@ -1,4 +1,6 @@
 // Light and dark are both emitted; ThemeService picks via `color-scheme`.
+// The fleet's theme-independent colours: scrims and text over media.
+@use '@xinutec/ui-harness/tokens';
 @use '@angular/material' as mat;
 
 html {
