@@ -116,7 +116,7 @@ function usage(): Wire.ClaudeUsage<string> {
 
 /** Catch-all first: Playwright tries the last-registered handler first. */
 async function mockApi(page: Page): Promise<void> {
-	await page.route('**/api/**', (r) => r.fulfill({ json: [] }));
+	await page.route('**/api/**', (r) => r.fulfill({ status: 204, body: '' }));
 	await page.route('**/api/devices', (r) => r.fulfill({ json: DEVICES }));
 	await page.route('**/api/usage', (r) => r.fulfill({ json: usage() }));
 	await page.route('**/api/measurements*', (r) => {
