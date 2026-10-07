@@ -1,11 +1,10 @@
 import { test, type Page } from '@playwright/test';
 import {
-	expectNoTextOverlaps,
-	expectNoHorizontalOverflow,
-	expectNoStarvedText,
-	expectViewportIsPhone,
+	expectCleanLayout,
 	expectIconFontLoaded,
+	expectNoStarvedText,
 	expectRecoversFromMissingBundle,
+	expectViewportIsPhone,
 } from '@xinutec/ui-harness';
 import type * as Wire from '../../src/wire';
 
@@ -152,8 +151,7 @@ test('dashboard — hero + metrics + rooms + trends: lays out cleanly @ phone wi
 	await page.getByText('Trends').waitFor();
 	await page.getByText('Bedroom').waitFor();
 	await expectIconFontLoaded(page);
-	await expectNoTextOverlaps(page, testInfo);
-	await expectNoHorizontalOverflow(page, testInfo);
+	await expectCleanLayout(page, testInfo);
 	await expectNoStarvedText(page, testInfo);
 });
 
@@ -168,7 +166,6 @@ test('claude usage — bars, day ticks and clock mark: lay out cleanly @ phone w
 	// The week bar's sixth day tick.
 	await page.locator('.cu-card').nth(1).locator('.day').nth(5).waitFor();
 	await expectIconFontLoaded(page);
-	await expectNoTextOverlaps(page, testInfo);
-	await expectNoHorizontalOverflow(page, testInfo);
+	await expectCleanLayout(page, testInfo);
 	await expectNoStarvedText(page, testInfo);
 });
