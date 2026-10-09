@@ -37,9 +37,6 @@ body {
 }
 
 :root {
-	// The status bar or notch under viewport-fit=cover; 0 in a browser tab.
-	--safe-top: env(safe-area-inset-top, 0px);
-
 	--aqi-good: #2e9e5b;
 	--aqi-moderate: #d6b400;
 	--aqi-usg: #e8830c;
@@ -100,12 +97,9 @@ mat-icon {
 	flex-shrink: 0;
 }
 
-// The scaffold's bar (`@xinutec/ui-scaffold`), edge-to-edge (viewport-fit=cover):
-// its surface fills the status-bar strip and its content drops below it.
-// height:auto overrides mat-toolbar's fixed height; min-height folds in the inset
-// so the content keeps its full height below the status bar.
+// The scaffold's bar (`@xinutec/ui-scaffold`): 64px at every width, where
+// mat-toolbar's own height drops to 56px on a phone.
 ui-scaffold mat-toolbar {
 	height: auto;
-	min-height: calc(64px + var(--safe-top, 0px));
-	padding-top: var(--safe-top, 0px);
+	min-height: 64px;
 }

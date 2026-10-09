@@ -16,7 +16,7 @@
 
 .top-progress {
 	position: sticky;
-	top: calc(64px + var(--safe-top, 0px));
+	top: 64px;
 	z-index: 9;
 }
 
