@@ -15,6 +15,7 @@ import {
 	clearPendingLogin,
 	issuePendingLogin,
 	pendingCookie,
+	retryPendingLogin,
 } from "../middleware/pending-login.js";
 import { validateReturnTo } from "../middleware/return-to.js";
 import { clearSessionCookie, createSession, setSessionCookie } from "../middleware/session.js";
@@ -40,27 +41,38 @@ export function nextcloudOAuthRoutes(config: Config): Hono<AppEnv> {
 	const ncClientSecret = process.env.NC_CLIENT_SECRET ?? "";
 	const ncRedirectUri = process.env.NC_REDIRECT_URI ?? "https://home.xinutec.org/auth/callback";
 
-	app.get("/login", (c) => {
-		const returnTo = c.req.query("return_to");
-		const state = issuePendingLogin(c, config.sessionSecret, returnTo, Date.now());
+	function authorizeUrl(state: string): string {
 		const url = new URL(`${nc.baseUrl}/index.php/apps/oauth2/authorize`);
 		url.searchParams.set("client_id", ncClientId);
 		url.searchParams.set("response_type", "code");
 		url.searchParams.set("redirect_uri", ncRedirectUri);
 		url.searchParams.set("state", state);
-		return c.redirect(url.toString());
+		return url.toString();
+	}
+
+	app.get("/login", (c) => {
+		const returnTo = c.req.query("return_to");
+		const state = issuePendingLogin(c, config.sessionSecret, returnTo, Date.now());
+		return c.redirect(authorizeUrl(state));
 	});
 
 	app.get("/auth/callback", async (c) => {
-		const pending = acceptPendingLogin(
+		const callback = acceptPendingLogin(
 			config.sessionSecret,
 			pendingCookie(c),
 			c.req.query("state"),
 			Date.now(),
 		);
-		if (!pending) {
+		if (!callback) {
 			return c.text("Invalid or expired OAuth state. Please try logging in again.", 403);
 		}
+		if (callback.kind === "retry") {
+			// The code is not exchanged: without `state` nothing ties it to this
+			// browser. Nextcloud now has a session, so `state` returns.
+			const state = retryPendingLogin(c, config.sessionSecret, callback.pending, Date.now());
+			return c.redirect(authorizeUrl(state));
+		}
+		const { pending } = callback;
 
 		const code = c.req.query("code");
 		if (!code) {

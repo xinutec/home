@@ -9,12 +9,11 @@
  *      → 303 …/login/flow?providedRedirectUri=&clientIdentifier=…
  *
  * So `state` cannot find the pending login. The cookie can, binds it to the
- * browser that started it, and survives a pod restart mid-login. `state` is
- * still sent, and checked whenever NC returns it.
+ * browser that started it, and survives a pod restart mid-login.
  *
- * Accepted risk: with `state` empty the cookie is the only binding, so a
- * login-CSRF is possible for 10 minutes. On this host that can only sign a
- * victim in as the attacker, whose name then goes on `POST /api/telemetry` lines.
+ * A callback with `state` empty is never trusted (RFC 6749 §10.12, login CSRF):
+ * its code is dropped and the browser sent to authorize once more. NC then has
+ * a session, so `state` comes back and must match.
  */
 
 import * as crypto from "node:crypto";
@@ -32,35 +31,53 @@ export interface PendingLogin {
 	/** Where to land afterwards; validated when used. */
 	returnTo?: string;
 	expiresAt: number;
+	/** Already sent back once for a missing `state`; a second miss is refused. */
+	retried: boolean;
 }
 
-/** `<expiry ms>|<nonce>|<returnTo>` — returnTo last, so a `|` inside a query
- *  string cannot shift the fields. */
+/** What a callback may do with the pending login it carries. */
+export type Callback =
+	/** `state` matched: exchange the code. */
+	| { kind: "accept"; pending: PendingLogin }
+	/** `state` was empty: drop the code and authorize again ({@link retryPendingLogin}). */
+	| { kind: "retry"; pending: PendingLogin };
+
+/** `<expiry ms>|<nonce>|<retried 0/1>|<returnTo>` — returnTo last, so a `|`
+ *  inside a query string cannot shift the fields. */
 function encode(p: PendingLogin): string {
-	return `${p.expiresAt}|${p.nonce}|${p.returnTo ?? ""}`;
+	return `${p.expiresAt}|${p.nonce}|${p.retried ? 1 : 0}|${p.returnTo ?? ""}`;
 }
 
 function decode(raw: string): PendingLogin | null {
 	const first = raw.indexOf("|");
 	const second = raw.indexOf("|", first + 1);
-	if (first < 0 || second < 0) return null;
+	const third = raw.indexOf("|", second + 1);
+	if (first < 0 || second < 0 || third < 0) return null;
 	const expiresAt = Number(raw.slice(0, first));
 	if (!Number.isFinite(expiresAt)) return null;
-	const returnTo = raw.slice(second + 1);
-	return { expiresAt, nonce: raw.slice(first + 1, second), returnTo: returnTo || undefined };
+	const retried = raw.slice(second + 1, third);
+	if (retried !== "0" && retried !== "1") return null;
+	const returnTo = raw.slice(third + 1);
+	return {
+		expiresAt,
+		nonce: raw.slice(first + 1, second),
+		retried: retried === "1",
+		returnTo: returnTo || undefined,
+	};
 }
 
-/** Start a login: set the cookie, return the nonce to send to NC as `state`. */
-export function issuePendingLogin(
+function fresh(
 	c: Context,
 	secret: string,
 	returnTo: string | undefined,
+	retried: boolean,
 	now: number,
 ): string {
 	const pending: PendingLogin = {
 		nonce: crypto.randomBytes(24).toString("hex"),
 		returnTo,
 		expiresAt: now + PENDING_TTL_MS,
+		retried,
 	};
 	setCookie(c, PENDING_COOKIE, signValue(secret, encode(pending)), {
 		path: "/",
@@ -74,23 +91,43 @@ export function issuePendingLogin(
 	return pending.nonce;
 }
 
-/** Finish a login: the pending entry if this callback really belongs to it.
- *
- *  `state` is what NC returned — empty when it was lost through the Login Flow.
- *  Present means it must match; absent means the cookie stands alone. */
+/** Start a login: set the cookie, return the nonce to send to NC as `state`. */
+export function issuePendingLogin(
+	c: Context,
+	secret: string,
+	returnTo: string | undefined,
+	now: number,
+): string {
+	return fresh(c, secret, returnTo, false, now);
+}
+
+/** The second and last attempt after a missing `state`: a new nonce, the same
+ *  destination. */
+export function retryPendingLogin(
+	c: Context,
+	secret: string,
+	pending: PendingLogin,
+	now: number,
+): string {
+	return fresh(c, secret, pending.returnTo, true, now);
+}
+
+/** What this callback may do, or null if it does not belong to a login this
+ *  browser started. `state` is what NC returned — empty when it was lost
+ *  through the Login Flow. Present must match; empty earns a retry, once. */
 export function acceptPendingLogin(
 	secret: string,
 	cookie: string | undefined,
 	state: string | undefined,
 	now: number,
-): PendingLogin | null {
+): Callback | null {
 	if (!cookie) return null;
 	const raw = verifyValue(secret, cookie);
 	if (!raw) return null;
 	const pending = decode(raw);
 	if (!pending || pending.expiresAt < now) return null;
-	if (state && state !== pending.nonce) return null;
-	return pending;
+	if (state) return state === pending.nonce ? { kind: "accept", pending } : null;
+	return pending.retried ? null : { kind: "retry", pending };
 }
 
 /** The login is over: drop its cookie so a stale one can't be replayed. */
