@@ -183,6 +183,7 @@ export function apiRoutes(ingestToken: string): Hono<AppEnv> {
 	});
 
 	// The freshest row across hosts: the figures are account-wide.
+	// dev-lint: allow-unauthenticated-route every read on home is public by design (src/routes/nextcloud-oauth.ts)
 	api.get("/usage", async (c) => {
 		const row = await db()
 			.selectFrom("claude_usage")
@@ -208,6 +209,7 @@ export function apiRoutes(ingestToken: string): Hono<AppEnv> {
 	});
 
 	// The latest reading per device, labelled and in UI order.
+	// dev-lint: allow-unauthenticated-route every read on home is public by design (src/routes/nextcloud-oauth.ts)
 	api.get("/devices", async (c) => {
 		// Each device's newest ts joined back to its row; (device, ts) is the
 		// primary key, so that is one row each, read off the index.
@@ -233,6 +235,7 @@ export function apiRoutes(ingestToken: string): Hono<AppEnv> {
 
 	// Per receiver: when it last pushed and which devices it hears. A sensor stays
 	// fresh while ANY receiver hears it, so only this view shows one receiver dying.
+	// dev-lint: allow-unauthenticated-route every read on home is public by design (src/routes/nextcloud-oauth.ts)
 	api.get("/receivers", async (c) => {
 		const rows = await db()
 			.selectFrom("measurement")
@@ -265,6 +268,7 @@ export function apiRoutes(ingestToken: string): Hono<AppEnv> {
 	});
 
 	// One device's readings in a range, oldest first.
+	// dev-lint: allow-unauthenticated-route every read on home is public by design (src/routes/nextcloud-oauth.ts)
 	api.get("/measurements", async (c) => {
 		const parsed = MeasurementsQuery.safeParse(c.req.query());
 		if (!parsed.success) {

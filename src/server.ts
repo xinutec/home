@@ -25,6 +25,7 @@ app.onError((err, c) => {
 // this pod compresses, and a 30-day history is megabytes of repetitive JSON.
 app.use("*", compress());
 
+// dev-lint: allow-unauthenticated-route the liveness probe: answers only that the process is up
 app.get("/health", (c) => c.json({ ok: true }));
 
 app.use("*", sessionMiddleware(config.sessionSecret));
@@ -62,6 +63,7 @@ app.use("/*", serveStatic({ root: "./public" }));
 // renders as broken icons and nothing reports it. A dot in the last segment
 // means a file. Between the two serveStatic calls, so any real file has already
 // been served.
+// dev-lint: allow-unauthenticated-route the frontend's own files: a missing one 404s, the rest are the public app
 app.get("/*", async (c, next) => {
 	const last = c.req.path.split("/").pop() ?? "";
 	if (last.includes(".")) return c.text("not found", 404);
@@ -69,6 +71,7 @@ app.get("/*", async (c, next) => {
 });
 
 // Every other path is a client-side route.
+// dev-lint: allow-unauthenticated-route the frontend's index for client-side routes, public like the app
 app.get("/*", serveStatic({ path: "./public/index.html" }));
 
 serve({ fetch: app.fetch, port: config.port }, (info) => {
