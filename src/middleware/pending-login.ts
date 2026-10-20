@@ -36,9 +36,25 @@ export interface PendingLogin {
 }
 
 /** What a callback may do with the pending login it carries. */
+declare const matched: unique symbol;
+
+/** Proof that a callback's `state` equalled the nonce this server stored for
+ *  the sign-in. The code exchange takes one and only {@link checkState} makes
+ *  one, so no code is redeemed on a path that skipped the comparison
+ *  (RFC 6749 §10.12; dev-lint DL-TS-OAUTH-EXCHANGE-UNPROVEN checks the shape). */
+export type StateMatched = { readonly [matched]: true };
+
+/** The proof, when `urlState` is present and equals `stored`. */
+export function checkState(urlState: string, stored: string): StateMatched | null {
+	const a = Buffer.from(urlState);
+	const b = Buffer.from(stored);
+	const equal = a.length === b.length && crypto.timingSafeEqual(a, b);
+	return urlState !== "" && equal ? ({} as StateMatched) : null;
+}
+
 export type Callback =
 	/** `state` matched: exchange the code. */
-	| { kind: "accept"; pending: PendingLogin }
+	| { kind: "accept"; pending: PendingLogin; proof: StateMatched }
 	/** `state` was empty: drop the code and authorize again ({@link retryPendingLogin}). */
 	| { kind: "retry"; pending: PendingLogin };
 
@@ -126,7 +142,10 @@ export function acceptPendingLogin(
 	if (!raw) return null;
 	const pending = decode(raw);
 	if (!pending || pending.expiresAt < now) return null;
-	if (state) return state === pending.nonce ? { kind: "accept", pending } : null;
+	if (state) {
+		const proof = checkState(state, pending.nonce);
+		return proof ? { kind: "accept", pending, proof } : null;
+	}
 	return pending.retried ? null : { kind: "retry", pending };
 }
 

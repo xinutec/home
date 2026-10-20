@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Config } from "../src/config.js";
-import { PENDING_COOKIE } from "../src/middleware/pending-login.js";
+import { checkState, PENDING_COOKIE } from "../src/middleware/pending-login.js";
 import { nextcloudOAuthRoutes } from "../src/routes/nextcloud-oauth.js";
 
 // Login CSRF (RFC 6749 §10.12): a callback with an empty `state` must never
@@ -76,5 +76,17 @@ describe("GET /auth/callback", () => {
 
 		expect(res.status).toBe(403);
 		expect(fetch).not.toHaveBeenCalled();
+	});
+});
+
+describe("checkState", () => {
+	// The proof the code exchange demands: made only by a present `state` equal
+	// to the stored nonce.
+	it("is made only by a present, matching state", () => {
+		expect(checkState("n0nce", "n0nce")).not.toBeNull();
+		expect(checkState("", "")).toBeNull();
+		expect(checkState("", "n0nce")).toBeNull();
+		expect(checkState("nonce", "n0nce")).toBeNull();
+		expect(checkState("n0nc", "n0nce")).toBeNull();
 	});
 });

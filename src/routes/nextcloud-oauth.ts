@@ -16,6 +16,7 @@ import {
 	issuePendingLogin,
 	pendingCookie,
 	retryPendingLogin,
+	type StateMatched,
 } from "../middleware/pending-login.js";
 import { validateReturnTo } from "../middleware/return-to.js";
 import { clearSessionCookie, createSession, setSessionCookie } from "../middleware/session.js";
@@ -50,6 +51,22 @@ export function nextcloudOAuthRoutes(config: Config): Hono<AppEnv> {
 		return url.toString();
 	}
 
+	/** Redeem an authorization code. Takes the proof that the callback's `state`
+	 *  matched, so it cannot be reached on a path that skipped the comparison. */
+	function exchangeCode(code: string, _proof: StateMatched): Promise<Response> {
+		return fetch(`${nc.baseUrl}/index.php/apps/oauth2/api/v1/token`, {
+			method: "POST",
+			headers: { "Content-Type": "application/x-www-form-urlencoded" },
+			body: new URLSearchParams({
+				grant_type: "authorization_code",
+				code,
+				client_id: ncClientId,
+				client_secret: ncClientSecret,
+				redirect_uri: ncRedirectUri,
+			}),
+		});
+	}
+
 	app.get("/login", (c) => {
 		const returnTo = c.req.query("return_to");
 		const state = issuePendingLogin(c, config.sessionSecret, returnTo, Date.now());
@@ -72,24 +89,14 @@ export function nextcloudOAuthRoutes(config: Config): Hono<AppEnv> {
 			const state = retryPendingLogin(c, config.sessionSecret, callback.pending, Date.now());
 			return c.redirect(authorizeUrl(state));
 		}
-		const { pending } = callback;
+		const { pending, proof } = callback;
 
 		const code = c.req.query("code");
 		if (!code) {
 			return c.text("Missing authorization code.", 400);
 		}
 
-		const tokenRes = await fetch(`${nc.baseUrl}/index.php/apps/oauth2/api/v1/token`, {
-			method: "POST",
-			headers: { "Content-Type": "application/x-www-form-urlencoded" },
-			body: new URLSearchParams({
-				grant_type: "authorization_code",
-				code,
-				client_id: ncClientId,
-				client_secret: ncClientSecret,
-				redirect_uri: ncRedirectUri,
-			}),
-		});
+		const tokenRes = await exchangeCode(code, proof);
 
 		if (!tokenRes.ok) {
 			console.error(`Nextcloud token exchange failed: ${tokenRes.status}`, await tokenRes.text());
