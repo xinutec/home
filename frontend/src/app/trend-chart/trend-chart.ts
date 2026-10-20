@@ -73,6 +73,8 @@ export class TrendChart implements AfterViewInit, OnDestroy {
 
 	private chart: Chart<'line', TrendPoint[]> | null = null;
 	private ready = false;
+	// What the chart was last drawn for: only a change of these animates.
+	private drawnFor: { span: number; theme: 'light' | 'dark' } | null = null;
 
 	readonly hasData = computed(() => this.series().some((s) => s.points.length > 0));
 
@@ -227,14 +229,20 @@ export class TrendChart implements AfterViewInit, OnDestroy {
 			},
 		};
 
+		const drawnFor = { span: this.spanMs(), theme: this.theme.effective() };
 		if (this.chart) {
 			this.chart.data = config.data;
 			if (config.options) {
 				this.chart.options = config.options;
 			}
-			this.chart.update();
+			// A data refresh is not animated: animating resolves the animation
+			// options per point, which allocated ~400 MB/min across the charts.
+			const restyled =
+				drawnFor.span !== this.drawnFor?.span || drawnFor.theme !== this.drawnFor?.theme;
+			this.chart.update(restyled ? undefined : 'none');
 		} else {
 			this.chart = new Chart(ctx, config);
 		}
+		this.drawnFor = drawnFor;
 	}
 }
