@@ -6,6 +6,7 @@ import {
 	expectRecoversFromMissingBundle,
 	expectViewportIsPhone,
 } from '@xinutec/ui-harness';
+import { routesFrom, screens } from '@xinutec/ui-harness/routes';
 import type * as Wire from '../../src/wire';
 
 /**
@@ -122,6 +123,19 @@ async function mockApi(page: Page): Promise<void> {
 		const device = new URL(r.request().url()).searchParams.get('device') ?? '267F';
 		return r.fulfill({ json: series(device) });
 	});
+}
+
+/** Every screen in the route table (`routes.json`), not only those a test opens. */
+for (const { route, url } of screens(
+  routesFrom('e2e/routes.json'),
+  {},
+)) {
+  test(`${route} lays out cleanly @ phone width`, async ({ page }, testInfo) => {
+    await mockApi(page);
+    await page.goto(url);
+    await page.waitForLoadState('networkidle');
+    await expectCleanLayout(page, testInfo);
+  });
 }
 
 // Without the device preset every check below would pass at desktop width.
