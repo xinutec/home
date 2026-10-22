@@ -8,3 +8,5 @@ The Angular dashboard. Run the commands here, in the flake's dev shell.
 - `pnpm run build`, then `pnpm run ui-check` — the phone-width layout checks
   against that build.
 - `./gen-icons.sh` — re-render the icons after editing `public/icon*.svg`.
+- `node e2e/alloc-rate.ts [deployed|local]` — MB allocated per minute on
+  `/environment`, collected garbage included, and where.
