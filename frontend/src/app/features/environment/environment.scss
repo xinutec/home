@@ -5,15 +5,6 @@
 	gap: 1.5rem;
 }
 
-.env-actions {
-	display: flex;
-	justify-content: flex-end;
-}
-
-.cal-toggle {
-	font: var(--mat-sys-label-large);
-}
-
 .top-progress {
 	position: sticky;
 	top: 64px;
@@ -86,7 +77,8 @@
 }
 
 .humidity,
-.updated {
+.updated,
+.uncalibrated {
 	display: flex;
 	align-items: center;
 	gap: 0.35rem;
@@ -94,7 +86,8 @@
 }
 
 .humidity mat-icon,
-.updated mat-icon {
+.updated mat-icon,
+.uncalibrated mat-icon {
 	font-size: 19px;
 	width: 19px;
 	height: 19px;
@@ -329,10 +322,6 @@
 	justify-content: space-between;
 	gap: 0.75rem;
 	flex-wrap: wrap;
-}
-
-.ids-toggle {
-	font: var(--mat-sys-label-large);
 }
 
 .range-toggle {

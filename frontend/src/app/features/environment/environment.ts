@@ -1,10 +1,11 @@
 import { DecimalPipe } from '@angular/common';
 import { Component, type OnDestroy, type OnInit, computed, inject, signal } from '@angular/core';
+import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
+import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
-import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ApiService } from '../../api.service';
 import {
@@ -39,11 +40,12 @@ function writeLocal(key: string, value: string): void {
 	selector: 'app-environment',
 	imports: [
 		DecimalPipe,
+		MatButtonModule,
 		MatButtonToggleModule,
 		MatCardModule,
 		MatIconModule,
+		MatMenuModule,
 		MatProgressBarModule,
-		MatSlideToggleModule,
 		MatTooltipModule,
 		RelativeTimePipe,
 		TrendChart,

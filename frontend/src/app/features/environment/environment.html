@@ -23,17 +23,6 @@
 		<p>No sensor has reported any data yet. This page updates automatically.</p>
 	</section>
 } @else {
-	<div class="env-actions">
-		<mat-slide-toggle
-			class="cal-toggle"
-			[checked]="calibrated()"
-			(change)="toggleCalibrated()"
-			matTooltip="Apply per-device calibration offsets"
-		>
-			Calibrated
-		</mat-slide-toggle>
-	</div>
-
 	<!-- HERO: current conditions from the air-quality sensor -->
 	<section class="hero">
 		<div class="hero-climate">
@@ -52,6 +41,13 @@
 					<mat-icon>schedule</mat-icon>
 					<span>Updated {{ airDevice()?.ts | relativeTime: now() }}</span>
 				</div>
+				<!-- Only the unusual state shows: calibration is on unless turned off. -->
+				@if (!calibrated()) {
+					<div class="uncalibrated" matTooltip="Calibration offsets are off: raw sensor readings">
+						<mat-icon>tune</mat-icon>
+						<span>Uncalibrated</span>
+					</div>
+				}
 			</div>
 		</div>
 
@@ -123,14 +119,37 @@
 	<section class="rooms">
 		<div class="rooms-head">
 			<h3 class="section-title">Rooms</h3>
-			<mat-slide-toggle
-				class="ids-toggle"
-				[checked]="showIds()"
-				(change)="toggleShowIds()"
-				matTooltip="Show each sensor's device id (for relabelling a moved sensor)"
+			<button
+				matIconButton
+				type="button"
+				[matMenuTriggerFor]="displayMenu"
+				aria-label="Display options"
+				matTooltip="Display options"
 			>
-				Show IDs
-			</mat-slide-toggle>
+				<mat-icon>tune</mat-icon>
+			</button>
+			<mat-menu #displayMenu="matMenu" xPosition="before">
+				<button
+					mat-menu-item
+					type="button"
+					role="menuitemcheckbox"
+					[attr.aria-checked]="calibrated()"
+					(click)="toggleCalibrated()"
+				>
+					<mat-icon>{{ calibrated() ? 'check_box' : 'check_box_outline_blank' }}</mat-icon>
+					<span>Calibrated</span>
+				</button>
+				<button
+					mat-menu-item
+					type="button"
+					role="menuitemcheckbox"
+					[attr.aria-checked]="showIds()"
+					(click)="toggleShowIds()"
+				>
+					<mat-icon>{{ showIds() ? 'check_box' : 'check_box_outline_blank' }}</mat-icon>
+					<span>Show IDs</span>
+				</button>
+			</mat-menu>
 		</div>
 		<div class="room-grid">
 			@for (d of devices(); track d.device) {
