@@ -15,6 +15,8 @@ export interface Furniture {
 	h: number;
 	y0?: number;
 	color?: string | null;
+	/** A key into the scene's `materials`; wins over `color` in the room view. */
+	material?: string;
 }
 
 /** An opening (doorway / window / wide cased passage) cut into one of a room's
@@ -42,14 +44,32 @@ export interface Room {
 	heading?: number;
 	walls: [number, number][];
 	openings?: WallOpening[];
+	/** Material keys for the room view's surfaces. */
+	surfaces?: { walls?: string; floor?: string; ceiling?: string };
+	/** Where the room view starts: eye and a point looked at, [x, y, z] metres. */
+	view?: { eye: [number, number, number]; look: [number, number, number] };
 }
 
 /** Hand-authored house geometry (scenes/house.json): a set of rooms (each its own
  *  outline) plus furniture. See scenes/README.md. */
+/** How a surface looks: physically based, so the same numbers suit any renderer.
+ *  `texture` names a procedural pattern the renderer draws (`wood`, `carpet`). */
+export interface MaterialSpec {
+	color: string;
+	/** 0 = mirror, 1 = matt. */
+	roughness?: number;
+	/** 0 = dielectric (wood, paint), 1 = metal. */
+	metalness?: number;
+	texture?: 'wood' | 'carpet';
+	/** Metres one repeat of the texture covers. */
+	textureScale?: number;
+}
+
 export interface HouseScene {
 	height: number;
 	rooms: Room[];
 	furniture: Furniture[];
+	materials?: Record<string, MaterialSpec>;
 	highlight?: number | null;
 	question?: string;
 }

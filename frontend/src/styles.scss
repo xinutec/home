@@ -104,8 +104,9 @@ ui-scaffold mat-toolbar {
 	min-height: 64px;
 }
 
-// The house screen's WebGL canvas, which three.js appends at runtime, so it has
+// The 3D screens' WebGL canvas, which three.js appends at runtime, so it has
 // no `_ngcontent` attribute and nothing scoped in the component can reach it.
-app-house .canvas canvas {
+app-house .canvas canvas,
+app-room .canvas canvas {
 	display: block;
 }

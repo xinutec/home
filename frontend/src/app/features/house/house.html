@@ -14,4 +14,15 @@
 			<p class="empty"><mat-icon>home</mat-icon> No house layout yet.</p>
 		}
 	</div>
+
+	@if (rooms().length > 0) {
+		<nav class="rooms" aria-label="View a room from inside">
+			@for (r of rooms(); track r) {
+				<a matButton="tonal" [routerLink]="['/house', r]">
+					<mat-icon>visibility</mat-icon>
+					{{ r }}
+				</a>
+			}
+		</nav>
+	}
 </div>

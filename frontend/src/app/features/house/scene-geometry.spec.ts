@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Room } from './house.model';
-import { bounds, perimeter, roomPerimeter, segments } from './scene-geometry';
+import { bounds, perimeter, roomPerimeter, segments, wallPanels } from './scene-geometry';
 
 const close = (a: number, b: number) => expect(a).toBeCloseTo(b, 6);
 
@@ -82,5 +82,30 @@ describe('bounds', () => {
 		close(b.cx, 3);
 		close(b.cz, 3);
 		close(b.span, 1);
+	});
+});
+
+describe('wallPanels', () => {
+	it('is one full panel for a wall with no openings', () => {
+		expect(wallPanels(4, [], 2.4)).toEqual([{ a0: 0, a1: 4, yb: 0, yt: 2.4 }]);
+	});
+
+	it('leaves piers either side, a lintel above and a sill below a window', () => {
+		const win = { wall: 0, offset: 1, width: 1.5, height: 1.2, sill: 0.9 };
+		expect(wallPanels(4, [win], 2.4)).toEqual([
+			{ a0: 0, a1: 1, yb: 0, yt: 2.4 },
+			{ a0: 1, a1: 2.5, yb: 2.1, yt: 2.4 },
+			{ a0: 1, a1: 2.5, yb: 0, yt: 0.9 },
+			{ a0: 2.5, a1: 4, yb: 0, yt: 2.4 },
+		]);
+	});
+
+	it('leaves only a header over a full-height doorway at the wall start', () => {
+		const door = { wall: 0, offset: 0, width: 2.4, height: 2.22 };
+		const p = wallPanels(3.19, [door], 2.4);
+		expect(p.length).toBe(2);
+		expect(p[0]).toEqual({ a0: 0, a1: 2.4, yb: 2.22, yt: 2.4 });
+		expect(p[1].a0).toBe(2.4);
+		expect(p[1].a1).toBeCloseTo(3.19);
 	});
 });

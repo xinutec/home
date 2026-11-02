@@ -48,3 +48,14 @@
 .banner span {
 	flex: 1;
 }
+
+// Ways into each room's view, along the bottom of the scene.
+.rooms {
+	position: absolute;
+	inset: auto 0 0 0;
+	z-index: 1;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+	padding: 0.75rem;
+}

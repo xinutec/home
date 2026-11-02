@@ -1,0 +1,127 @@
+import * as THREE from 'three';
+import type { Furniture, HouseScene, MaterialSpec, Room } from './house.model';
+
+/** What a room surface looks like when its room names nothing. */
+const SURFACE_DEFAULTS: Record<'walls' | 'floor' | 'ceiling', MaterialSpec> = {
+	walls: { color: '#c9cbc4', roughness: 0.9 },
+	floor: { color: '#6b6870', roughness: 1, texture: 'carpet', textureScale: 0.5 },
+	ceiling: { color: '#f4f3ef', roughness: 0.95 },
+};
+
+function named(scene: HouseScene, key: string): MaterialSpec {
+	const spec = scene.materials?.[key];
+	if (!spec) throw new Error(`the scene's materials have no "${key}"`);
+	return spec;
+}
+
+/** A box's material: its named one, else its colour, matt. */
+export function boxMaterial(scene: HouseScene, f: Furniture): MaterialSpec {
+	if (f.material) return named(scene, f.material);
+	return { color: f.color ?? '#9e9e9e', roughness: 0.8 };
+}
+
+/** A room surface's material: the room's named one, else the surface's default. */
+export function surfaceMaterial(
+	scene: HouseScene,
+	room: Room,
+	surface: 'walls' | 'floor' | 'ceiling',
+): MaterialSpec {
+	const key = room.surfaces?.[surface];
+	return key ? named(scene, key) : SURFACE_DEFAULTS[surface];
+}
+
+/** Builds three.js materials from specs, one per distinct spec, with procedural
+ *  textures drawn once. `own` keeps each for disposal. */
+export class MaterialLibrary {
+	private readonly built = new Map<string, THREE.MeshStandardMaterial>();
+	private readonly patterns = new Map<string, THREE.Texture>();
+
+	constructor(private readonly own: <T extends { dispose(): void }>(r: T) => T) {}
+
+	/** `side`: walls, floors and ceilings are planes seen from both sides. */
+	get(spec: MaterialSpec, side: THREE.Side = THREE.FrontSide): THREE.MeshStandardMaterial {
+		const key = `${JSON.stringify(spec)}|${side}`;
+		const hit = this.built.get(key);
+		if (hit) return hit;
+		const mat = this.own(
+			new THREE.MeshStandardMaterial({
+				color: new THREE.Color(spec.color),
+				roughness: spec.roughness ?? 0.8,
+				metalness: spec.metalness ?? 0,
+				side,
+			}),
+		);
+		if (spec.texture) {
+			const map = this.pattern(spec.texture).clone();
+			// Box faces and the floor carry UVs in metres; a repeat of 1/scale tiles it.
+			const repeat = 1 / (spec.textureScale ?? 1);
+			map.repeat.set(repeat, repeat);
+			map.needsUpdate = true;
+			mat.map = this.own(map);
+			// The pattern is grey around mid-tone; the colour tints it.
+		}
+		this.built.set(key, mat);
+		return mat;
+	}
+
+	private pattern(kind: 'wood' | 'carpet'): THREE.Texture {
+		const hit = this.patterns.get(kind);
+		if (hit) return hit;
+		const canvas = document.createElement('canvas');
+		canvas.width = canvas.height = 512;
+		const ctx = canvas.getContext('2d');
+		if (!ctx) throw new Error('no 2D canvas to draw a texture on');
+		if (kind === 'wood') drawWood(ctx, 512);
+		else drawCarpet(ctx, 512);
+		const tex = this.own(new THREE.CanvasTexture(canvas));
+		tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+		tex.colorSpace = THREE.SRGBColorSpace;
+		tex.anisotropy = 8;
+		this.patterns.set(kind, tex);
+		return tex;
+	}
+}
+
+/** Seeded, so a texture is the same on every load. */
+function rng(seed: number): () => number {
+	let s = seed >>> 0;
+	return () => {
+		s = (s * 1664525 + 1013904223) >>> 0;
+		return s / 2 ** 32;
+	};
+}
+
+/** Long grain along x: bands of slightly darker and lighter streaks, each wavering. */
+function drawWood(ctx: CanvasRenderingContext2D, px: number): void {
+	const r = rng(7);
+	ctx.fillStyle = 'rgb(235,235,235)';
+	ctx.fillRect(0, 0, px, px);
+	for (let i = 0; i < 140; i++) {
+		const y0 = r() * px;
+		const shade = 170 + r() * 70;
+		ctx.strokeStyle = `rgba(${shade},${shade},${shade},${0.25 + r() * 0.35})`;
+		ctx.lineWidth = 0.6 + r() * 2.2;
+		const amp = 2 + r() * 6;
+		const freq = (1 + r() * 2) * ((2 * Math.PI) / px);
+		const phase = r() * 10;
+		ctx.beginPath();
+		for (let x = 0; x <= px; x += 8) {
+			const y = y0 + amp * Math.sin(x * freq + phase);
+			if (x === 0) ctx.moveTo(x, y);
+			else ctx.lineTo(x, y);
+		}
+		ctx.stroke();
+	}
+}
+
+/** Fine speckle around mid-grey, the look of a short cut-pile carpet from standing height. */
+function drawCarpet(ctx: CanvasRenderingContext2D, px: number): void {
+	const r = rng(11);
+	const img = ctx.createImageData(px, px);
+	for (let i = 0; i < px * px; i++) {
+		const v = 205 + (r() - 0.5) * 70;
+		img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = v;
+		img.data[i * 4 + 3] = 255;
+	}
+	ctx.putImageData(img, 0, 0);
+}

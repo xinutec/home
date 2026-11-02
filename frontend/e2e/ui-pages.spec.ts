@@ -4,6 +4,7 @@ import {
 	expectIconFontLoaded,
 	expectNoStarvedText,
 	expectRecoversFromMissingBundle,
+	expectUpInTheBar,
 	expectViewportIsPhone,
 } from '@xinutec/ui-harness';
 import { routesFrom, screens } from '@xinutec/ui-harness/routes';
@@ -149,7 +150,8 @@ async function mockApi(page: Page): Promise<void> {
 }
 
 /** Every screen in the route table (`routes.json`), not only those a test opens. */
-for (const { route, url } of screens(routesFrom('e2e/routes.json'), {})) {
+// The fixture scene's one room stands in for :room.
+for (const { route, url } of screens(routesFrom('e2e/routes.json'), { room: 'Kitchen' })) {
 	test(`${route} lays out cleanly @ phone width`, async ({ page }, testInfo) => {
 		await mockApi(page);
 		await page.goto(url);
@@ -274,4 +276,15 @@ test('house — idle draws nothing, a drag still redraws', async ({ page }) => {
 	await page.mouse.up();
 	await page.waitForTimeout(300);
 	expect(await frames()).toBeGreaterThan(idle + 5);
+});
+
+test('house — a room button opens that room from inside, a screen with up in its bar', async ({
+	page,
+}) => {
+	await mockApi(page);
+	await page.goto('/house');
+	await page.getByRole('link', { name: /Kitchen/ }).click();
+	await expect(page).toHaveURL(/\/house\/Kitchen$/);
+	await page.locator('.canvas canvas').waitFor();
+	await expectUpInTheBar(page);
 });

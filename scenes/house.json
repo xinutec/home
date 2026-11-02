@@ -1,5 +1,16 @@
 {
   "height": 2.4,
+  "materials": {
+    "oak": {"color": "#c49a63", "roughness": 0.55, "texture": "wood", "textureScale": 0.6},
+    "oak-veneer": {"color": "#d2b48a", "roughness": 0.6, "texture": "wood", "textureScale": 0.6},
+    "sideboard-paint": {"color": "#c7c8bf", "roughness": 0.75},
+    "cast-iron": {"color": "#1c1c1e", "roughness": 0.45, "metalness": 0.6},
+    "slate": {"color": "#1a1a1a", "roughness": 0.7},
+    "screen": {"color": "#060708", "roughness": 0.15},
+    "wall-paint": {"color": "#c5c8c0", "roughness": 0.92},
+    "carpet": {"color": "#6e6b72", "roughness": 1, "texture": "carpet", "textureScale": 0.5},
+    "ceiling-paint": {"color": "#f3f2ee", "roughness": 0.95}
+  },
   "rooms": [
     {
       "name": "living",
@@ -12,7 +23,9 @@
       "openings": [
         {"wall": 4, "offset": 0, "width": 2.4, "height": 2.22, "sill": 0, "leads": "bay"},
         {"wall": 6, "offset": 1.37, "width": 1.5, "height": 1.94, "sill": 0, "leads": "dining"}
-      ]
+      ],
+      "surfaces": {"walls": "wall-paint", "floor": "carpet", "ceiling": "ceiling-paint"},
+      "view": {"eye": [1.9, 1.55, 3.2], "look": [0.2, 1.0, -0.1]}
     },
     {
       "name": "dining",
@@ -42,19 +55,23 @@
       "heading": 0,
       "walls": [[37.04, 0.664], [52.96, 1.6], [52.96, 0.664], [127.04, 2.4]],
       "openings": [
+        {"wall": 0, "offset": 0.07, "width": 0.52, "height": 1.2, "sill": 0.95, "leads": "outside"},
+        {"wall": 1, "offset": 0.1, "width": 1.4, "height": 1.2, "sill": 0.95, "leads": "outside"},
+        {"wall": 2, "offset": 0.07, "width": 0.52, "height": 1.2, "sill": 0.95, "leads": "outside"},
         {"wall": 3, "offset": 0, "width": 2.4, "height": 2.22, "sill": 0, "leads": "living"}
-      ]
+      ],
+      "surfaces": {"walls": "wall-paint", "floor": "carpet", "ceiling": "ceiling-paint"}
     }
   ],
   "furniture": [
-    {"id": "living-ikea-cupboard-fireplace-wall", "name": "IKEA cupboard, bay end, fireplace wall", "cx": 2.345, "cz": 0.055, "w": 0.47, "d": 0.82, "h": 0.9, "color": "#d2a679"},
-    {"id": "living-hearth", "name": "Hearth", "cx": 0.69, "cz": 0.195, "w": 1.14, "d": 0.39, "h": 0.02, "y0": 0.03, "color": "#181818"},
-    {"id": "living-fire-surround", "name": "Fire surround (oak; cast-iron arched insert)", "cx": 0.69, "cz": 0.0925, "w": 1.05, "d": 0.185, "h": 0.95, "y0": 0.05, "color": "#c8a878"},
-    {"id": "living-mantel-shelf", "name": "Mantel shelf", "cx": 0.69, "cz": 0.105, "w": 1.11, "d": 0.21, "h": 0.04, "y0": 1.0, "color": "#c8a878"},
-    {"id": "living-sideboard", "name": "Sideboard", "cx": -0.66, "cz": -0.18, "w": 1.15, "d": 0.34, "h": 0.8, "color": "#b3b3ab"},
-    {"id": "living-sideboard-top", "name": "Sideboard top (oak)", "cx": -0.66, "cz": -0.175, "w": 1.17, "d": 0.35, "h": 0.025, "y0": 0.8, "color": "#c8a878"},
-    {"id": "living-tv", "name": "TV (wall-mounted above the sideboard)", "cx": -0.66, "cz": -0.245, "w": 1.22, "d": 0.05, "h": 0.7, "y0": 0.975, "color": "#0c0c0c"},
-    {"id": "living-ikea-cupboard-opposite-wall", "name": "IKEA cupboard, bay end, opposite wall", "cx": 2.345, "cz": 3.24, "w": 0.47, "d": 0.82, "h": 0.9, "color": "#d2a679"},
+    {"id": "living-ikea-cupboard-fireplace-wall", "name": "IKEA cupboard, bay end, fireplace wall", "cx": 2.345, "cz": 0.055, "w": 0.47, "d": 0.82, "h": 0.9, "material": "oak-veneer", "color": "#d2a679"},
+    {"id": "living-hearth", "name": "Hearth", "cx": 0.69, "cz": 0.195, "w": 1.14, "d": 0.39, "h": 0.02, "y0": 0.03, "material": "slate", "color": "#181818"},
+    {"id": "living-fire-surround", "name": "Fire surround (oak; cast-iron arched insert)", "cx": 0.69, "cz": 0.0925, "w": 1.05, "d": 0.185, "h": 0.95, "y0": 0.05, "material": "oak", "color": "#c8a878"},
+    {"id": "living-mantel-shelf", "name": "Mantel shelf", "cx": 0.69, "cz": 0.105, "w": 1.11, "d": 0.21, "h": 0.04, "y0": 1.0, "material": "oak", "color": "#c8a878"},
+    {"id": "living-sideboard", "name": "Sideboard", "cx": -0.66, "cz": -0.18, "w": 1.15, "d": 0.34, "h": 0.8, "material": "sideboard-paint", "color": "#b3b3ab"},
+    {"id": "living-sideboard-top", "name": "Sideboard top (oak)", "cx": -0.66, "cz": -0.175, "w": 1.17, "d": 0.35, "h": 0.025, "y0": 0.8, "material": "oak", "color": "#c8a878"},
+    {"id": "living-tv", "name": "TV (wall-mounted above the sideboard)", "cx": -0.66, "cz": -0.245, "w": 1.22, "d": 0.05, "h": 0.7, "y0": 0.975, "material": "screen", "color": "#0c0c0c"},
+    {"id": "living-ikea-cupboard-opposite-wall", "name": "IKEA cupboard, bay end, opposite wall", "cx": 2.345, "cz": 3.24, "w": 0.47, "d": 0.82, "h": 0.9, "material": "oak-veneer", "color": "#d2a679"},
     {"cx": -4.65, "cz": 5.145, "w": 0.8, "d": 0.67, "h": 0.92, "color": "#c8a878"},
     {"cx": -3.275, "cz": 5.145, "w": 1.29, "d": 0.67, "h": 0.92, "color": "#c8a878"},
     {"cx": -4.085, "cz": 5.4125, "w": 0.33, "d": 0.135, "h": 0.92, "color": "#c8a878"},

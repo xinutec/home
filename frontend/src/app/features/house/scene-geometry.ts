@@ -2,7 +2,7 @@
 // A room is a turtle walk: from a start corner + heading, each wall turns then
 // steps, producing the corner points and wall segments.
 
-import type { Room } from './house.model';
+import type { Room, WallOpening } from './house.model';
 
 export interface Pt {
 	x: number;
@@ -69,4 +69,41 @@ export function bounds(pts: Pt[]): { cx: number; cz: number; span: number } | nu
 		cz: (minZ + maxZ) / 2,
 		span: Math.max(maxX - minX, maxZ - minZ, 1),
 	};
+}
+
+/** One solid rectangle of a wall: [a0,a1] metres along it from its start, [yb,yt] up. */
+export interface WallPanel {
+	a0: number;
+	a1: number;
+	yb: number;
+	yt: number;
+}
+
+/** A wall of length `len` and height `h`, cut by its openings: solid piers
+ *  between and around them, a lintel above each and a sill below a window. A
+ *  floor-to-ceiling opening therefore leaves only its header. */
+export function wallPanels(len: number, ops: WallOpening[], h: number): WallPanel[] {
+	const cuts = ops
+		.map((o) => ({
+			a0: o.offset,
+			a1: o.offset + o.width,
+			yb: o.sill ?? 0,
+			yt: (o.sill ?? 0) + o.height,
+		}))
+		.sort((p, q) => p.a0 - q.a0);
+	const out: WallPanel[] = [];
+	const push = (a0: number, a1: number, yb: number, yt: number) => {
+		if (a1 - a0 > 1e-6 && yt - yb > 1e-6) out.push({ a0, a1, yb, yt });
+	};
+	let cursor = 0;
+	for (const c of cuts) {
+		const a0 = Math.max(0, Math.min(len, c.a0));
+		const a1 = Math.max(0, Math.min(len, c.a1));
+		if (a0 > cursor) push(cursor, a0, 0, h);
+		if (c.yt < h) push(a0, a1, c.yt, h);
+		if (c.yb > 0) push(a0, a1, 0, c.yb);
+		cursor = Math.max(cursor, a1);
+	}
+	if (cursor < len) push(cursor, len, 0, h);
+	return out;
 }

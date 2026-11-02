@@ -13,12 +13,13 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { RouterLink } from '@angular/router';
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 import type { HouseScene, WallOpening } from './house.model';
-import { bounds, roomPerimeter, segments } from './scene-geometry';
+import { bounds, roomPerimeter, segments, wallPanels } from './scene-geometry';
 import type { Pt, WallSeg } from './scene-geometry';
+import { ThreeView } from './three-view';
 
 const WALL_COLOR = 0xb9b7bd;
 const RED_COLOR = 0xff5252;
@@ -29,25 +30,20 @@ const DEFAULT_FURNITURE = '#9e9e9e';
 	selector: 'app-house',
 	templateUrl: './house.html',
 	styleUrl: './house.scss',
-	imports: [MatButtonModule, MatIconModule, MatProgressBarModule],
+	imports: [MatButtonModule, MatIconModule, MatProgressBarModule, RouterLink],
 })
 export class House implements AfterViewInit, OnDestroy {
 	readonly empty = signal(false);
 	readonly error = signal(false);
 	readonly loading = signal(false);
+	/** The named rooms, each a way into its room view. */
+	readonly rooms = signal<string[]>([]);
 
 	private http = inject(HttpClient);
 	private zone = inject(NgZone);
 	private host = viewChild.required<ElementRef<HTMLDivElement>>('canvas');
 
-	private renderer?: THREE.WebGLRenderer;
-	private scene = new THREE.Scene();
-	private camera?: THREE.PerspectiveCamera;
-	private controls?: OrbitControls;
-	private frame = 0;
-	private framePending = false;
-	private owned: { dispose(): void }[] = [];
-	private resize?: ResizeObserver;
+	private view?: ThreeView;
 
 	ngAfterViewInit(): void {
 		this.initThree();
@@ -75,45 +71,22 @@ export class House implements AfterViewInit, OnDestroy {
 	}
 
 	ngOnDestroy(): void {
-		cancelAnimationFrame(this.frame);
-		this.resize?.disconnect();
-		this.controls?.dispose();
-		// A renderer's dispose frees only its own state; geometries, materials and
-		// textures stay on the GPU until each is disposed.
-		for (const r of this.owned) r.dispose();
-		this.renderer?.dispose();
+		this.view?.dispose();
 	}
 
 	private initThree(): void {
-		const host = this.host().nativeElement;
-		const renderer = new THREE.WebGLRenderer({ antialias: true });
-		renderer.setPixelRatio(window.devicePixelRatio);
-		renderer.setSize(host.clientWidth, host.clientHeight || 400);
-		host.appendChild(renderer.domElement);
-		this.renderer = renderer;
-
-		this.scene.background = new THREE.Color(0x101418);
-
-		this.camera = new THREE.PerspectiveCamera(50, this.aspect(), 0.1, 200);
-		this.camera.position.set(6, 6, 8);
-
-		this.controls = new OrbitControls(this.camera, renderer.domElement);
-		this.controls.enableDamping = true;
-		// Drawn on demand, not 60 times a second: a gesture, and the damping after
-		// it (update() fires `change` until it settles), each ask for a frame.
-		this.controls.addEventListener('change', () => this.requestFrame());
-
-		this.scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+		const view = new ThreeView(this.host().nativeElement, this.zone);
+		this.view = view;
+		view.scene.background = new THREE.Color(0x101418);
+		view.camera.position.set(6, 6, 8);
+		view.scene.add(new THREE.AmbientLight(0xffffff, 0.8));
 		const dir = new THREE.DirectionalLight(0xffffff, 1.0);
 		dir.position.set(5, 10, 7);
-		this.scene.add(dir);
+		view.scene.add(dir);
 		const grid = new THREE.GridHelper(20, 20, 0x2a2f36, 0x20242a);
-		this.own(grid);
-		this.scene.add(grid);
-
-		this.resize = new ResizeObserver(() => this.onResize());
-		this.resize.observe(host);
-		this.requestFrame();
+		view.own(grid);
+		view.scene.add(grid);
+		view.requestFrame();
 	}
 
 	private buildHouse(scene: HouseScene): void {
@@ -157,20 +130,21 @@ export class House implements AfterViewInit, OnDestroy {
 					// Number each wall (global index) so you can say "change wall 7".
 					const label = this.numberSprite(String(n));
 					label.position.set((s.ax + s.bx) / 2, h * 0.5, (s.az + s.bz) / 2);
-					this.scene.add(label);
+					this.add(label);
 				}
 				n++;
 			});
 			this.addFloor(pts);
 		}
 		this.empty.set(n === 0);
+		this.rooms.set((scene.rooms ?? []).flatMap((r) => (r.name ? [r.name] : [])));
 
 		// Furniture as coloured boxes (world coordinates).
 		for (const f of scene.furniture ?? []) {
 			const mat = this.own(new THREE.MeshStandardMaterial({ color: f.color ?? DEFAULT_FURNITURE }));
 			const mesh = new THREE.Mesh(this.own(new THREE.BoxGeometry(f.w, f.h, f.d)), mat);
 			mesh.position.set(f.cx, (f.y0 ?? 0) + f.h / 2, f.cz);
-			this.scene.add(mesh);
+			this.add(mesh);
 		}
 
 		this.frameBounds(allPts);
@@ -214,34 +188,11 @@ export class House implements AfterViewInit, OnDestroy {
 		);
 	}
 
-	// Render one wall segment, cut by its openings: solid piers between/around the
-	// openings, a lintel above each, and a sill below (for windows). A full-width
-	// floor-to-`height` opening therefore leaves only the lintel — i.e. a header.
+	// Render one wall segment, cut by its openings (see wallPanels).
 	private renderWall(s: WallSeg, ops: WallOpening[], h: number, mat: THREE.Material): void {
 		const len = Math.hypot(s.bx - s.ax, s.bz - s.az);
 		if (len < 1e-6) return;
-		const cuts = ops
-			.map((o) => ({
-				a0: o.offset,
-				a1: o.offset + o.width,
-				yb: o.sill ?? 0,
-				yt: (o.sill ?? 0) + o.height,
-			}))
-			.sort((p, q) => p.a0 - q.a0);
-		if (cuts.length === 0) {
-			this.addWallPanel(s, len, 0, len, 0, h, mat);
-			return;
-		}
-		let cursor = 0;
-		for (const c of cuts) {
-			const a0 = Math.max(0, Math.min(len, c.a0));
-			const a1 = Math.max(0, Math.min(len, c.a1));
-			if (a0 > cursor) this.addWallPanel(s, len, cursor, a0, 0, h, mat);
-			if (c.yt < h) this.addWallPanel(s, len, a0, a1, c.yt, h, mat);
-			if (c.yb > 0) this.addWallPanel(s, len, a0, a1, 0, c.yb, mat);
-			cursor = Math.max(cursor, a1);
-		}
-		if (cursor < len) this.addWallPanel(s, len, cursor, len, 0, h, mat);
+		for (const p of wallPanels(len, ops, h)) this.addWallPanel(s, len, p.a0, p.a1, p.yb, p.yt, mat);
 	}
 
 	// One rectangular slab of a wall, spanning [a0,a1] along the segment (metres
@@ -268,7 +219,7 @@ export class House implements AfterViewInit, OnDestroy {
 		const mesh = new THREE.Mesh(this.own(new THREE.PlaneGeometry(w, ht)), mat);
 		mesh.position.set(s.ax + dx * along, (yb + yt) / 2, s.az + dz * along);
 		mesh.rotation.y = -Math.atan2(s.bz - s.az, s.bx - s.ax);
-		this.scene.add(mesh);
+		this.add(mesh);
 	}
 
 	private addFloor(pts: Pt[]): void {
@@ -283,47 +234,28 @@ export class House implements AfterViewInit, OnDestroy {
 			this.own(new THREE.MeshStandardMaterial({ color: FLOOR_COLOR, side: THREE.DoubleSide })),
 		);
 		mesh.position.y = -0.01;
-		this.scene.add(mesh);
+		this.add(mesh);
 	}
 
 	private frameBounds(pts: Pt[]): void {
 		const b = bounds(pts);
-		if (!b || !this.camera || !this.controls) return;
-		this.controls.target.set(b.cx, 1, b.cz);
-		this.camera.position.set(b.cx + b.span * 0.9, b.span * 0.9, b.cz + b.span * 1.2);
-		this.controls.update();
+		const view = this.view;
+		if (!b || !view) return;
+		view.controls.target.set(b.cx, 1, b.cz);
+		view.camera.position.set(b.cx + b.span * 0.9, b.span * 0.9, b.cz + b.span * 1.2);
+		view.controls.update();
 	}
 
 	/** Kept for disposal when the page closes. */
 	private own<T extends { dispose(): void }>(resource: T): T {
-		this.owned.push(resource);
-		return resource;
+		return this.view ? this.view.own(resource) : resource;
+	}
+
+	private add(object: THREE.Object3D): void {
+		this.view?.scene.add(object);
 	}
 
 	private requestFrame(): void {
-		if (this.framePending) return;
-		this.framePending = true;
-		this.zone.runOutsideAngular(() => {
-			this.frame = requestAnimationFrame(() => {
-				this.framePending = false;
-				this.controls?.update();
-				if (this.renderer && this.camera) this.renderer.render(this.scene, this.camera);
-			});
-		});
-	}
-
-	private aspect(): number {
-		const host = this.host().nativeElement;
-		return host.clientWidth / (host.clientHeight || 400);
-	}
-
-	private onResize(): void {
-		const host = this.host().nativeElement;
-		this.renderer?.setSize(host.clientWidth, host.clientHeight || 400);
-		if (this.camera) {
-			this.camera.aspect = this.aspect();
-			this.camera.updateProjectionMatrix();
-		}
-		this.requestFrame();
+		this.view?.requestFrame();
 	}
 }

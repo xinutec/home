@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 import { EnvironmentPage } from './features/environment/environment';
 import { House } from './features/house/house';
+import { RoomPage } from './features/house/room';
 import { UsagePage } from './features/usage/usage';
 
 export const routes: Routes = [
@@ -14,5 +15,6 @@ export const routes: Routes = [
 	},
 	{ path: 'claude', title: 'Home · Claude usage', component: UsagePage, data: { top: true } },
 	{ path: 'house', title: 'Home · house', component: House, data: { top: true } },
+	{ path: 'house/:room', title: 'Home · room', component: RoomPage, data: { up: '/house' } },
 	{ path: '**', redirectTo: 'environment' },
 ];

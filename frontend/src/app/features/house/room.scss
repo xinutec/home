@@ -1,0 +1,50 @@
+.wrap {
+	position: relative;
+	// Fill the viewport minus the top bar and the page's padding.
+	height: calc(100dvh - 64px - 4.5rem);
+	min-height: 300px;
+	touch-action: none; // let three.js OrbitControls own touch gestures
+}
+
+.canvas {
+	position: absolute;
+	inset: 0;
+
+	// The canvas is styled from styles.scss — see the note there.
+}
+
+// The load state, floated over the absolutely positioned canvas. The scene is
+// #101418 in both schemes, so the text takes the fleet's over-media colour.
+.status {
+	position: absolute;
+	inset: 0 0 auto 0;
+	z-index: 1;
+}
+
+.empty {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	margin: 1rem;
+	font: var(--mat-sys-body-medium);
+	color: var(--on-media);
+}
+
+.banner {
+	display: flex;
+	align-items: center;
+	gap: 0.6rem;
+	margin: 0.75rem;
+	padding: 0.5rem 0.5rem 0.5rem 1rem;
+	border-radius: 14px;
+	font: var(--mat-sys-body-medium);
+}
+
+.banner-error {
+	background: var(--mat-sys-error-container);
+	color: var(--mat-sys-on-error-container);
+}
+
+.banner span {
+	flex: 1;
+}
