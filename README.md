@@ -17,6 +17,9 @@ IQAir (SMB), Govee (BLE) ──▶ Mac / phone ──HTTPS POST /api/ingest─�
 
 ## House
 
+`doc/realistic-rendering.md` is the plan for a living room that renders like
+its photos.
+
 `/house` draws the hand-measured rooms and furniture in 3D from
 `scenes/house.json`, served at `/api/house`; `scenes/README.md` is the format.
 `scripts/house-plan.mjs` renders the same file with every furniture box
