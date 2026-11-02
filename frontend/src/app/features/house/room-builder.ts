@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { CameraQuery } from './camera';
 import type { HouseScene, Room } from './house.model';
 import { boxMaterial, MaterialLibrary, surfaceMaterial } from './materials';
 import { bounds, roomPerimeter, segments, wallPanels } from './scene-geometry';
@@ -13,7 +14,12 @@ import type { ThreeView } from './three-view';
  * Every room is drawn, not only the one named: the bay and the dining room are
  * seen through their openings.
  */
-export function buildInterior(view: ThreeView, scene: HouseScene, roomName: string): boolean {
+export function buildInterior(
+	view: ThreeView,
+	scene: HouseScene,
+	roomName: string,
+	camera: CameraQuery = {},
+): boolean {
 	const room = scene.rooms.find((r) => r.name === roomName);
 	if (!room) return false;
 	const mats = new MaterialLibrary(<T extends { dispose(): void }>(r: T) => view.own(r));
@@ -30,7 +36,7 @@ export function buildInterior(view: ThreeView, scene: HouseScene, roomName: stri
 	}
 
 	addLight(view);
-	placeCamera(view, room);
+	placeCamera(view, room, camera);
 	return true;
 }
 
@@ -146,12 +152,14 @@ function addLight(view: ThreeView): void {
 
 /** Standing where the room's `view` says, looking where it says; orbiting turns
  *  the head rather than swinging round a far point, so it stays in the room. */
-function placeCamera(view: ThreeView, room: Room): void {
+function placeCamera(view: ThreeView, room: Room, asked: CameraQuery): void {
 	const b = bounds(roomPerimeter(room));
-	const eye = new THREE.Vector3(...(room.view?.eye ?? [b?.cx ?? 0, 1.55, b?.cz ?? 0]));
-	const look = new THREE.Vector3(...(room.view?.look ?? [b?.cx ?? 0, 1.2, (b?.cz ?? 0) - 1]));
+	const eye = new THREE.Vector3(...(asked.eye ?? room.view?.eye ?? [b?.cx ?? 0, 1.55, b?.cz ?? 0]));
+	const look = new THREE.Vector3(
+		...(asked.look ?? room.view?.look ?? [b?.cx ?? 0, 1.2, (b?.cz ?? 0) - 1]),
+	);
 	const dir = look.clone().sub(eye).normalize();
-	view.camera.fov = 60;
+	view.camera.fov = asked.fov ?? 60;
 	view.camera.position.copy(eye);
 	view.controls.target.copy(eye.clone().addScaledVector(dir, 0.6));
 	view.controls.minDistance = 0.1;

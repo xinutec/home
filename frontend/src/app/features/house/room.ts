@@ -18,6 +18,7 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 import type { HouseScene } from './house.model';
+import { cameraFromQuery } from './camera';
 import { buildInterior } from './room-builder';
 import { ThreeView } from './three-view';
 
@@ -70,7 +71,8 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 				this.loading.set(false);
 				const view = this.view;
 				if (!view) return;
-				if (!buildInterior(view, scene, this.room)) this.empty.set(true);
+				if (!buildInterior(view, scene, this.room, cameraFromQuery(window.location.search)))
+					this.empty.set(true);
 				view.requestFrame();
 			},
 			error: (e) => {

@@ -3,12 +3,12 @@
   "materials": {
     "oak": {"color": "#c49a63", "roughness": 0.55, "texture": "wood", "textureScale": 0.6},
     "oak-veneer": {"color": "#d2b48a", "roughness": 0.6, "texture": "wood", "textureScale": 0.6},
-    "sideboard-paint": {"color": "#c7c8bf", "roughness": 0.75},
+    "sideboard-paint": {"color": "#cfccc4", "roughness": 0.7},
     "cast-iron": {"color": "#1c1c1e", "roughness": 0.45, "metalness": 0.6},
     "slate": {"color": "#1a1a1a", "roughness": 0.7},
     "screen": {"color": "#060708", "roughness": 0.15},
-    "wall-paint": {"color": "#c5c8c0", "roughness": 0.92},
-    "carpet": {"color": "#6e6b72", "roughness": 1, "texture": "carpet", "textureScale": 0.5},
+    "wall-paint": {"color": "#a9a9a2", "roughness": 0.92},
+    "carpet": {"color": "#7c7b7f", "roughness": 1, "texture": "carpet", "textureScale": 0.5},
     "ceiling-paint": {"color": "#f3f2ee", "roughness": 0.95}
   },
   "rooms": [
@@ -25,7 +25,7 @@
         {"wall": 6, "offset": 1.37, "width": 1.5, "height": 1.94, "sill": 0, "leads": "dining"}
       ],
       "surfaces": {"walls": "wall-paint", "floor": "carpet", "ceiling": "ceiling-paint"},
-      "view": {"eye": [1.9, 1.55, 3.2], "look": [0.2, 1.0, -0.1]}
+      "view": {"eye": [-0.25, 1.45, 2.65], "look": [-0.45, 0.72, 0]}
     },
     {
       "name": "dining",
