@@ -49,6 +49,19 @@ hand. The 3D house view (`frontend/.../features/house`) renders from these.
   `id` is a stable slug (`living-sideboard`), unique across the house, and `name`
   says what it is; every box in the living room carries both
   (`tests/scene.test.ts`). Name a side by its wall, never "left"/"right".
+- **parts** (optional) — what a piece is made of, inside its box (the box stays
+  its envelope, which the overview and observe read). Each part is a box `size`
+  [w, h, d] centred at `at`, in the piece's frame: origin at the envelope's floor
+  centre, front +z, the piece turned by `front` (`+z`, `-z`, `+x`, `-x`) into the
+  room. `parent` fixes a part to another, and it moves with it. `joint` makes it
+  move: `{"type": "slide", "axis", "range": [0, metres]}` or `{"type": "hinge",
+  "pivot", "range": [0, degrees]}` about the vertical, its sign the way it opens.
+  All `at` are written closed. A piece without parts is one filling its box.
+- **Physics** (`frontend/.../house/physics.ts`, run on this file by
+  `scene-physics.spec.ts`): no two solids in one place, nothing through a wall, no
+  part outside its box when closed, nothing hit anywhere along a joint's travel,
+  and every piece held up by the floor, by what it stands on, or by a wall it
+  touches. Touching is fine; deeper than 2 mm is not.
 
 ## Dev aids
 

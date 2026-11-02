@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Furniture, HouseScene } from './house.model';
-import { boxMaterial, surfaceMaterial } from './materials';
+import { boxMaterial, partMaterial, surfaceMaterial } from './materials';
 
 const scene: HouseScene = {
 	height: 2.4,
@@ -28,6 +28,19 @@ describe('boxMaterial', () => {
 
 	it('refuses a material the table does not have, rather than drawing it grey', () => {
 		expect(() => boxMaterial(scene, box({ material: 'walnut' }))).toThrow(/walnut/);
+	});
+});
+
+describe('partMaterial', () => {
+	it("takes the part's own material, else its colour, else the piece's", () => {
+		const piece = box({ material: 'oak' });
+		expect(
+			partMaterial(scene, piece, { id: 'a', size: [1, 1, 1], at: [0, 0, 0], color: '#123456' })
+				.color,
+		).toBe('#123456');
+		expect(partMaterial(scene, piece, { id: 'b', size: [1, 1, 1], at: [0, 0, 0] }).color).toBe(
+			'#c8a878',
+		);
 	});
 });
 

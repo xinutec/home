@@ -17,6 +17,33 @@ export interface Furniture {
 	color?: string | null;
 	/** A key into the scene's `materials`; wins over `color` in the room view. */
 	material?: string;
+	/** Which way the piece faces in the room; its parts' frame has its front at +z. */
+	front?: '+z' | '-z' | '+x' | '-x';
+	/** What it is made of, inside its box (the envelope above). None: one part
+	 *  filling the envelope. */
+	parts?: Part[];
+}
+
+export type Vec3 = [number, number, number];
+
+/** How a part moves against its parent (or the piece): a `slide` along `axis`
+ *  by `range` metres, or a `hinge` about a vertical line through `pivot` by
+ *  `range` degrees, its sign the direction of opening. `range[0]` is closed. */
+export type Joint =
+	| { type: 'slide'; axis: Vec3; range: [number, number] }
+	| { type: 'hinge'; pivot: Vec3; range: [number, number] };
+
+/** One solid of a piece: a box `size` (w, h, d) centred at `at`, in the piece's
+ *  frame (origin at the envelope's floor centre, front +z), or in its parent's. */
+export interface Part {
+	id: string;
+	size: Vec3;
+	at: Vec3;
+	material?: string;
+	color?: string;
+	/** The part this one is fixed to, and moves with. */
+	parent?: string;
+	joint?: Joint;
 }
 
 /** An opening (doorway / window / wide cased passage) cut into one of a room's

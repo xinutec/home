@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import type { CameraQuery } from './camera';
 import type { HouseScene, Room } from './house.model';
-import { boxMaterial, MaterialLibrary, surfaceMaterial } from './materials';
+import { partsOf, solidsOf } from './assembly';
+import { MaterialLibrary, partMaterial, surfaceMaterial } from './materials';
 import { bounds, roomPerimeter, segments, wallPanels } from './scene-geometry';
 import type { Pt, WallSeg } from './scene-geometry';
 import type { ThreeView } from './three-view';
@@ -25,14 +26,17 @@ export function buildInterior(
 	const mats = new MaterialLibrary(<T extends { dispose(): void }>(r: T) => view.own(r));
 
 	for (const r of scene.rooms) addRoomShell(view, mats, scene, r);
+	// Each piece as its parts, closed; a piece without parts is its box.
 	for (const f of scene.furniture) {
-		const mesh = new THREE.Mesh(
-			view.own(metricBox(f.w, f.h, f.d)),
-			mats.get(boxMaterial(scene, f)),
-		);
-		mesh.position.set(f.cx, (f.y0 ?? 0) + f.h / 2, f.cz);
-		mesh.castShadow = mesh.receiveShadow = true;
-		view.scene.add(mesh);
+		const parts = partsOf(f);
+		solidsOf(f).forEach((sol, k) => {
+			const geom = view.own(metricBox(sol.hw * 2, sol.y1 - sol.y0, sol.hd * 2));
+			const mesh = new THREE.Mesh(geom, mats.get(partMaterial(scene, f, parts[k])));
+			mesh.position.set(sol.x, (sol.y0 + sol.y1) / 2, sol.z);
+			mesh.rotation.y = sol.yaw;
+			mesh.castShadow = mesh.receiveShadow = true;
+			view.scene.add(mesh);
+		});
 	}
 
 	addLight(view);

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { Furniture, HouseScene, MaterialSpec, Room } from './house.model';
+import type { Furniture, HouseScene, MaterialSpec, Part, Room } from './house.model';
 
 /** What a room surface looks like when its room names nothing. */
 const SURFACE_DEFAULTS: Record<'walls' | 'floor' | 'ceiling', MaterialSpec> = {
@@ -18,6 +18,13 @@ function named(scene: HouseScene, key: string): MaterialSpec {
 export function boxMaterial(scene: HouseScene, f: Furniture): MaterialSpec {
 	if (f.material) return named(scene, f.material);
 	return { color: f.color ?? '#9e9e9e', roughness: 0.8 };
+}
+
+/** A part's material: its own named one, else its own colour, else its piece's. */
+export function partMaterial(scene: HouseScene, f: Furniture, p: Part): MaterialSpec {
+	if (p.material) return named(scene, p.material);
+	if (p.color) return { color: p.color, roughness: 0.8 };
+	return boxMaterial(scene, f);
 }
 
 /** A room surface's material: the room's named one, else the surface's default. */
