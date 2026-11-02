@@ -23,7 +23,7 @@ hand. The 3D house view (`frontend/.../features/house`) renders from these.
     }
     // ... more rooms ...
   ],
-  "furniture": [ { cx, cz, w, d, h, y0?, color? }, ... ],
+  "furniture": [ { id?, name?, cx, cz, w, d, h, y0?, color? }, ... ],
   "highlight": null,                      // reserved
   "question": "..."                       // optional design note (free text)
 }
@@ -46,6 +46,9 @@ hand. The 3D house view (`frontend/.../features/house`) renders from these.
   every room is the same kind of thing.
 - **furniture** — floor boxes centred at `(cx, cz)` (world coords), size
   `w`×`d`×`h`; `y0` = base height off the floor (>0 = elevated); `color` hex.
+  `id` is a stable slug (`living-sideboard`), unique across the house, and `name`
+  says what it is; every box in the living room carries both
+  (`tests/scene.test.ts`). Name a side by its wall, never "left"/"right".
 
 ## Dev aids
 

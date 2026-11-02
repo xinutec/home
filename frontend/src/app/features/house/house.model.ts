@@ -4,6 +4,10 @@
 /** A furniture floor-box in the house scene. Centred at (cx,cz); w×d×h metres;
  *  y0 = base height off the floor. */
 export interface Furniture {
+	/** Stable slug, unique across the house (`living-sideboard`). */
+	id?: string;
+	/** What it is, for a person. */
+	name?: string;
 	cx: number;
 	cz: number;
 	w: number;
