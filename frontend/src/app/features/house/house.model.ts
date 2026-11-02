@@ -60,6 +60,20 @@ export interface WallOpening {
 	sill?: number;
 	depth?: number;
 	leads?: string;
+	/** A window in the opening: its frame and panes. */
+	glazing?: Glazing;
+}
+
+/** A window's frame and panes, drawn in its opening. `transom`: metres from the
+ *  sill to the bar that splits the lower pane from the upper ones; `upperPanes`:
+ *  how many panes side by side above it. `lower` and `upper` are material keys. */
+export interface Glazing {
+	frame: number;
+	transom?: number;
+	upperPanes?: number;
+	lower: string;
+	upper?: string;
+	frameMaterial: string;
 }
 
 /** One room: its own closed outline, walked turtle-style from `start` (world XZ
@@ -88,6 +102,8 @@ export interface MaterialSpec {
 	/** 0 = dielectric (wood, paint), 1 = metal. */
 	metalness?: number;
 	texture?: 'wood' | 'carpet';
+	/** 0 = opaque, 1 = clear glass; frosted glass is transmissive and rough. */
+	transmission?: number;
 	/** Metres one repeat of the texture covers. */
 	textureScale?: number;
 }

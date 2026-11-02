@@ -47,6 +47,7 @@ export class MaterialLibrary {
 
 	/** `side`: walls, floors and ceilings are planes seen from both sides. */
 	get(spec: MaterialSpec, side: THREE.Side = THREE.FrontSide): THREE.MeshStandardMaterial {
+		if (spec.transmission) return this.glass(spec, side);
 		const key = `${JSON.stringify(spec)}|${side}`;
 		const hit = this.built.get(key);
 		if (hit) return hit;
@@ -67,6 +68,26 @@ export class MaterialLibrary {
 			mat.map = this.own(map);
 			// The pattern is grey around mid-tone; the colour tints it.
 		}
+		this.built.set(key, mat);
+		return mat;
+	}
+
+	/** Glass: light passes through; a rough surface scatters it, as frosted glass does. */
+	private glass(spec: MaterialSpec, side: THREE.Side): THREE.MeshPhysicalMaterial {
+		const key = `glass|${JSON.stringify(spec)}|${side}`;
+		const hit = this.built.get(key);
+		if (hit instanceof THREE.MeshPhysicalMaterial) return hit;
+		const mat = this.own(
+			new THREE.MeshPhysicalMaterial({
+				color: new THREE.Color(spec.color),
+				roughness: spec.roughness ?? 0.05,
+				metalness: 0,
+				transmission: spec.transmission ?? 1,
+				thickness: 0.006,
+				ior: 1.5,
+				side,
+			}),
+		);
 		this.built.set(key, mat);
 		return mat;
 	}

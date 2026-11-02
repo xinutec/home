@@ -145,6 +145,15 @@ describe('check', () => {
 		expect(v.some((x) => x.kind === 'wall')).toBe(true);
 	});
 
+	it('holds a curtain by the pole it hangs from, and not without one', () => {
+		const pole: Furniture = { id: 'pole', cx: 0, cz: 1, w: 6, d: 0.03, h: 0.03, y0: 2.15 };
+		const curtain: Furniture = { id: 'curtain', cx: 1, cz: 1, w: 0.35, d: 0.03, h: 1.75, y0: 0.4 };
+		expect(check(scene([pole, curtain]))).toEqual([]);
+		expect(check(scene([curtain])).map((v) => v.what)).toEqual([
+			'curtain is held up by nothing (bottom at 0.4 m)',
+		]);
+	});
+
 	it('holds a piece up by the floor, by what it stands on, or by the wall it is on, and nothing else', () => {
 		const floating: Furniture = { id: 'f', cx: 0, cz: 2, w: 0.5, d: 0.5, h: 0.2, y0: 1 };
 		expect(check(scene([floating])).map((v) => v.kind)).toEqual(['support']);

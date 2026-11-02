@@ -2,7 +2,7 @@
 // A room is a turtle walk: from a start corner + heading, each wall turns then
 // steps, producing the corner points and wall segments.
 
-import type { Room, WallOpening } from './house.model';
+import type { Glazing, HouseScene, Room, WallOpening } from './house.model';
 
 export interface Pt {
 	x: number;
@@ -105,5 +105,114 @@ export function wallPanels(len: number, ops: WallOpening[], h: number): WallPane
 		cursor = Math.max(cursor, a1);
 	}
 	if (cursor < len) push(cursor, len, 0, h);
+	return out;
+}
+
+/** One rectangle of a window, in the same coordinates as a WallPanel. */
+export interface GlazingPart extends WallPanel {
+	kind: 'frame' | 'lower' | 'upper';
+}
+
+/** A window's frame and panes in its opening: the frame round the edge, a transom
+ *  bar `transom` above the sill, the lower pane under it and `upperPanes` panes
+ *  over it, split by mullions. Together they tile the opening exactly. */
+export function glazingLayout(o: WallOpening, g: Glazing): GlazingPart[] {
+	const f = g.frame;
+	const a0 = o.offset;
+	const a1 = o.offset + o.width;
+	const y0 = o.sill ?? 0;
+	const y1 = y0 + o.height;
+	const out: GlazingPart[] = [
+		{ kind: 'frame', a0, a1: a0 + f, yb: y0, yt: y1 },
+		{ kind: 'frame', a0: a1 - f, a1, yb: y0, yt: y1 },
+		{ kind: 'frame', a0: a0 + f, a1: a1 - f, yb: y0, yt: y0 + f },
+		{ kind: 'frame', a0: a0 + f, a1: a1 - f, yb: y1 - f, yt: y1 },
+	];
+	const ia0 = a0 + f;
+	const ia1 = a1 - f;
+	if (g.transom === undefined) {
+		out.push({ kind: 'lower', a0: ia0, a1: ia1, yb: y0 + f, yt: y1 - f });
+		return out;
+	}
+	const t = y0 + g.transom;
+	out.push({ kind: 'frame', a0: ia0, a1: ia1, yb: t - f / 2, yt: t + f / 2 });
+	out.push({ kind: 'lower', a0: ia0, a1: ia1, yb: y0 + f, yt: t - f / 2 });
+	const n = Math.max(1, g.upperPanes ?? 1);
+	const pane = (ia1 - ia0 - (n - 1) * f) / n;
+	for (let k = 0; k < n; k++) {
+		const pa0 = ia0 + k * (pane + f);
+		out.push({ kind: 'upper', a0: pa0, a1: pa0 + pane, yb: t + f / 2, yt: y1 - f });
+		if (k < n - 1)
+			out.push({ kind: 'frame', a0: pa0 + pane, a1: pa0 + pane + f, yb: t + f / 2, yt: y1 - f });
+	}
+	return out;
+}
+
+export type P3 = [number, number, number];
+
+/** The wall thickness at a doorway between two rooms: each room is its own outline,
+ *  so the two walls stand apart and the gap between their openings must be filled
+ *  with a floor, a soffit above and the two side jambs. */
+export interface Passage {
+	/** The room whose surfaces it takes. */
+	room: Room;
+	floor: P3[];
+	soffit: P3[];
+	jambs: P3[][];
+}
+
+/** How far apart two facing walls may stand and still be one wall's two faces. */
+const WALL_THICKNESS_MAX = 0.5;
+
+function openingEnds(
+	room: Room,
+	o: WallOpening,
+): { a: [number, number]; b: [number, number]; seg: WallSeg } | null {
+	const seg = segments(roomPerimeter(room))[o.wall];
+	if (!seg) return null;
+	const len = Math.hypot(seg.bx - seg.ax, seg.bz - seg.az);
+	const ux = (seg.bx - seg.ax) / len;
+	const uz = (seg.bz - seg.az) / len;
+	return {
+		a: [seg.ax + ux * o.offset, seg.az + uz * o.offset],
+		b: [seg.ax + ux * (o.offset + o.width), seg.az + uz * (o.offset + o.width)],
+		seg,
+	};
+}
+
+export function passages(scene: HouseScene): Passage[] {
+	const out: Passage[] = [];
+	scene.rooms.forEach((room, ri) => {
+		for (const o of room.openings ?? []) {
+			const j = scene.rooms.findIndex((r) => r.name === o.leads);
+			if (j <= ri) continue; // each pair once; outside leads to no room
+			const other = scene.rooms[j];
+			const here = openingEnds(room, o);
+			if (!here) continue;
+			for (const o2 of other.openings ?? []) {
+				if (o2.leads !== room.name) continue;
+				const there = openingEnds(other, o2);
+				if (!there) continue;
+				// The far opening's ends, each matched to the nearer end here.
+				const d = (p: [number, number], q: [number, number]) =>
+					Math.hypot(p[0] - q[0], p[1] - q[1]);
+				const [qa, qb] =
+					d(here.a, there.a) <= d(here.a, there.b) ? [there.a, there.b] : [there.b, there.a];
+				if (d(here.a, qa) > WALL_THICKNESS_MAX || d(here.b, qb) > WALL_THICKNESS_MAX) continue;
+				const yb = Math.max(o.sill ?? 0, o2.sill ?? 0);
+				const yt = Math.min((o.sill ?? 0) + o.height, (o2.sill ?? 0) + o2.height);
+				const at = (p: [number, number], y: number): P3 => [p[0], y, p[1]];
+				out.push({
+					room,
+					floor: [at(here.a, yb), at(here.b, yb), at(qb, yb), at(qa, yb)],
+					soffit: [at(here.a, yt), at(here.b, yt), at(qb, yt), at(qa, yt)],
+					jambs: [
+						[at(here.a, yb), at(qa, yb), at(qa, yt), at(here.a, yt)],
+						[at(here.b, yb), at(qb, yb), at(qb, yt), at(here.b, yt)],
+					],
+				});
+			}
+		}
+	});
 	return out;
 }

@@ -10,7 +10,11 @@
     "screen": {"color": "#060708", "roughness": 0.15},
     "wall-paint": {"color": "#a9a9a2", "roughness": 0.92},
     "carpet": {"color": "#7c7b7f", "roughness": 1, "texture": "carpet", "textureScale": 0.5},
-    "ceiling-paint": {"color": "#f3f2ee", "roughness": 0.95}
+    "ceiling-paint": {"color": "#f3f2ee", "roughness": 0.95},
+    "pvc-white": {"color": "#f1f1ec", "roughness": 0.4},
+    "glass-clear": {"color": "#ffffff", "roughness": 0.03, "transmission": 1},
+    "glass-frosted": {"color": "#ffffff", "roughness": 0.55, "transmission": 1},
+    "curtain-fabric": {"color": "#4a4541", "roughness": 1}
   },
   "rooms": [
     {
@@ -56,9 +60,9 @@
       "heading": 0,
       "walls": [[37.04, 0.664], [52.96, 1.6], [52.96, 0.664], [127.04, 2.4]],
       "openings": [
-        {"wall": 0, "offset": 0.07, "width": 0.52, "height": 1.2, "sill": 0.95, "leads": "outside"},
-        {"wall": 1, "offset": 0.1, "width": 1.4, "height": 1.2, "sill": 0.95, "leads": "outside"},
-        {"wall": 2, "offset": 0.07, "width": 0.52, "height": 1.2, "sill": 0.95, "leads": "outside"},
+        {"wall": 0, "offset": 0.07, "width": 0.52, "height": 1.25, "sill": 0.9, "leads": "outside", "glazing": {"frame": 0.06, "transom": 0.92, "upperPanes": 1, "lower": "glass-frosted", "upper": "glass-clear", "frameMaterial": "pvc-white"}},
+        {"wall": 1, "offset": 0.1, "width": 1.4, "height": 1.25, "sill": 0.9, "leads": "outside", "glazing": {"frame": 0.06, "transom": 0.92, "upperPanes": 2, "lower": "glass-frosted", "upper": "glass-clear", "frameMaterial": "pvc-white"}},
+        {"wall": 2, "offset": 0.07, "width": 0.52, "height": 1.25, "sill": 0.9, "leads": "outside", "glazing": {"frame": 0.06, "transom": 0.92, "upperPanes": 1, "lower": "glass-frosted", "upper": "glass-clear", "frameMaterial": "pvc-white"}},
         {"wall": 3, "offset": 0, "width": 2.4, "height": 2.22, "sill": 0, "leads": "living"}
       ],
       "surfaces": {"walls": "wall-paint", "floor": "carpet", "ceiling": "ceiling-paint"}
@@ -72,6 +76,9 @@
     {"id": "living-sideboard", "name": "Sideboard (grey, oak top; two drawers, three doors)", "cx": -0.66, "cz": -0.1625, "w": 1.17, "d": 0.375, "h": 0.825, "front": "+z", "material": "sideboard-paint", "color": "#b3b3ab", "parts": [{"id": "top", "size": [1.17, 0.025, 0.35], "at": [0, 0.8125, -0.0125], "material": "oak"}, {"id": "side-left", "size": [0.018, 0.7, 0.33], "at": [-0.566, 0.45, -0.0225], "material": "sideboard-paint"}, {"id": "side-right", "size": [0.018, 0.7, 0.33], "at": [0.566, 0.45, -0.0225], "material": "sideboard-paint"}, {"id": "back", "size": [1.114, 0.7, 0.01], "at": [0, 0.45, -0.1825], "material": "sideboard-paint"}, {"id": "bottom", "size": [1.114, 0.018, 0.32], "at": [0, 0.109, -0.0175], "material": "sideboard-paint"}, {"id": "rail", "size": [1.114, 0.018, 0.32], "at": [0, 0.564, -0.0175], "material": "sideboard-paint"}, {"id": "leg-1", "size": [0.05, 0.1, 0.05], "at": [-0.545, 0.05, -0.14], "material": "sideboard-paint"}, {"id": "leg-2", "size": [0.05, 0.1, 0.05], "at": [0.545, 0.05, -0.14], "material": "sideboard-paint"}, {"id": "leg-3", "size": [0.05, 0.1, 0.05], "at": [-0.545, 0.05, 0.1175], "material": "sideboard-paint"}, {"id": "leg-4", "size": [0.05, 0.1, 0.05], "at": [0.545, 0.05, 0.1175], "material": "sideboard-paint"}, {"id": "drawer-left", "size": [0.515, 0.19, 0.31], "at": [-0.26, 0.675, 0.0075], "material": "sideboard-paint", "joint": {"type": "slide", "axis": [0, 0, 1], "range": [0, 0.28]}}, {"id": "drawer-left-knob", "size": [0.03, 0.03, 0.025], "at": [-0.26, 0.675, 0.175], "material": "steel", "parent": "drawer-left"}, {"id": "drawer-right", "size": [0.515, 0.19, 0.31], "at": [0.26, 0.675, 0.0075], "material": "sideboard-paint", "joint": {"type": "slide", "axis": [0, 0, 1], "range": [0, 0.28]}}, {"id": "drawer-right-knob", "size": [0.03, 0.03, 0.025], "at": [0.26, 0.675, 0.175], "material": "steel", "parent": "drawer-right"}, {"id": "door-left", "size": [0.33, 0.385, 0.02], "at": [-0.35, 0.3385, 0.1525], "material": "sideboard-paint", "joint": {"type": "hinge", "pivot": [-0.515, 0.3385, 0.1625], "range": [0, -95]}}, {"id": "door-left-knob", "size": [0.025, 0.025, 0.025], "at": [-0.21, 0.37, 0.175], "material": "steel", "parent": "door-left"}, {"id": "door-middle", "size": [0.33, 0.385, 0.02], "at": [0.0, 0.3385, 0.1525], "material": "sideboard-paint", "joint": {"type": "hinge", "pivot": [0.165, 0.3385, 0.1625], "range": [0, 95]}}, {"id": "door-middle-knob", "size": [0.025, 0.025, 0.025], "at": [-0.14, 0.37, 0.175], "material": "steel", "parent": "door-middle"}, {"id": "door-right", "size": [0.33, 0.385, 0.02], "at": [0.35, 0.3385, 0.1525], "material": "sideboard-paint", "joint": {"type": "hinge", "pivot": [0.515, 0.3385, 0.1625], "range": [0, 95]}}, {"id": "door-right-knob", "size": [0.025, 0.025, 0.025], "at": [0.21, 0.37, 0.175], "material": "steel", "parent": "door-right"}]},
     {"id": "living-tv", "name": "TV on a wall bracket above the sideboard", "cx": -0.66, "cz": -0.285, "w": 1.22, "d": 0.13, "h": 0.7, "y0": 0.975, "front": "+z", "material": "screen", "color": "#0c0c0c", "parts": [{"id": "wall-plate", "size": [0.4, 0.3, 0.02], "at": [0, 0.35, -0.055], "material": "cast-iron"}, {"id": "arm", "size": [0.08, 0.08, 0.06], "at": [0, 0.35, -0.015], "material": "cast-iron"}, {"id": "screen", "size": [1.22, 0.7, 0.05], "at": [0, 0.35, 0.04], "material": "screen"}]},
     {"id": "living-ikea-cupboard-opposite-wall", "name": "IKEA cupboard, bay end, opposite wall", "cx": 2.345, "cz": 3.24, "w": 0.47, "d": 0.82, "h": 0.9, "material": "oak-veneer", "color": "#d2a679"},
+    {"id": "living-curtain-pole", "name": "Bay curtain pole (estimate, from keyframe 421)", "cx": 2.835, "cz": 1.66, "w": 0.03, "d": 2.2792, "h": 0.03, "y0": 2.15, "material": "steel", "color": "#c9ccd0"},
+    {"id": "living-curtain-fireplace-side", "name": "Bay curtain, fireplace side (estimate, from keyframe 421)", "cx": 2.835, "cz": 0.765, "w": 0.08, "d": 0.33, "h": 1.75, "y0": 0.4, "material": "curtain-fabric", "color": "#4a4541"},
+    {"id": "living-curtain-door-side", "name": "Bay curtain, glazed-door side (estimate, from keyframe 421)", "cx": 2.835, "cz": 2.555, "w": 0.08, "d": 0.33, "h": 1.75, "y0": 0.4, "material": "curtain-fabric", "color": "#4a4541"},
     {"cx": -4.65, "cz": 5.145, "w": 0.8, "d": 0.67, "h": 0.92, "color": "#c8a878"},
     {"cx": -3.275, "cz": 5.145, "w": 1.29, "d": 0.67, "h": 0.92, "color": "#c8a878"},
     {"cx": -4.085, "cz": 5.4125, "w": 0.33, "d": 0.135, "h": 0.92, "color": "#c8a878"},

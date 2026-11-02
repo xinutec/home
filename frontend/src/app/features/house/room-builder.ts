@@ -1,9 +1,17 @@
 import * as THREE from 'three';
 import type { CameraQuery } from './camera';
-import type { HouseScene, Room } from './house.model';
+import type { Glazing, HouseScene, Room, WallOpening } from './house.model';
 import { partsOf, solidsOf } from './assembly';
 import { MaterialLibrary, partMaterial, surfaceMaterial } from './materials';
-import { bounds, roomPerimeter, segments, wallPanels } from './scene-geometry';
+import {
+	bounds,
+	glazingLayout,
+	passages,
+	roomPerimeter,
+	segments,
+	wallPanels,
+} from './scene-geometry';
+import type { P3, Passage } from './scene-geometry';
 import type { Pt, WallSeg } from './scene-geometry';
 import type { ThreeView } from './three-view';
 
@@ -26,6 +34,7 @@ export function buildInterior(
 	const mats = new MaterialLibrary(<T extends { dispose(): void }>(r: T) => view.own(r));
 
 	for (const r of scene.rooms) addRoomShell(view, mats, scene, r);
+	for (const p of passages(scene)) addPassage(view, mats, scene, p);
 	// Each piece as its parts, closed; a piece without parts is its box.
 	for (const f of scene.furniture) {
 		const parts = partsOf(f);
@@ -54,6 +63,7 @@ function addRoomShell(view: ThreeView, mats: MaterialLibrary, scene: HouseScene,
 		for (const p of wallPanels(len, ops, scene.height)) {
 			view.scene.add(wallPanel(view, s, len, p.a0, p.a1, p.yb, p.yt, wallMat));
 		}
+		for (const o of ops) if (o.glazing) addGlazing(view, mats, scene, s, len, o, o.glazing);
 	});
 	view.scene.add(
 		flat(view, pts, 0, mats.get(surfaceMaterial(scene, room, 'floor'), THREE.DoubleSide)),
@@ -66,6 +76,68 @@ function addRoomShell(view: ThreeView, mats: MaterialLibrary, scene: HouseScene,
 			mats.get(surfaceMaterial(scene, room, 'ceiling'), THREE.DoubleSide),
 		),
 	);
+}
+
+/** The wall's thickness at a doorway: floor, soffit and jambs between the two
+ *  rooms' openings. */
+function addPassage(view: ThreeView, mats: MaterialLibrary, scene: HouseScene, p: Passage): void {
+	const wall = mats.get(surfaceMaterial(scene, p.room, 'walls'), THREE.DoubleSide);
+	const floor = mats.get(surfaceMaterial(scene, p.room, 'floor'), THREE.DoubleSide);
+	for (const [quad, mat] of [
+		[p.floor, floor],
+		[p.soffit, wall],
+		...p.jambs.map((j) => [j, wall] as const),
+	] as const) {
+		const mesh = new THREE.Mesh(view.own(quadGeometry(quad)), mat);
+		mesh.receiveShadow = true;
+		mesh.castShadow = true;
+		view.scene.add(mesh);
+	}
+}
+
+/** Four corners in order as two triangles, UVs the x, z in metres (so a carpet tiles). */
+function quadGeometry(q: P3[]): THREE.BufferGeometry {
+	const g = new THREE.BufferGeometry();
+	const pos = [q[0], q[1], q[2], q[0], q[2], q[3]].flat();
+	g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+	const uv = [q[0], q[1], q[2], q[0], q[2], q[3]].flatMap(([x, , z]) => [x, z]);
+	g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+	g.computeVertexNormals();
+	return g;
+}
+
+/** A window in its opening: frame bars 7 cm deep, panes of 6 mm glass, on the
+ *  wall's line. Glass lets the sun through, so it casts no shadow. */
+function addGlazing(
+	view: ThreeView,
+	mats: MaterialLibrary,
+	scene: HouseScene,
+	s: WallSeg,
+	len: number,
+	o: WallOpening,
+	g: Glazing,
+): void {
+	const named = (key: string) => {
+		const spec = scene.materials?.[key];
+		if (!spec) throw new Error(`the scene's materials have no "${key}"`);
+		return mats.get(spec, THREE.DoubleSide);
+	};
+	const dx = (s.bx - s.ax) / len;
+	const dz = (s.bz - s.az) / len;
+	for (const p of glazingLayout(o, g)) {
+		const frame = p.kind === 'frame';
+		const geom = view.own(metricBox(p.a1 - p.a0, p.yt - p.yb, frame ? 0.07 : 0.006));
+		const mat = named(
+			frame ? g.frameMaterial : p.kind === 'lower' ? g.lower : (g.upper ?? g.lower),
+		);
+		const mesh = new THREE.Mesh(geom, mat);
+		const along = (p.a0 + p.a1) / 2;
+		mesh.position.set(s.ax + dx * along, (p.yb + p.yt) / 2, s.az + dz * along);
+		mesh.rotation.y = -Math.atan2(s.bz - s.az, s.bx - s.ax);
+		mesh.castShadow = frame;
+		mesh.receiveShadow = true;
+		view.scene.add(mesh);
+	}
 }
 
 /** One solid slab of a wall, with UVs in metres so a texture keeps its scale. */

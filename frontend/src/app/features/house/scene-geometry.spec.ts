@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Room } from './house.model';
-import { bounds, perimeter, roomPerimeter, segments, wallPanels } from './scene-geometry';
+import {
+	bounds,
+	glazingLayout,
+	passages,
+	perimeter,
+	roomPerimeter,
+	segments,
+	wallPanels,
+} from './scene-geometry';
 
 const close = (a: number, b: number) => expect(a).toBeCloseTo(b, 6);
 
@@ -107,5 +115,84 @@ describe('wallPanels', () => {
 		expect(p[0]).toEqual({ a0: 0, a1: 2.4, yb: 2.22, yt: 2.4 });
 		expect(p[1].a0).toBe(2.4);
 		expect(p[1].a1).toBeCloseTo(3.19);
+	});
+});
+
+describe('glazingLayout', () => {
+	const win = { wall: 0, offset: 0, width: 1.4, height: 1.25, sill: 0.9 };
+	const glazing = {
+		frame: 0.06,
+		transom: 0.92,
+		upperPanes: 2,
+		lower: 'frosted',
+		upper: 'clear',
+		frameMaterial: 'pvc',
+	};
+
+	it('frames the opening, splits it at the transom, and divides the top into panes', () => {
+		const parts = glazingLayout(win, glazing);
+		const panes = parts.filter((p) => p.kind !== 'frame');
+		expect(panes.map((p) => p.kind)).toEqual(['lower', 'upper', 'upper']);
+		const [lower, up1, up2] = panes;
+		expect(lower.yb).toBeCloseTo(0.96);
+		expect(lower.yt).toBeCloseTo(0.9 + 0.92 - 0.03);
+		expect(up1.a1).toBeLessThan(up2.a0);
+		expect(up2.a1).toBeCloseTo(1.34);
+		expect(up1.yt).toBeCloseTo(2.15 - 0.06);
+	});
+
+	it('leaves no gap and no overlap: frame and panes tile the opening exactly', () => {
+		const area = glazingLayout(win, glazing).reduce((s, p) => s + (p.a1 - p.a0) * (p.yt - p.yb), 0);
+		expect(area).toBeCloseTo(1.4 * 1.25, 6);
+	});
+});
+
+describe('passages', () => {
+	// Two rooms whose facing walls stand 0.2 m apart, a 1 m doorway cut in each.
+	const a = {
+		name: 'a',
+		start: [0, 0] as [number, number],
+		walls: [
+			[0, 2],
+			[90, 2],
+			[90, 2],
+			[90, 2],
+		] as [number, number][],
+		openings: [{ wall: 0, offset: 0.5, width: 1, height: 2, leads: 'b' }],
+	};
+	const b = {
+		name: 'b',
+		start: [2, -0.2] as [number, number],
+		heading: 180,
+		walls: [
+			[0, 2],
+			[90, 2],
+			[90, 2],
+			[90, 2],
+		] as [number, number][],
+		openings: [{ wall: 0, offset: 0.5, width: 1, height: 2, leads: 'a' }],
+	};
+
+	it('fills the wall thickness between two matching openings once, with its four faces', () => {
+		const ps = passages({ height: 2.4, rooms: [a, b], furniture: [] });
+		expect(ps.length).toBe(1);
+		expect(ps[0].floor.map(([x, , z]) => [+x.toFixed(3), +z.toFixed(3)]).sort()).toEqual(
+			[
+				[0.5, -0.2],
+				[0.5, 0],
+				[1.5, -0.2],
+				[1.5, 0],
+			].sort(),
+		);
+		expect(ps[0].soffit.every(([, y]) => y === 2)).toBe(true);
+		expect(ps[0].jambs.length).toBe(2);
+	});
+
+	it('fills nothing for an opening to the outside', () => {
+		const lone = {
+			...a,
+			openings: [{ wall: 0, offset: 0.5, width: 1, height: 1, sill: 1, leads: 'outside' }],
+		};
+		expect(passages({ height: 2.4, rooms: [lone], furniture: [] })).toEqual([]);
 	});
 });

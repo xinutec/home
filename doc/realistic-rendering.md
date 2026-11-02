@@ -75,6 +75,16 @@ how it is judged done.
 Done when the physics passes and the side-by-side shows each piece where the photo
 has it.
 
+**Done so far, from keyframe 421 (estimates until the tape replaces them):** the
+bay has no net curtains; its soft light comes through **frosted lower panes**,
+with clear top openers above. Windows are part of an opening (`glazing`: frame,
+transom, upper panes, materials), drawn along whatever wall holds them, the angled
+bay sides included; the sill is about 0.90 m, the top 2.15 m, the transom 0.92 m
+above the sill. The curtains hang from a pole held by the bay's side walls (the
+physics now counts hanging as support). Doorways between rooms now have their
+wall's thickness: floor, soffit and jambs fill the gap between the two rooms'
+outlines, which showed as a white strip on the floor.
+
 ### 2. Settle reflectance
 
 From the photo with a sheet of white paper in it: the paper's known reflectance
@@ -99,6 +109,7 @@ recording, so no picture of the house is in the repository.
 | Step | living-kf1 score (mean ΔE) | Worst regions |
 | --- | --- | --- |
 | Baseline: estimated paints, generic environment, hard sun | 7.0 | alcove side wall 12.7 (the photo's is bluish: sky light), sideboard door 11.2 (×1.46 too bright), oak top 9.3 |
+| Bay glazing, curtains, passages (light unchanged) | 6.9 | the same three; carpet 3.2 → 1.9 |
 
 ### 4. Physically correct light, as a reference
 
@@ -150,7 +161,7 @@ times are rough.
 
 | # | What | Measure | Time |
 | --- | --- | --- | --- |
-| 1 | Bay, middle window | width, height, sill above floor | 2 min |
+| 1 | Bay, middle window | width, height, sill above floor, transom height; is the lower pane frosted? | 2 min |
 | 2 | Bay, side windows | the same, each | 2 min |
 | 3 | Bay | phone compass bearing, standing in the bay facing out | 1 min |
 | 4 | Dining windows | width, height, sill | 2 min |
