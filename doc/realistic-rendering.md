@@ -10,6 +10,9 @@ how it is judged done.
 
 ## Principles
 
+- **Step by step, rendering and contents together.** Each step makes one thing
+  better, the light or the model, and is judged by the score; precision comes
+  later, where it shows.
 - **Model what shapes the light before tuning the light.** Tuning lighting
   against a room that lacks its curtains or sofas fits the knobs to the missing
   geometry: a wrong answer that looks right. A light setting is only adjusted once
@@ -35,8 +38,8 @@ how it is judged done.
    regions. A first estimate, to refine by the side-by-side: eye
    [-0.3, 1.4, 2.6], look [3.0, 1.0, 1.25], fov 69; the fireplace-side IKEA
    cupboard is on its left.
-3. **Settle the paints (step 2)** once the white-paper photo exists; until then the
-   traced score cannot be compared with the raster one.
+3. **Fit the paints (step 2)** from keyframe 1 under the traced light, anchored on
+   the ceiling, and check them against keyframe 421.
 4. **Bake the traced light into the everyday view (step 5).**
 5. Whatever the measuring session brings: replace each estimate and delete its note.
 
@@ -81,7 +84,7 @@ how it is judged done.
 | The two sofas, the armchair, the bean bag | large and dark: they absorb bounce light | tape (width, depth, height each) |
 | The ceiling light: position, fitting, bulb | the inside light source | look and read the bulb |
 | The bay's compass bearing | sets where the sun comes from | phone compass, at the window |
-| True surface reflectance | a photo's brightness is paint times light | one photo with white paper in it |
+| True surface reflectance | a photo's brightness is paint times light | fitted from the photos under the traced light (step 2) |
 | The light at each photo | exposure, sky, lamp on or off | the photo's own timestamp and look |
 
 ## Steps
@@ -112,12 +115,16 @@ outlines, which showed as a white strip on the floor.
 
 ### 2. Settle reflectance
 
-From the photo with a sheet of white paper in it: the paper's known reflectance
-(about 0.85) calibrates the photo, which gives the wall, ceiling, carpet and
-sideboard their true colours.
+A photo's brightness is paint times light; with the light simulated (step 4), each
+material's colour is fitted so its regions match the photo. One overall scale is
+left, which the exposure absorbs; it is anchored on the ceiling (white emulsion,
+about 0.85), with the white window frames (about 0.8) and the black TV (about
+0.05) as checks. A second photo (keyframe 421) checks the fit: the same paint must
+come out the same from both. Only if they disagree is a photo with a sheet of white
+paper worth taking.
 
-Done when the scene's `materials` carry those measured values, each noted as
-measured.
+Done when the scene's paints are the fitted values, each still marked an estimate
+until a second photo agrees.
 
 ### 3. Measure the match
 
@@ -221,7 +228,7 @@ times are rough.
 | 7 | Bay sofa | the same | 1 min |
 | 8 | Armchair | the same | 1 min |
 | 9 | Ceiling light | where it hangs (distance from two walls), drop below the ceiling, the bulb's watts or lumens and colour temperature (printed on the bulb) | 2 min |
-| 10 | White paper | one photo of the fireplace wall with an A4 sheet on the mantel, lamp off | 1 min |
+| 10 | White paper (only if step 2's two photos disagree) | one photo of the fireplace wall with an A4 sheet on the mantel, lamp off | 1 min |
 
 About fifteen minutes. Nothing here is precise beyond a centimetre, and nothing
 needs moving furniture.
