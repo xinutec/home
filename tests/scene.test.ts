@@ -54,8 +54,8 @@ describe("scenes/house.json", () => {
 
 	it("names every box in the living room", () => {
 		const living = scene.rooms.find((r) => r.name === "living");
-		expect(living).toBeDefined();
-		const poly = outline(living!);
+		if (!living) throw new Error("no room named living in the scene");
+		const poly = outline(living);
 		const unnamed = scene.furniture
 			.map((f, i) => ({ f, i }))
 			.filter(({ f }) => inside([f.cx, f.cz], poly))
