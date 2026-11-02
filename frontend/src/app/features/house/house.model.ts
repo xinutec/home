@@ -19,6 +19,8 @@ export interface Furniture {
 	material?: string;
 	/** Which way the piece faces in the room; its parts' frame has its front at +z. */
 	front?: '+z' | '-z' | '+x' | '-x';
+	/** Not measured yet: where the numbers came from and what to measure. */
+	estimate?: string;
 	/** What it is made of, inside its box (the envelope above). None: one part
 	 *  filling the envelope. */
 	parts?: Part[];
@@ -62,6 +64,8 @@ export interface WallOpening {
 	leads?: string;
 	/** A window in the opening: its frame and panes. */
 	glazing?: Glazing;
+	/** Not measured yet: where the numbers came from and what to measure. */
+	estimate?: string;
 }
 
 /** A window's frame and panes, drawn in its opening. `transom`: metres from the
@@ -106,6 +110,8 @@ export interface MaterialSpec {
 	transmission?: number;
 	/** Metres one repeat of the texture covers. */
 	textureScale?: number;
+	/** Not measured yet: where the values came from and what to measure. */
+	estimate?: string;
 }
 
 export interface HouseScene {
@@ -113,6 +119,22 @@ export interface HouseScene {
 	rooms: Room[];
 	furniture: Furniture[];
 	materials?: Record<string, MaterialSpec>;
+	/** The light sources inside the house. */
+	lights?: Light[];
+	/** What is not measured yet that belongs to no one element. */
+	notes?: string[];
 	highlight?: number | null;
 	question?: string;
+}
+
+/** A lamp: where its bulb is, how much light and of what colour. */
+export interface Light {
+	id: string;
+	name?: string;
+	at: Vec3;
+	lumens: number;
+	/** Colour temperature: 2700 is warm white, 6500 daylight. */
+	kelvin: number;
+	on?: boolean;
+	estimate?: string;
 }

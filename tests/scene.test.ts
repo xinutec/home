@@ -47,6 +47,23 @@ function inside([x, z]: [number, number], poly: [number, number][]): boolean {
 }
 
 describe("scenes/house.json", () => {
+	it("has every estimate say what would settle it", () => {
+		const all = JSON.parse(readFileSync("scenes/house.json", "utf8")) as {
+			furniture: { estimate?: string }[];
+			rooms: { openings?: { estimate?: string }[] }[];
+			materials?: Record<string, { estimate?: string }>;
+			lights?: { estimate?: string }[];
+		};
+		const estimates = [
+			...all.furniture.map((f) => f.estimate),
+			...all.rooms.flatMap((r) => (r.openings ?? []).map((o) => o.estimate)),
+			...Object.values(all.materials ?? {}).map((m) => m.estimate),
+			...(all.lights ?? []).map((l) => l.estimate),
+		].filter((e): e is string => e !== undefined);
+		expect(estimates.length).toBeGreaterThan(0);
+		expect(estimates.filter((e) => !/measure|settle|read/.test(e))).toEqual([]);
+	});
+
 	it("gives no two boxes the same id", () => {
 		const ids = scene.furniture.flatMap((f) => (f.id ? [f.id] : []));
 		expect(ids.length).toBe(new Set(ids).size);

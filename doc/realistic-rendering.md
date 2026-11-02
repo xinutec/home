@@ -154,6 +154,16 @@ smaller things. Each one is judged in the correct light, by the score.
 - Photo textures projected from observe's keyframes, once observe registers its
   camera poses to the house frame.
 
+## Estimates until then
+
+Everything the session would measure is already in the scene as an estimate from
+the photos, each marked with an `estimate` saying where it came from and what
+would settle it, and the rest as scene `notes`: the windows, curtains and pole,
+both sofas, the armchair, the bean bag, the mat, the ceiling light and its bulb
+(806 lm, 2700 K, a typical LED bulb), the sideboard's sizes, and the paints. The
+bay's compass bearing is not guessed. `./scripts/estimates.mjs` lists them; the
+session replaces them one by one.
+
 ## The measuring session
 
 One short session with a tape and the phone. Each line is one measurement; the

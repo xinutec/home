@@ -145,6 +145,13 @@ describe('check', () => {
 		expect(v.some((x) => x.kind === 'wall')).toBe(true);
 	});
 
+	it('holds a light fitting by the ceiling it is fixed to', () => {
+		const fitting: Furniture = { id: 'lamp', cx: 0, cz: 2, w: 0.35, d: 0.35, h: 0.12, y0: 2.28 };
+		expect(check(scene([fitting]))).toEqual([]);
+		const low: Furniture = { ...fitting, y0: 2.2 };
+		expect(check(scene([low])).map((v) => v.kind)).toEqual(['support']);
+	});
+
 	it('holds a curtain by the pole it hangs from, and not without one', () => {
 		const pole: Furniture = { id: 'pole', cx: 0, cz: 1, w: 6, d: 0.03, h: 0.03, y0: 2.15 };
 		const curtain: Furniture = { id: 'curtain', cx: 1, cz: 1, w: 0.35, d: 0.03, h: 1.75, y0: 0.4 };

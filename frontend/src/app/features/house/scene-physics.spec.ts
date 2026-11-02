@@ -22,9 +22,8 @@ const KNOWN_KITCHEN = [
 	'overlap: @-3.65,2.965,2.01/body and @-3.06,2.815,2.01/body overlap by 20 mm',
 	'overlap: @-3.06,2.965,2.01/body and @-3.06,2.815,2.01/body overlap by 30 mm',
 	'overlap: @-2.47,2.965,2.01/body and @-3.06,2.815,2.01/body overlap by 20 mm',
-	// A thin plate at 0.77 m and a wall cupboard at 1.68 m touch nothing below or behind.
+	// A thin plate at 0.77 m touches nothing below or behind.
 	'support: @-4.085,5.135,0.77 is held up by nothing (bottom at 0.77 m)',
-	'support: @-4.115,3.31,1.68 is held up by nothing (bottom at 1.68 m)',
 ];
 
 // The real scene, held to the physics: what is in the house must be able to be there.

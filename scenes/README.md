@@ -57,6 +57,14 @@ hand. The 3D house view (`frontend/.../features/house`) renders from these.
   move: `{"type": "slide", "axis", "range": [0, metres]}` or `{"type": "hinge",
   "pivot", "range": [0, degrees]}` about the vertical, its sign the way it opens.
   All `at` are written closed. A piece without parts is one filling its box.
+- **estimate** — on a piece, an opening, a material or a light: the numbers are not
+  measured yet, and the text says where they came from and what would settle them
+  (`tests/scene.test.ts` holds every estimate to naming its settling). `notes` holds
+  what belongs to no one element (the ceiling height here, the bay's bearing). A
+  measurement replaces the numbers and deletes the estimate.
+  `./scripts/estimates.mjs` lists them all.
+- **lights** — each lamp's bulb: `at` [x, y, z], `lumens`, colour temperature
+  `kelvin`, and whether it is `on`.
 - **Physics** (`frontend/.../house/physics.ts`, run on this file by
   `scene-physics.spec.ts`): no two solids in one place, nothing through a wall, no
   part outside its box when closed, nothing hit anywhere along a joint's travel,

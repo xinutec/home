@@ -186,8 +186,8 @@ export function check(scene: HouseScene): Violation[] {
 		}
 	});
 
-	// Held up: by the floor, by a piece it stands on, by a wall it is fixed to, or by
-	// what it hangs from.
+	// Held up: by the floor, by a piece it stands on, by a wall it is fixed to, by
+	// what it hangs from, or by the ceiling.
 	scene.furniture.forEach((f, i) => {
 		const y0 = f.y0 ?? 0;
 		if (y0 <= TOLERANCE) return;
@@ -206,7 +206,8 @@ export function check(scene: HouseScene): Violation[] {
 				footprintsOverlap(env, envelopeSolid(g, j))
 			);
 		});
-		if (!below && !onWall && !hangs)
+		const onCeiling = Math.abs(y0 + f.h - scene.height) <= TOLERANCE;
+		if (!below && !onWall && !hangs && !onCeiling)
 			out.push({
 				kind: 'support',
 				what: `${pieceId(f)} is held up by nothing (bottom at ${y0} m)`,
