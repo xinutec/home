@@ -27,21 +27,46 @@ how it is judged done.
   never the house's location. Latitude and longitude for the sun come from a
   setting outside the repository.
 
+## Next up
+
+1. **Widen the thin regions** in `scenes/photos.json` (living-kf1's `oak-top` is a
+   7 px strip, too thin to judge; take the top's upper face).
+2. **Record keyframe 421** (the bay) in `scenes/photos.json` with its camera and
+   regions. A first estimate, to refine by the side-by-side: eye
+   [-0.3, 1.4, 2.6], look [3.0, 1.0, 1.25], fov 69; the fireplace-side IKEA
+   cupboard is on its left.
+3. **Settle the paints (step 2)** once the white-paper photo exists; until then the
+   traced score cannot be compared with the raster one.
+4. **Bake the traced light into the everyday view (step 5).**
+5. Whatever the measuring session brings: replace each estimate and delete its note.
+
 ## Where it stands
 
 - **Shell:** walls, chimney breast, alcoves, openings to the bay and dining room,
-  tape-measured. Ceiling height is the house-wide 2.4 m, not measured in this room.
+  tape-measured; doorways have their wall thickness (floor, soffit, jambs). Ceiling
+  height is the house-wide 2.4 m, not measured in this room.
+- **Windows:** the bay's three, as glazing in their openings (frame, transom,
+  frosted lower pane, clear openers), estimates from keyframe 421.
 - **Furniture:** the sideboard as a real assembly (top, carcass, legs, two sliding
   drawers, three hinged doors, knobs); the TV on its wall bracket; the hearth, fire
-  surround, mantel shelf and two IKEA cupboards as boxes.
-- **Materials:** a table of physically based materials, with procedural wood grain
-  and carpet; colours toned to keyframe 1 of the 26 September walk.
-- **Light:** a generic built-in environment, a sky fill and a hard sun. Not
-  physically based; the next steps replace it.
-- **Camera:** `?eye&look&fov` on `/house/:room`; the living room opens where
-  keyframe 1 was taken. The phone's portrait keyframes have a 69° vertical field
-  of view (fx 1397 px on a 1920 px side, read from the capture stream).
-- **Comparison:** `compare-view.ts` renders beside a photo from the same camera.
+  surround, mantel shelf and two IKEA cupboards as boxes; the curtains on their
+  pole, both sofas, the armchair, the bean bag, the mat and the ceiling light as
+  estimated blocks. `./scripts/estimates.mjs` lists every estimate.
+- **Physics:** `physics.ts`, run on the real scene by `scene-physics.spec.ts`; the
+  kitchen's known findings are listed there by name.
+- **Materials:** physically based, with procedural wood grain and carpet; the
+  paints toned to keyframe 1 under the approximate light (so off under correct
+  light), the glass with its transmittance.
+- **Light:** the everyday view keeps an approximate setup (generic environment, sky
+  fill, hard sun). `?trace=N` is the physical reference: an overcast sky through
+  the windows, path-traced on the GPU.
+- **Camera:** `?eye&look&fov&exposure` on `/house/:room`; the living room opens
+  where keyframe 1 was taken. The phone's portrait keyframes have a 69° vertical
+  field of view (fx 1397 px on a 1920 px side, read from the capture stream).
+- **Comparison:** `node e2e/compare-view.ts --photo-id living-kf1 [--trace 256]`,
+  scored region by region; the photo is cut from observe's recording
+  (`$OBSERVE_ARCHIVE`). Traces need the real GPU (headless Chromium with Metal);
+  256 samples take about 1.5 minutes a render.
 
 ## What realistic light needs that is missing
 
