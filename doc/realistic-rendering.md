@@ -92,6 +92,14 @@ brightness and colour in the render against the photo, plus one overall score.
 
 Done when the score is printed for every comparison and recorded here per step.
 
+**Built.** `node e2e/compare-view.ts --photo-id living-kf1` reads the photo's
+camera and regions from `scenes/photos.json` and cuts the keyframe from observe's
+recording, so no picture of the house is in the repository.
+
+| Step | living-kf1 score (mean ΔE) | Worst regions |
+| --- | --- | --- |
+| Baseline: estimated paints, generic environment, hard sun | 7.0 | alcove side wall 12.7 (the photo's is bluish: sky light), sideboard door 11.2 (×1.46 too bright), oak top 9.3 |
+
 ### 4. Physically correct light, as a reference
 
 - **Daylight:** the sun placed by date, time and the room's bearing (solar

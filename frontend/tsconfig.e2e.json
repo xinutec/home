@@ -1,11 +1,13 @@
 // Type-checks the layout harness. No other config covers e2e/, and Playwright
 // strips types without checking them. harness.d.mts types the .mjs, so no allowJs.
 {
-  "extends": "./tsconfig.json",
-  "compilerOptions": {
-    "noEmit": true,
-    // alloc-rate.ts runs under plain Node.
-    "types": ["node"]
-  },
-  "include": ["playwright.config.ts", "e2e/**/*.ts", "e2e/**/*.d.mts"]
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"noEmit": true,
+		// alloc-rate.ts and compare-view.ts run under plain Node, which needs the
+		// .ts in an import path.
+		"types": ["node"],
+		"allowImportingTsExtensions": true
+	},
+	"include": ["playwright.config.ts", "e2e/**/*.ts", "e2e/**/*.d.mts"]
 }
