@@ -10,6 +10,11 @@ describe('cameraFromQuery', () => {
 		});
 	});
 
+	it('reads a path-traced sample count and an exposure', () => {
+		expect(cameraFromQuery('?trace=256&exposure=1.5')).toEqual({ trace: 256, exposure: 1.5 });
+		expect(cameraFromQuery('?trace=0&exposure=-1')).toEqual({});
+	});
+
 	it('takes only what is given', () => {
 		expect(cameraFromQuery('?fov=50')).toEqual({ fov: 50 });
 		expect(cameraFromQuery('')).toEqual({});

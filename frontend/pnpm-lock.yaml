@@ -72,6 +72,12 @@ importers:
       three:
         specifier: ^0.185.1
         version: 0.185.1
+      three-gpu-pathtracer:
+        specifier: 0.0.27
+        version: 0.0.27(three-mesh-bvh@0.9.17(three@0.185.1))(three@0.185.1)(xatlas-web@0.1.0)
+      three-mesh-bvh:
+        specifier: ^0.9.17
+        version: 0.9.17
       tslib:
         specifier: ^2.8.1
         version: 2.8.1
@@ -2996,6 +3002,18 @@ packages:
     resolution: {integrity: sha512-9kY+CygyYM6j02t5YFHbNz2FN5QmYGv9zAjVp4lCDjlCw7amdckXlEt/bjMhUIfj4ThGRE4gCUH5+yGnNuPo5A==}
     engines: {node: '>=10.0.0'}
 
+  three-gpu-pathtracer@0.0.27:
+    resolution: {integrity: sha512-NLUYnL9nSLcUFurIHHLHbnmpKLaXi8JbGqfTeWRSx4h+l7Ndpllwj2DK2uOYTSUaN5+PuZ1JRqv1ynHEB1XCwQ==}
+    peerDependencies:
+      three: '>=0.185.0'
+      three-mesh-bvh: '>=0.9.15'
+      xatlas-web: ^0.1.0
+
+  three-mesh-bvh@0.9.17:
+    resolution: {integrity: sha512-uU2DNnTHsMcrsAM1kiLXEeLx4JNsPLayLTPE5Rf7exbFRuQYEifS4DhGEA+lDiU8/7mID1PsE9sH8i6p5prZSg==}
+    peerDependencies:
+      three: '>= 0.159.0'
+
   three@0.185.1:
     resolution: {integrity: sha512-5aojFCXKwnjBRZvUnt3WFfEcvUJgkN5LlijRFN95hMy8WVkG4I0QNcJE+OuWvuJ0bOdStrbfXn0pkd6/QyiAlg==}
 
@@ -3220,6 +3238,9 @@ packages:
   write-file-atomic@7.0.1:
     resolution: {integrity: sha512-OTIk8iR8/aCRWBqvxrzxR0hgxWpnYBblY1S5hDWBQfk/VFmJwzmJgQFN3WsoUKHISv2eAwe+PpbUzyL1CKTLXg==}
     engines: {node: ^20.17.0 || >=22.9.0}
+
+  xatlas-web@0.1.0:
+    resolution: {integrity: sha512-PprVfuXbaIskxLTLBUQRaWfgSy9xUQqAMIRooOw0P6NYqwgh6T0voeer6+Z5M7AFt5SGXUybuww/uDGs1yw8vQ==}
 
   xml-name-validator@5.0.0:
     resolution: {integrity: sha512-EvGK8EJ3DhaHfbRlETOWAS5pO9MZITeauHKJyb8wyajUfQUenkIg2MvLDTZ4T/TgIcm3HU0TFBgWWboAZ30UHg==}
@@ -5899,6 +5920,16 @@ snapshots:
       string-width: 4.2.3
       strip-ansi: 6.0.1
 
+  three-gpu-pathtracer@0.0.27(three-mesh-bvh@0.9.17(three@0.185.1))(three@0.185.1)(xatlas-web@0.1.0):
+    dependencies:
+      three: 0.185.1
+      three-mesh-bvh: 0.9.17(three@0.185.1)
+      xatlas-web: 0.1.0
+
+  three-mesh-bvh@0.9.17(three@0.185.1):
+    dependencies:
+      three: 0.185.1
+
   three@0.185.1: {}
 
   tinybench@2.9.0: {}
@@ -6065,6 +6096,8 @@ snapshots:
   write-file-atomic@7.0.1:
     dependencies:
       signal-exit: 4.1.0
+
+  xatlas-web@0.1.0: {}
 
   xml-name-validator@5.0.0: {}
 

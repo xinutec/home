@@ -42,6 +42,9 @@ const { values: args } = parseArgs({
 		room: { type: 'string', default: 'living' },
 		out: { type: 'string', default: 'compare.png' },
 		deployed: { type: 'boolean', default: false },
+		trace: { type: 'string' },
+		exposure: { type: 'string', default: '1' },
+		'fixed-exposure': { type: 'boolean', default: false },
 	},
 });
 
@@ -132,13 +135,23 @@ const TYPES: Record<string, string> = {
 const W = 540;
 const H = 960;
 
+// The real GPU (Metal, on the Mac): path tracing on the software one takes minutes a sample.
 const browser = await chromium.launch({
-	args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
+	args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'],
 });
 const ctx = await browser.newContext({
 	serviceWorkers: 'block',
 	viewport: { width: W + 200, height: H + 300 },
 });
+// The canvas takes the photo's exact size before the page draws, so the two frame the
+// same view and nothing resizes under a trace.
+await ctx.addInitScript((css: string) => {
+	document.addEventListener('DOMContentLoaded', () => {
+		const style = document.createElement('style');
+		style.textContent = css;
+		document.head.appendChild(style);
+	});
+}, `.wrap { width: ${W}px !important; height: ${H}px !important; }`);
 if (!args.deployed) {
 	await ctx.route(new RegExp(`^${ORIGIN}/(?!api/|auth/|login)`), (route) => {
 		const path = new URL(route.request().url()).pathname;
@@ -152,85 +165,134 @@ if (!args.deployed) {
 		route.fulfill({ body: readFileSync(SCENE), contentType: 'application/json' }),
 	);
 }
-const page = await ctx.newPage();
-const q = new URLSearchParams({ eye, look, fov });
-await page.goto(`${ORIGIN}/house/${room}?${q.toString()}`, { waitUntil: 'networkidle' });
-// The canvas takes the photo's exact size, so the two frame the same view.
-await page.addStyleTag({
-	content: `.wrap { width: ${W}px !important; height: ${H}px !important; }`,
-});
-const canvas = page.locator('.canvas canvas');
-await canvas.waitFor();
-await page.waitForTimeout(2000);
-const render = await canvas.screenshot();
+
+/** The room drawn from the photo's camera at `exposure`, as PNG bytes. */
+async function renderAt(exposure: number): Promise<Buffer> {
+	const page = await ctx.newPage();
+	const q = new URLSearchParams({
+		eye: eye ?? '',
+		look: look ?? '',
+		fov: fov ?? '69',
+		exposure: String(exposure),
+	});
+	if (args.trace) q.set('trace', args.trace);
+	await page.goto(`${ORIGIN}/house/${room}?${q.toString()}`, { waitUntil: 'networkidle' });
+	const canvas = page.locator('.canvas canvas');
+	await canvas.waitFor();
+	if (args.trace) await page.locator('.canvas[data-traced]').waitFor({ timeout: 600_000 });
+	else await page.waitForTimeout(2000);
+	const png = await canvas.screenshot();
+	await page.close();
+	return png;
+}
 
 // Both images onto canvases of one size; the photo turned upright.
 const side = await ctx.newPage();
 await side.setViewportSize({ width: W * 2 + 12, height: H });
-await side.setContent(
-	`<body style="margin:0;background:#222;display:flex;gap:12px">` +
-		`<canvas id="r" width="${W}" height="${H}"></canvas><canvas id="p" width="${W}" height="${H}"></canvas></body>`,
-);
 const regions = record?.regions ?? {};
-const pixels = await side.evaluate(
-	async ({ render, photo, rotate, W, H, regions }) => {
-		const load = (src: string) =>
-			new Promise<HTMLImageElement>((ok, fail) => {
-				const img = new Image();
-				img.onload = () => ok(img);
-				img.onerror = () => fail(new Error('image did not load'));
-				img.src = src;
-			});
-		const draw = (id: string, img: HTMLImageElement, turn: number) => {
-			const c = document.getElementById(id) as HTMLCanvasElement;
-			const g = c.getContext('2d')!;
-			if (turn === 90) {
-				g.translate(W, 0);
-				g.rotate(Math.PI / 2);
-				g.drawImage(img, 0, 0, H, W);
-			} else g.drawImage(img, 0, 0, W, H);
-			g.setTransform(1, 0, 0, 1, 0, 0);
-			return g;
-		};
-		const gr = draw('r', await load(render), 0);
-		const gp = draw('p', await load(photo), rotate);
-		const data = [
-			Array.from(gr.getImageData(0, 0, W, H).data),
-			Array.from(gp.getImageData(0, 0, W, H).data),
-		];
-		// The regions, outlined on both, once their pixels are read.
-		for (const g of [gr, gp]) {
-			g.strokeStyle = '#ffd166';
-			g.lineWidth = 2;
-			g.font = '13px sans-serif';
-			g.fillStyle = '#ffd166';
-			for (const [name, r] of Object.entries(regions)) {
-				g.strokeRect(r.x, r.y, r.w, r.h);
-				g.fillText(name, r.x + 2, r.y > 16 ? r.y - 4 : r.y + r.h + 14);
-			}
-		}
-		return data;
-	},
-	{
-		render: `data:image/png;base64,${render.toString('base64')}`,
-		photo: `data:image/jpeg;base64,${photoJpeg.toString('base64')}`,
-		rotate,
-		W,
-		H,
-		regions,
-	},
-);
+
+/** Draws the render and the photo side by side; returns both canvases' pixels. */
+async function lay(
+	render: Buffer,
+	outline: boolean,
+): Promise<[Uint8ClampedArray, Uint8ClampedArray]> {
+	await side.setContent(
+		`<body style="margin:0;background:#222;display:flex;gap:12px">` +
+			`<canvas id="r" width="${W}" height="${H}"></canvas><canvas id="p" width="${W}" height="${H}"></canvas></body>`,
+	);
+	const data = await side.evaluate(
+		async ({ render, photo, rotate, W, H, regions, outline }) => {
+			const load = (src: string) =>
+				new Promise<HTMLImageElement>((ok, fail) => {
+					const img = new Image();
+					img.onload = () => ok(img);
+					img.onerror = () => fail(new Error('image did not load'));
+					img.src = src;
+				});
+			const draw = (id: string, img: HTMLImageElement, turn: number) => {
+				const c = document.getElementById(id) as HTMLCanvasElement;
+				const g = c.getContext('2d')!;
+				if (turn === 90) {
+					g.translate(W, 0);
+					g.rotate(Math.PI / 2);
+					g.drawImage(img, 0, 0, H, W);
+				} else g.drawImage(img, 0, 0, W, H);
+				g.setTransform(1, 0, 0, 1, 0, 0);
+				return g;
+			};
+			const gr = draw('r', await load(render), 0);
+			const gp = draw('p', await load(photo), rotate);
+			const out = [
+				Array.from(gr.getImageData(0, 0, W, H).data),
+				Array.from(gp.getImageData(0, 0, W, H).data),
+			];
+			// The regions, outlined on both, once their pixels are read.
+			if (outline)
+				for (const g of [gr, gp]) {
+					g.strokeStyle = '#ffd166';
+					g.lineWidth = 2;
+					g.font = '13px sans-serif';
+					g.fillStyle = '#ffd166';
+					for (const [name, r] of Object.entries(regions)) {
+						g.strokeRect(r.x, r.y, r.w, r.h);
+						g.fillText(name, r.x + 2, r.y > 16 ? r.y - 4 : r.y + r.h + 14);
+					}
+				}
+			return out;
+		},
+		{
+			render: `data:image/png;base64,${render.toString('base64')}`,
+			photo: `data:image/jpeg;base64,${photoJpeg.toString('base64')}`,
+			rotate,
+			W,
+			H,
+			regions,
+			outline,
+		},
+	);
+	return [new Uint8ClampedArray(data[0]), new Uint8ClampedArray(data[1])];
+}
+
+/** How much brighter the render is than the photo, over all the regions together:
+ *  the ratio of their summed linear luminance. */
+function brightness(rpx: Uint8ClampedArray, ppx: Uint8ClampedArray): number {
+	let r = 0;
+	let p = 0;
+	for (const rect of Object.values(regions)) {
+		r += luminance(regionMean(rpx, W, rect)) * rect.w * rect.h;
+		p += luminance(regionMean(ppx, W, rect)) * rect.w * rect.h;
+	}
+	return r / Math.max(p, 1e-9);
+}
+
+// Exposure as a camera's: one number for the whole picture, set so the regions
+// together are as bright as in the photo, never per region (that would hide a
+// colour error). Tone mapping is not linear, so a few rounds.
+let exposure = Number(args.exposure);
+let render = await renderAt(exposure);
+if (record && !args['fixed-exposure']) {
+	for (let round = 0; round < 4; round++) {
+		const [rpx, ppx] = await lay(render, false);
+		const ratio = brightness(rpx, ppx);
+		if (Math.abs(ratio - 1) < 0.02) break;
+		exposure /= ratio;
+		render = await renderAt(exposure);
+	}
+}
+const [rpx, ppx] = await lay(render, true);
 writeFileSync(args.out, await side.screenshot());
 await browser.close();
 
 console.log(`${args.out}: render (left) beside ${record ? record.id : args.photo} (right)`);
 if (record) {
-	const [rpx, ppx] = pixels.map((a) => new Uint8ClampedArray(a));
 	const hex = (c: number[]) =>
 		`#${c.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')}`;
 	let sum = 0;
 	console.log(
-		`\n${'region'.padEnd(18)} ${'render'.padEnd(8)} ${'photo'.padEnd(8)}    ΔE  brightness`,
+		`\n${args.trace ? `path-traced, ${args.trace} samples` : 'raster'}; exposure ${exposure.toFixed(3)}`,
+	);
+	console.log(
+		`${'region'.padEnd(18)} ${'render'.padEnd(8)} ${'photo'.padEnd(8)}    ΔE  brightness`,
 	);
 	for (const [name, r] of Object.entries(record.regions)) {
 		const a = regionMean(rpx, W, r);

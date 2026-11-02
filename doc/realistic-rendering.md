@@ -110,6 +110,12 @@ recording, so no picture of the house is in the repository.
 | --- | --- | --- |
 | Baseline: estimated paints, generic environment, hard sun | 7.0 | alcove side wall 12.7 (the photo's is bluish: sky light), sideboard door 11.2 (×1.46 too bright), oak top 9.3 |
 | Bay glazing, curtains, passages (light unchanged) | 6.9 | the same three; carpet 3.2 → 1.9 |
+| Path-traced reference: overcast sky, windows as diffuse area lights, 256 samples | 9.9 | oak top 22.5 (a 7 px strip now in shadow: too thin to judge), alcove side wall 16.6 (×1.58: lit by the bay; the sofas and curtains that shade it are still blocks), fire surround 10.9; sideboard door 11.2 → 6.0 with no paint change |
+
+**The paints were toned to the approximate light, so under correct light they are
+off the other way:** part of the raster score was paint compensating for wrong
+light. The path-traced score only means something once step 2 gives the paints
+their true values; until then raster and traced scores are not comparable.
 
 ### 4. Physically correct light, as a reference
 
@@ -122,6 +128,16 @@ recording, so no picture of the house is in the repository.
   into a still with every bounce simulated. This is the reference against which
   the photos are matched, and the truth for the next step.
 - **Exposure** like a camera: set to the photo's, by the regions' brightness.
+
+**Built:** `/house/living?trace=N` lights the room only from the sky outside
+(`sky.ts`: a CIE overcast sky over a ground of albedo 0.2), through its windows,
+and path-traces N samples a pixel with `three-gpu-pathtracer` on the GPU (Metal,
+headless). A pane is drawn as the diffuse light it lets in (`windowRadiance`: its
+transmittance times the vertical daylight on it, over π), not as a hole onto the
+sky: paths seldom find a small hole, and the image came out as noise.
+`compare-view --trace N` sets the exposure like a camera, one number for the
+whole picture, from the regions' total brightness. No direct sun yet: keyframe 1
+shows none, and the bay's bearing is unknown.
 
 Done when the photo mode's region score against keyframe 1 is within a stated
 bound (set once the first numbers are in, not before), for each of daylight with

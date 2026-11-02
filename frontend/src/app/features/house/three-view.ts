@@ -16,6 +16,9 @@ export class ThreeView {
 	readonly camera: THREE.PerspectiveCamera;
 	readonly controls: OrbitControls;
 
+	/** While true, nothing is drawn here: something else owns the canvas (the path tracer). */
+	paused = false;
+
 	private frame = 0;
 	private framePending = false;
 	private readonly owned: { dispose(): void }[] = [];
@@ -48,7 +51,7 @@ export class ThreeView {
 	}
 
 	requestFrame(): void {
-		if (this.framePending) return;
+		if (this.paused || this.framePending) return;
 		this.framePending = true;
 		this.zone.runOutsideAngular(() => {
 			this.frame = requestAnimationFrame(() => {

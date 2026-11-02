@@ -13,6 +13,7 @@ import {
 } from './scene-geometry';
 import type { P3, Passage } from './scene-geometry';
 import type { Pt, WallSeg } from './scene-geometry';
+import { SKY, windowRadiance } from './sky';
 import type { ThreeView } from './three-view';
 
 /**
@@ -28,12 +29,14 @@ export function buildInterior(
 	scene: HouseScene,
 	roomName: string,
 	camera: CameraQuery = {},
+	/** Light only from the world outside (the path-traced reference), not the approximations. */
+	physical = false,
 ): boolean {
 	const room = scene.rooms.find((r) => r.name === roomName);
 	if (!room) return false;
 	const mats = new MaterialLibrary(<T extends { dispose(): void }>(r: T) => view.own(r));
 
-	for (const r of scene.rooms) addRoomShell(view, mats, scene, r);
+	for (const r of scene.rooms) addRoomShell(view, mats, scene, r, physical);
 	for (const p of passages(scene)) addPassage(view, mats, scene, p);
 	// Each piece as its parts, closed; a piece without parts is its box.
 	for (const f of scene.furniture) {
@@ -48,13 +51,20 @@ export function buildInterior(
 		});
 	}
 
-	addLight(view);
+	if (!physical) addLight(view);
 	placeCamera(view, room, camera);
 	return true;
 }
 
-function addRoomShell(view: ThreeView, mats: MaterialLibrary, scene: HouseScene, room: Room): void {
+function addRoomShell(
+	view: ThreeView,
+	mats: MaterialLibrary,
+	scene: HouseScene,
+	room: Room,
+	physical: boolean,
+): void {
 	const pts = roomPerimeter(room);
+	const centre = bounds(pts);
 	const wallMat = mats.get(surfaceMaterial(scene, room, 'walls'), THREE.DoubleSide);
 	segments(pts).forEach((s, i) => {
 		const len = Math.hypot(s.bx - s.ax, s.bz - s.az);
@@ -63,7 +73,15 @@ function addRoomShell(view: ThreeView, mats: MaterialLibrary, scene: HouseScene,
 		for (const p of wallPanels(len, ops, scene.height)) {
 			view.scene.add(wallPanel(view, s, len, p.a0, p.a1, p.yb, p.yt, wallMat));
 		}
-		for (const o of ops) if (o.glazing) addGlazing(view, mats, scene, s, len, o, o.glazing);
+		// Into the room: the side of the wall facing its centre (every room here is convex).
+		const nx = -(s.bz - s.az) / len;
+		const nz = (s.bx - s.ax) / len;
+		const toCentre = centre
+			? (centre.cx - (s.ax + s.bx) / 2) * nx + (centre.cz - (s.az + s.bz) / 2) * nz
+			: 1;
+		const inward: [number, number] = toCentre >= 0 ? [nx, nz] : [-nx, -nz];
+		for (const o of ops)
+			if (o.glazing) addGlazing(view, mats, scene, s, len, o, o.glazing, inward, physical);
 	});
 	view.scene.add(
 		flat(view, pts, 0, mats.get(surfaceMaterial(scene, room, 'floor'), THREE.DoubleSide)),
@@ -116,22 +134,38 @@ function addGlazing(
 	len: number,
 	o: WallOpening,
 	g: Glazing,
+	inward: [number, number],
+	physical: boolean,
 ): void {
-	const named = (key: string) => {
-		const spec = scene.materials?.[key];
-		if (!spec) throw new Error(`the scene's materials have no "${key}"`);
-		return mats.get(spec, THREE.DoubleSide);
+	const spec = (key: string) => {
+		const m = scene.materials?.[key];
+		if (!m) throw new Error(`the scene's materials have no "${key}"`);
+		return m;
 	};
 	const dx = (s.bx - s.ax) / len;
 	const dz = (s.bz - s.az) / len;
 	for (const p of glazingLayout(o, g)) {
 		const frame = p.kind === 'frame';
-		const geom = view.own(metricBox(p.a1 - p.a0, p.yt - p.yb, frame ? 0.07 : 0.006));
-		const mat = named(
-			frame ? g.frameMaterial : p.kind === 'lower' ? g.lower : (g.upper ?? g.lower),
-		);
-		const mesh = new THREE.Mesh(geom, mat);
 		const along = (p.a0 + p.a1) / 2;
+		const key = frame ? g.frameMaterial : p.kind === 'lower' ? g.lower : (g.upper ?? g.lower);
+		if (physical && !frame) {
+			// The pane as the light it lets in: a diffuse emitter facing the room, which a
+			// path tracer can aim at, instead of a small hole onto the sky it would rarely find.
+			const light = new THREE.RectAreaLight(
+				new THREE.Color(...SKY),
+				windowRadiance(spec(key).transmission ?? 1),
+				p.a1 - p.a0,
+				p.yt - p.yb,
+			);
+			const x = s.ax + dx * along + inward[0] * 0.004;
+			const z = s.az + dz * along + inward[1] * 0.004;
+			light.position.set(x, (p.yb + p.yt) / 2, z);
+			light.lookAt(x + inward[0], (p.yb + p.yt) / 2, z + inward[1]);
+			view.scene.add(light);
+			continue;
+		}
+		const geom = view.own(metricBox(p.a1 - p.a0, p.yt - p.yb, frame ? 0.07 : 0.006));
+		const mesh = new THREE.Mesh(geom, mats.get(spec(key), THREE.DoubleSide));
 		mesh.position.set(s.ax + dx * along, (p.yb + p.yt) / 2, s.az + dz * along);
 		mesh.rotation.y = -Math.atan2(s.bz - s.az, s.bx - s.ax);
 		mesh.castShadow = frame;

@@ -5,6 +5,10 @@ export interface CameraQuery {
 	eye?: [number, number, number];
 	look?: [number, number, number];
 	fov?: number;
+	/** Path-trace with this many samples a pixel: the physically based reference. */
+	trace?: number;
+	/** The camera's exposure, as the phone's: scales the light before tone mapping. */
+	exposure?: number;
 }
 
 function triple(raw: string | null): [number, number, number] | undefined {
@@ -21,5 +25,9 @@ export function cameraFromQuery(search: string): CameraQuery {
 	if (eye) out.eye = eye;
 	if (look) out.look = look;
 	if (q.has('fov') && fov > 5 && fov < 150) out.fov = fov;
+	const trace = Math.round(Number(q.get('trace')));
+	if (trace > 0 && trace <= 100_000) out.trace = trace;
+	const exposure = Number(q.get('exposure'));
+	if (exposure > 0 && Number.isFinite(exposure)) out.exposure = exposure;
 	return out;
 }
