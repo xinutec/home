@@ -45,6 +45,7 @@ export class App implements OnInit, OnDestroy {
 	protected readonly nav: readonly NavItem[] = [
 		{ path: '/environment', label: 'Environment', icon: 'thermostat' },
 		{ path: '/claude', label: 'Claude usage', icon: 'smart_toy' },
+		{ path: '/house', label: 'House', icon: 'home' },
 	];
 
 	protected readonly themeIcon = computed(() => {

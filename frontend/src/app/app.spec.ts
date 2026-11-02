@@ -34,8 +34,8 @@ describe('App', () => {
 		expect(compiled.querySelector('ui-scaffold h1')?.textContent).toContain('Home');
 	});
 
-	it('lists the two views in the nav menu', () => {
+	it('lists the three views in the nav menu', () => {
 		const app = TestBed.createComponent(App).componentInstance;
-		expect(app['nav'].map((n) => n.path)).toEqual(['/environment', '/claude']);
+		expect(app['nav'].map((n) => n.path)).toEqual(['/environment', '/claude', '/house']);
 	});
 });

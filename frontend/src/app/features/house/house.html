@@ -1,0 +1,17 @@
+<div class="wrap">
+	<div #canvas class="canvas"></div>
+
+	<div class="status">
+		@if (loading()) {
+			<mat-progress-bar mode="indeterminate" />
+		} @else if (error()) {
+			<div class="banner banner-error">
+				<mat-icon>cloud_off</mat-icon>
+				<span>Could not load the house layout.</span>
+				<button matButton type="button" (click)="load()">Retry</button>
+			</div>
+		} @else if (empty()) {
+			<p class="empty"><mat-icon>home</mat-icon> No house layout yet.</p>
+		}
+	</div>
+</div>

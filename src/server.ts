@@ -8,6 +8,7 @@ import type { AppEnv } from "./env.js";
 import { mountFrontend } from "./frontend.js";
 import { cleanupExpiredSessions, sessionMiddleware } from "./middleware/session.js";
 import { apiRoutes } from "./routes/api.js";
+import { houseRoutes } from "./routes/house.js";
 import { nextcloudOAuthRoutes } from "./routes/nextcloud-oauth.js";
 
 const config = loadConfig();
@@ -45,6 +46,7 @@ setInterval(sweepSessions, 6 * 60 * 60 * 1000).unref();
 app.route("/", nextcloudOAuthRoutes(config));
 
 app.route("/api", apiRoutes(config.ingestToken));
+app.route("/api", houseRoutes(config.houseScene));
 
 // Never let an unknown /api path fall through to the SPA's 200 + index.html.
 app.all("/api/*", (c) => c.json({ error: "not found" }, 404));

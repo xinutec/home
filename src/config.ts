@@ -14,6 +14,8 @@ const Env = z.object({
 	// would mean a deployment that silently accepts forged sessions.
 	SESSION_SECRET: z.string().min(32),
 	NC_BASE_URL: z.string().url().default("https://dash.xinutec.org"),
+	// The house scene the 3D view draws (scenes/README.md).
+	HOUSE_SCENE: z.string().default("scenes/house.json"),
 });
 
 export interface Config {
@@ -28,6 +30,7 @@ export interface Config {
 	ingestToken: string;
 	sessionSecret: string;
 	nextcloud: { baseUrl: string };
+	houseScene: string;
 }
 
 export function loadConfig(): Config {
@@ -44,5 +47,6 @@ export function loadConfig(): Config {
 		ingestToken: env.INGEST_TOKEN,
 		sessionSecret: env.SESSION_SECRET,
 		nextcloud: { baseUrl: env.NC_BASE_URL },
+		houseScene: env.HOUSE_SCENE,
 	};
 }

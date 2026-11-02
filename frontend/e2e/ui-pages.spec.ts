@@ -1,4 +1,4 @@
-import { test, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import {
 	expectCleanLayout,
 	expectIconFontLoaded,
@@ -8,6 +8,7 @@ import {
 } from '@xinutec/ui-harness';
 import { routesFrom, screens } from '@xinutec/ui-harness/routes';
 import type * as Wire from '../../src/wire';
+import type { HouseScene } from '../src/app/features/house/house.model';
 
 /**
  * Both pages at phone width, backend mocked with busy data: no text collides,
@@ -114,11 +115,33 @@ function usage(): Wire.ClaudeUsage<string> {
 	};
 }
 
+// ⚠ The 3D scene is NOT pixel-checked. `expectCanvasLegible` reads through a 2D
+// context, which a WebGL canvas has not, and `toDataURL` returns blank without
+// `preserveDrawingBuffer`; enabling that would change the thing under test.
+// These cover the states around the canvas, and that it gets real size.
+const HOUSE_SCENE = {
+	height: 2.4,
+	rooms: [
+		{
+			name: 'Kitchen',
+			start: [0, 0] as [number, number],
+			walls: [
+				[3.2, 0],
+				[0, 2.8],
+				[-3.2, 0],
+				[0, -2.8],
+			] as [number, number][],
+		},
+	],
+	furniture: [{ cx: 1.6, cz: 0.6, w: 0.6, d: 0.6, h: 0.9 }],
+} satisfies HouseScene;
+
 /** Catch-all first: Playwright tries the last-registered handler first. */
 async function mockApi(page: Page): Promise<void> {
 	await page.route('**/api/**', (r) => r.fulfill({ status: 204, body: '' }));
 	await page.route('**/api/devices', (r) => r.fulfill({ json: DEVICES }));
 	await page.route('**/api/usage', (r) => r.fulfill({ json: usage() }));
+	await page.route('**/api/house', (r) => r.fulfill({ json: HOUSE_SCENE }));
 	await page.route('**/api/measurements*', (r) => {
 		const device = new URL(r.request().url()).searchParams.get('device') ?? '267F';
 		return r.fulfill({ json: series(device) });
@@ -126,16 +149,13 @@ async function mockApi(page: Page): Promise<void> {
 }
 
 /** Every screen in the route table (`routes.json`), not only those a test opens. */
-for (const { route, url } of screens(
-  routesFrom('e2e/routes.json'),
-  {},
-)) {
-  test(`${route} lays out cleanly @ phone width`, async ({ page }, testInfo) => {
-    await mockApi(page);
-    await page.goto(url);
-    await page.waitForLoadState('networkidle');
-    await expectCleanLayout(page, testInfo);
-  });
+for (const { route, url } of screens(routesFrom('e2e/routes.json'), {})) {
+	test(`${route} lays out cleanly @ phone width`, async ({ page }, testInfo) => {
+		await mockApi(page);
+		await page.goto(url);
+		await page.waitForLoadState('networkidle');
+		await expectCleanLayout(page, testInfo);
+	});
 }
 
 // Without the device preset every check below would pass at desktop width.
@@ -182,4 +202,76 @@ test('claude usage — bars, day ticks and clock mark: lay out cleanly @ phone w
 	await expectIconFontLoaded(page);
 	await expectCleanLayout(page, testInfo);
 	await expectNoStarvedText(page, testInfo);
+});
+
+test('house — a 404 reads as "no layout yet", not as an error @ phone width', async ({
+	page,
+}, testInfo) => {
+	await mockApi(page);
+	// 404 is the ABSENT case and must stay distinguishable from offline, which is
+	// the whole reason the component branches on it.
+	await page.route('**/api/house', (r) => r.fulfill({ status: 404, body: '' }));
+	await page.goto('/house');
+	await page.getByText('No house layout yet.').waitFor();
+	await expectCleanLayout(page, testInfo);
+});
+
+test('house — a 500 offers a retry rather than claiming the house is empty', async ({ page }) => {
+	await mockApi(page);
+	await page.route('**/api/house', (r) => r.fulfill({ status: 500, body: '' }));
+	await page.goto('/house');
+	// The distinction the component exists to make: a failed load must never read
+	// as "you have not built one yet".
+	await expect(page.getByRole('button', { name: /retry/i })).toBeVisible();
+	await expect(page.getByText('No house layout yet.')).toHaveCount(0);
+});
+
+test('house — a scene gives the canvas real size and no layout faults @ phone width', async ({
+	page,
+}, testInfo) => {
+	await mockApi(page);
+	await page.goto('/house');
+	const canvas = page.locator('.canvas canvas');
+	await canvas.waitFor();
+	// A zero-height canvas is the failure this catches: the host is sized by CSS,
+	// and three.js takes its size from the host at init, so a layout regression
+	// upstream leaves a renderer drawing into nothing while the page looks fine.
+	const box = await canvas.boundingBox();
+	expect(box?.width ?? 0).toBeGreaterThan(200);
+	expect(box?.height ?? 0).toBeGreaterThan(200);
+	await expect(page.getByText('No house layout yet.')).toHaveCount(0);
+	await expectCleanLayout(page, testInfo);
+});
+
+// Drawn on demand: an open, untouched house costs nothing, and a drag still
+// moves the view. Counted against requestAnimationFrame, which an always-on
+// loop would call ~60 times a second.
+test('house — idle draws nothing, a drag still redraws', async ({ page }) => {
+	await page.addInitScript(() => {
+		const w = window as unknown as { __frames: number };
+		w.__frames = 0;
+		const raf = window.requestAnimationFrame.bind(window);
+		window.requestAnimationFrame = (cb) => {
+			w.__frames++;
+			return raf(cb);
+		};
+	});
+	await mockApi(page);
+	await page.goto('/house');
+	const canvas = page.locator('.canvas canvas');
+	await canvas.waitFor();
+	await page.waitForTimeout(1_000); // let the first frames and any damping settle
+	const frames = () => page.evaluate(() => (window as unknown as { __frames: number }).__frames);
+	const before = await frames();
+	await page.waitForTimeout(1_000);
+	expect(await frames()).toBeLessThan(before + 10);
+
+	const idle = await frames();
+	const box = (await canvas.boundingBox())!;
+	await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+	await page.mouse.down();
+	await page.mouse.move(box.x + box.width / 2 + 120, box.y + box.height / 2, { steps: 8 });
+	await page.mouse.up();
+	await page.waitForTimeout(300);
+	expect(await frames()).toBeGreaterThan(idle + 5);
 });

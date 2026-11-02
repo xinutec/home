@@ -15,6 +15,22 @@ IQAir (SMB), Govee (BLE) ──▶ Mac / phone ──HTTPS POST /api/ingest─�
                                                       MariaDB ◀── Hono API ──▶ Angular
 ```
 
+## House
+
+`/house` draws the hand-measured rooms and furniture in 3D from
+`scenes/house.json`, served at `/api/house`; `scenes/README.md` is the format.
+`scripts/house-plan.mjs` renders the same file with every furniture box
+numbered, which is how somebody says *which* box is the tall cupboard: the
+scene carries geometry and no labels.
+
+```sh
+./scripts/house-plan.mjs --room kitchen        > plan.svg   # top-down, split by height
+./scripts/house-plan.mjs --room kitchen --iso  > iso.svg    # isometric
+```
+
+Numbering is by index in `scenes/house.json`. Use `--iso` when boxes stack: seen
+from above, a wall unit lands on the base unit under it and the numbers collide.
+
 ## Android app
 
 A full-screen WebView onto the dashboard: [`android/README.md`](android/README.md).
