@@ -108,9 +108,9 @@ Done when the photo mode's region score against keyframe 1 is within a stated
 bound (set once the first numbers are in, not before), for each of daylight with
 the lamp off and, from a second photo, the lamp on.
 
-Cost to check first: the path tracer's size in every page download (the fleet
-loads its whole app; no lazy loading). Measured before adopting it; if it is much
-larger than a few hundred kilobytes, the choice comes back to the owner.
+Its cost, measured: `three-gpu-pathtracer` 0.0.27 with its `three-mesh-bvh` adds
+210 KB minified, 60 KB gzipped, to every page download (the fleet loads its whole
+app; no lazy loading). Within the few hundred kilobytes allowed.
 
 ### 5. Bake it into the everyday view
 
