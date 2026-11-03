@@ -15,11 +15,13 @@ export interface Rect {
 	h: number;
 }
 
-const toLinear = (c: number) => {
+/** An sRGB channel, 0..255, as linear light, 0..1. */
+export const toLinear = (c: number) => {
 	const v = c / 255;
 	return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
 };
-const toSrgb = (v: number) => {
+/** Linear light, 0..1, as an sRGB channel, 0..255. */
+export const toSrgb = (v: number) => {
 	const c = v <= 0.0031308 ? v * 12.92 : 1.055 * v ** (1 / 2.4) - 0.055;
 	return Math.max(0, Math.min(255, c * 255));
 };
@@ -62,4 +64,54 @@ export function regionMean(px: Uint8ClampedArray, width: number, r: Rect): Rgb {
 		}
 	}
 	return [toSrgb(sr / n), toSrgb(sg / n), toSrgb(sb / n)];
+}
+
+/** One region's mean colours, render and photo, with the material it shows. */
+export interface Sample {
+	material: string;
+	area: number;
+	render: Rgb;
+	photo: Rgb;
+}
+
+/**
+ * Each material's reflectance, linear per channel, refitted so the render's
+ * regions take the photo's colours: a diffuse surface's brightness is its
+ * reflectance times the light on it, so the fit scales each reflectance by
+ * photo over render. One scale per channel is left over, the camera's exposure
+ * and white balance; the anchor material, of known reflectance, sets it. The
+ * light itself depends on the paints (it bounces), so the caller re-renders
+ * with the result and fits again until it settles.
+ */
+export function fitReflectance(
+	samples: Sample[],
+	current: Record<string, Rgb>,
+	anchor: { material: string; reflectance: number },
+): Record<string, Rgb> {
+	// Per material, render and photo summed in linear light over its regions' area.
+	const sums = new Map<string, { r: number[]; p: number[] }>();
+	for (const s of samples) {
+		const acc = sums.get(s.material) ?? { r: [0, 0, 0], p: [0, 0, 0] };
+		for (let c = 0; c < 3; c++) {
+			acc.r[c] += toLinear(s.render[c]) * s.area;
+			acc.p[c] += toLinear(s.photo[c]) * s.area;
+		}
+		sums.set(s.material, acc);
+	}
+	const a = sums.get(anchor.material);
+	const ra = current[anchor.material];
+	if (!a || !ra) throw new Error(`no region shows the anchor, ${anchor.material}`);
+	// photo / render for the anchor, over its reflectance's share of what it should be.
+	const scale = [0, 1, 2].map((c) => ((a.p[c] / a.r[c]) * ra[c]) / anchor.reflectance);
+	const out: Record<string, Rgb> = {};
+	for (const [m, acc] of sums) {
+		const now = current[m];
+		if (!now) continue;
+		const fit = [0, 1, 2].map((c) =>
+			Math.min(0.95, Math.max(0.01, (now[c] * acc.p[c]) / acc.r[c] / scale[c])),
+		);
+		out[m] = [fit[0], fit[1], fit[2]];
+	}
+	out[anchor.material] = [anchor.reflectance, anchor.reflectance, anchor.reflectance];
+	return out;
 }

@@ -32,21 +32,21 @@ how it is judged done.
 
 ## Next up
 
-1. **Fit the paints (step 2)** under the traced light, anchored on the ceiling,
-   and check them on keyframe 822: the wall, ceiling and carpet must come out the
-   same from both photos. Its window frames cannot be the second anchor the plan
-   hoped for: about 10 px wide, backlit, in the glare of panes that clip to white.
-   Keyframe 1's trace has the ceiling ×1.53 too bright against the walls and the
-   carpet ×0.70: either the wall paint is lighter than its estimate (about 0.55
-   instead of 0.39 would explain the ceiling alone), or the windows light the
-   ceiling too much. They are drawn as even diffusers, which suits the frosted
-   lower panes but not the clear openers above, whose daylight mostly goes down.
-   If the two photos disagree, the windows are the suspect: give a pane's light
-   its direction, sky above the horizon and ground below. Keyframe 822 shows the
-   garden in sun, which the overcast sky does not have; its brightness says less
-   about the light than its colours do.
-2. **Bake the traced light into the everyday view (step 5).**
-3. Whatever the measuring session brings: replace each estimate and delete its note.
+1. **Windows that light like windows.** The paint fit (step 2) found the light
+   wrong, not the paints: anchored on the ceiling, keyframe 1 fits plausible
+   paints (wall 0.5, sideboard 0.65) but a carpet of 0.37 and oak of 0.55, both
+   too light, and keyframe 822, nearer the bay, cannot fit at all: its ceiling is
+   so much brighter than the rest that every other paint, the charcoal sofa
+   included, is pushed to the 0.95 limit. The ceiling gets too much light, more so
+   near the windows: a pane is drawn as an even diffuser, sending as much up as
+   down, where daylight comes mostly down from the sky, and only the ground's
+   share goes up. Done when a pane's light leaves by direction, and both photos fit
+   the same paints. Keyframe 822 has the garden in sun, which the overcast sky
+   lacks.
+2. **Fit the paints** with `compare-view --fit`, then check them on the other
+   photo; write them into the scene once both agree.
+3. **Bake the traced light into the everyday view (step 5).**
+4. Whatever the measuring session brings: replace each estimate and delete its note.
 
 ## Where it stands
 
@@ -144,6 +144,14 @@ paper worth taking.
 Done when the scene's paints are the fitted values, each still marked an estimate
 until a second photo agrees.
 
+**Built.** Each region in `scenes/photos.json` names its `material`;
+`compare-view --trace N --fit R --exposure E` traces in linear light
+(`?tone=linear`), refits each material from photo over render in R rounds (the
+light bounces off the paints it depends on), anchored on `--anchor`
+(`ceiling-paint`) at 0.85, never on clipped pixels, then balances the render's
+white as the phone did and scores it. The fitted colours are printed, not
+written. The phone's own tone curve is unknown and taken as none.
+
 ### 3. Measure the match
 
 `compare-view.ts` gains regions marked once per photo (wall, ceiling, carpet,
@@ -167,6 +175,11 @@ recording, so no picture of the house is in the repository.
 | Step | living-kf822 score (mean ΔE) | Worst regions |
 | --- | --- | --- |
 | Solved camera, first regions; raster | 12.1 | bay sofa seat 25.9 (×0.15), curtain 20.8 (×0.25): the darks are far too dark; bay reveal 8.6, ceiling 7.7 |
+| Paints fitted to this photo, traced | 10.8 | no fit: every paint but the ceiling at the 0.95 limit |
+
+On keyframe 1, paints fitted to it score 4.7 traced (sideboard door 1.2, fire
+surround 1.7, carpet 2.1; alcove side wall 10.1, TV 8.0), but they are not in the
+scene: keyframe 822 disagrees, so part of the fit is the light's error.
 
 From the solved camera on, scores are not comparable with the rows above: the
 regions moved with it. The oak top is gone as a region (from 0.84 m only its

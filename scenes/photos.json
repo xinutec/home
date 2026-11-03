@@ -7,13 +7,13 @@
       "source": {"capture": "capture_20260926_154507", "keyframe": 1, "rotate": 90},
       "camera": {"eye": [-0.423, 0.842, 2.709], "look": [-0.469, 0.649, -0.284], "fov": 69, "roll": 1.4},
       "regions": {
-        "ceiling": {"x": 150, "y": 10, "w": 220, "h": 24},
-        "chimney-breast": {"x": 400, "y": 200, "w": 130, "h": 90},
-        "alcove-side-wall": {"x": 22, "y": 420, "w": 38, "h": 140},
+        "ceiling": {"x": 150, "y": 10, "w": 220, "h": 24, "material": "ceiling-paint"},
+        "chimney-breast": {"x": 400, "y": 200, "w": 130, "h": 90, "material": "wall-paint"},
+        "alcove-side-wall": {"x": 22, "y": 420, "w": 38, "h": 140, "material": "wall-paint"},
         "tv-screen": {"x": 150, "y": 300, "w": 180, "h": 90},
-        "carpet": {"x": 40, "y": 780, "w": 340, "h": 160},
-        "sideboard-door": {"x": 90, "y": 532, "w": 60, "h": 66},
-        "fire-surround": {"x": 440, "y": 440, "w": 36, "h": 160}
+        "carpet": {"x": 40, "y": 780, "w": 340, "h": 160, "material": "carpet"},
+        "sideboard-door": {"x": 90, "y": 532, "w": 60, "h": 66, "material": "sideboard-paint"},
+        "fire-surround": {"x": 440, "y": 440, "w": 36, "h": 160, "material": "oak"}
       },
       "sightings": [
         {"what": "alcove corner (side wall, back wall), near the top", "line": [[-1.32, 0, -0.35], [-1.32, 2.4, -0.35]], "px": [64.5, 90]},
@@ -36,12 +36,12 @@
       "source": {"capture": "capture_20260926_154507", "keyframe": 822, "rotate": 90},
       "camera": {"eye": [-0.59, 0.951, 1.059], "look": [2.383, 0.563, 1.154], "fov": 69, "roll": -0.7},
       "regions": {
-        "ceiling": {"x": 150, "y": 8, "w": 330, "h": 22},
-        "wall-left": {"x": 26, "y": 130, "w": 64, "h": 220},
-        "bay-reveal": {"x": 112, "y": 160, "w": 18, "h": 180},
-        "curtain": {"x": 152, "y": 160, "w": 26, "h": 180},
-        "bay-sofa-seat": {"x": 330, "y": 480, "w": 90, "h": 50},
-        "carpet": {"x": 330, "y": 640, "w": 190, "h": 55}
+        "ceiling": {"x": 150, "y": 8, "w": 330, "h": 22, "material": "ceiling-paint"},
+        "wall-left": {"x": 26, "y": 130, "w": 64, "h": 220, "material": "wall-paint"},
+        "bay-reveal": {"x": 112, "y": 160, "w": 18, "h": 180, "material": "wall-paint"},
+        "curtain": {"x": 152, "y": 160, "w": 26, "h": 180, "material": "curtain-fabric"},
+        "bay-sofa-seat": {"x": 330, "y": 480, "w": 90, "h": 50, "material": "sofa-charcoal"},
+        "carpet": {"x": 330, "y": 640, "w": 190, "h": 55, "material": "carpet"}
       },
       "sightings": [
         {"what": "bay opening, top edge on the room side", "line": [[2.58, 2.22, 0.46], [2.58, 2.22, 2.86]], "px": [250, 88.75]},

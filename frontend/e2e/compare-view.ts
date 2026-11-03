@@ -20,8 +20,15 @@ import { chromium } from '@playwright/test';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { deltaE, luminance, regionMean } from '../src/app/features/house/colour-match.ts';
-import type { Rect } from '../src/app/features/house/colour-match.ts';
+import {
+	deltaE,
+	fitReflectance,
+	luminance,
+	regionMean,
+	toLinear,
+	toSrgb,
+} from '../src/app/features/house/colour-match.ts';
+import type { Rect, Rgb, Sample } from '../src/app/features/house/colour-match.ts';
 import { keyframe, uprightLens } from './keyframe.ts';
 
 interface PhotoRecord {
@@ -29,7 +36,7 @@ interface PhotoRecord {
 	room: string;
 	source: { capture: string; keyframe: number; rotate: 0 | 90 };
 	camera: { eye: number[]; look: number[]; fov: number; roll?: number };
-	regions: Record<string, Rect>;
+	regions: Record<string, Rect & { material?: string }>;
 }
 
 const { values: args } = parseArgs({
@@ -45,6 +52,8 @@ const { values: args } = parseArgs({
 		trace: { type: 'string' },
 		exposure: { type: 'string', default: '1' },
 		'fixed-exposure': { type: 'boolean', default: false },
+		fit: { type: 'string' },
+		anchor: { type: 'string', default: 'ceiling-paint' },
 	},
 });
 
@@ -76,6 +85,8 @@ function photoRecord(id: string): PhotoRecord {
 const ORIGIN = 'https://home.xinutec.org';
 const DIST = new URL('../dist/frontend/browser', import.meta.url).pathname;
 const SCENE = join(ROOT, 'scenes/house.json');
+// What the page is served as the scene: the file, or the file with fitted paints.
+let sceneBody = readFileSync(SCENE, 'utf8');
 const TYPES: Record<string, string> = {
 	'.js': 'text/javascript',
 	'.css': 'text/css',
@@ -126,7 +137,7 @@ if (!args.deployed) {
 			: route.fulfill({ body: readFileSync(`${DIST}/index.html`), contentType: 'text/html' });
 	});
 	await ctx.route('**/api/house', (route) =>
-		route.fulfill({ body: readFileSync(SCENE), contentType: 'application/json' }),
+		route.fulfill({ body: sceneBody, contentType: 'application/json' }),
 	);
 }
 
@@ -140,6 +151,7 @@ async function renderAt(exposure: number): Promise<Buffer> {
 		exposure: String(exposure),
 	});
 	if (args.trace) q.set('trace', args.trace);
+	if (args.fit) q.set('tone', 'linear');
 	await page.goto(`${ORIGIN}/house/${room}?${q.toString()}`, { waitUntil: 'networkidle' });
 	const canvas = page.locator('.canvas canvas');
 	await canvas.waitFor();
@@ -155,17 +167,19 @@ const side = await ctx.newPage();
 await side.setViewportSize({ width: W * 2 + 12, height: H });
 const regions = record?.regions ?? {};
 
-/** Draws the render and the photo side by side; returns both canvases' pixels. */
+/** Draws the render and the photo side by side; returns both canvases' pixels.
+ *  `balance` scales the render's channels in linear light, as a white balance. */
 async function lay(
 	render: Buffer,
 	outline: boolean,
+	balance: number[] = [1, 1, 1],
 ): Promise<[Uint8ClampedArray, Uint8ClampedArray]> {
 	await side.setContent(
 		`<body style="margin:0;background:#222;display:flex;gap:12px">` +
 			`<canvas id="r" width="${W}" height="${H}"></canvas><canvas id="p" width="${W}" height="${H}"></canvas></body>`,
 	);
 	const data = await side.evaluate(
-		async ({ render, photo, rotate, level, W, H, regions, outline }) => {
+		async ({ render, photo, rotate, level, W, H, regions, outline, balance }) => {
 			const load = (src: string) =>
 				new Promise<HTMLImageElement>((ok, fail) => {
 					const img = new Image();
@@ -190,6 +204,18 @@ async function lay(
 				return g;
 			};
 			const gr = draw('r', await load(render), 0);
+			if (balance.some((b) => b !== 1)) {
+				const img = gr.getImageData(0, 0, W, H);
+				const d = img.data;
+				for (let i = 0; i < d.length; i += 4)
+					for (let c = 0; c < 3; c++) {
+						const v = d[i + c] / 255;
+						const lin = (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4) * balance[c];
+						const out = lin <= 0.0031308 ? lin * 12.92 : 1.055 * lin ** (1 / 2.4) - 0.055;
+						d[i + c] = Math.round(Math.max(0, Math.min(1, out)) * 255);
+					}
+				gr.putImageData(img, 0, 0);
+			}
 			const gp = draw('p', await load(photo), rotate, level);
 			const out = [
 				Array.from(gr.getImageData(0, 0, W, H).data),
@@ -218,6 +244,7 @@ async function lay(
 			H,
 			regions,
 			outline,
+			balance,
 		},
 	);
 	return [new Uint8ClampedArray(data[0]), new Uint8ClampedArray(data[1])];
@@ -235,10 +262,79 @@ function brightness(rpx: Uint8ClampedArray, ppx: Uint8ClampedArray): number {
 	return r / Math.max(p, 1e-9);
 }
 
+const hexOf = (c: Rgb) => `#${c.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')}`;
+const linearOf = (hex: string): Rgb => {
+	const n = Number.parseInt(hex.slice(1), 16);
+	return [toLinear((n >> 16) & 255), toLinear((n >> 8) & 255), toLinear(n & 255)];
+};
+
+/** The share of a region's pixels with a channel at white. */
+function clippedShare(px: Uint8ClampedArray, r: Rect): number {
+	let n = 0;
+	for (let y = r.y; y < r.y + r.h; y++)
+		for (let x = r.x; x < r.x + r.w; x++) {
+			const i = (y * W + x) * 4;
+			if (px[i] === 255 || px[i + 1] === 255 || px[i + 2] === 255) n++;
+		}
+	return n / (r.w * r.h);
+}
+
+/**
+ * --fit N: the paints refitted to the photo in N rounds, each a linear trace with
+ * the last round's paints (the light bounces off them), anchored on --anchor at
+ * 0.85. The page then renders the fitted scene; the fitted colours are printed for
+ * scenes/house.json, which is not written.
+ */
+async function fitPaints(rounds: number): Promise<void> {
+	if (!record || !args.trace) throw new Error('--fit needs --photo-id and --trace');
+	const scene = JSON.parse(sceneBody) as { materials: Record<string, { color: string }> };
+	const start = Object.fromEntries(Object.entries(scene.materials).map(([k, m]) => [k, m.color]));
+	for (let round = 1; round <= rounds; round++) {
+		const [rpx, ppx] = await lay(await renderAt(exposure), false);
+		// A clipped pixel says only "at least this bright": fit no region with many
+		// (a few are the trace's noise).
+		const clipped = Object.values(record.regions).filter(
+			(r) => r.material && clippedShare(rpx, r) > 0.02,
+		);
+		if (clipped.length) {
+			console.log(
+				`  ${clipped.map((r) => r.material).join(', ')} clipped at exposure ${exposure.toFixed(1)}; halving it`,
+			);
+			exposure /= 2;
+			round--;
+			continue;
+		}
+		const samples: Sample[] = [];
+		for (const r of Object.values(record.regions)) {
+			if (!r.material) continue;
+			const render = regionMean(rpx, W, r);
+			samples.push({ material: r.material, area: r.w * r.h, render, photo: regionMean(ppx, W, r) });
+		}
+		const current = Object.fromEntries(
+			samples.map((s) => [s.material, linearOf(scene.materials[s.material].color)]),
+		);
+		const fitted = fitReflectance(samples, current, { material: args.anchor, reflectance: 0.85 });
+		for (const [m, rho] of Object.entries(fitted))
+			scene.materials[m].color = hexOf([toSrgb(rho[0]), toSrgb(rho[1]), toSrgb(rho[2])]);
+		sceneBody = JSON.stringify(scene);
+		// Linear: the next round's exposure keeps the regions as bright as the photo's.
+		exposure /= brightness(rpx, ppx);
+		console.log(`fit round ${round}:`);
+		for (const m of Object.keys(fitted)) {
+			const rho = fitted[m];
+			const lum = 0.2126 * rho[0] + 0.7152 * rho[1] + 0.0722 * rho[2];
+			console.log(
+				`  ${m.padEnd(16)} ${start[m]} → ${scene.materials[m].color}  reflectance ${lum.toFixed(2)}`,
+			);
+		}
+	}
+}
+
 // Exposure as a camera's: one number for the whole picture, set so the regions
 // together are as bright as in the photo, never per region (that would hide a
 // colour error). Tone mapping is not linear, so a few rounds.
 let exposure = Number(args.exposure);
+if (args.fit && record) await fitPaints(Number(args.fit));
 let render = await renderAt(exposure);
 if (record && !args['fixed-exposure']) {
 	for (let round = 0; round < 4; round++) {
@@ -249,14 +345,31 @@ if (record && !args['fixed-exposure']) {
 		render = await renderAt(exposure);
 	}
 }
-const [rpx, ppx] = await lay(render, true);
+// A linear render has no white balance, and the phone set its own: balance the
+// render as the phone did, so the anchor has the photo's colour (its brightness is
+// the exposure's).
+let balance = [1, 1, 1];
+if (args.fit && record) {
+	const [r0, p0] = await lay(render, false);
+	const sum = (px: Uint8ClampedArray) => {
+		const acc = [0, 0, 0];
+		for (const r of Object.values(record.regions))
+			if (r.material === args.anchor)
+				regionMean(px, W, r).forEach((v, c) => (acc[c] += toLinear(v) * r.w * r.h));
+		return acc;
+	};
+	const [rs, ps] = [sum(r0), sum(p0)];
+	const gain = [0, 1, 2].map((c) => ps[c] / rs[c]);
+	const lum = 0.2126 * gain[0] + 0.7152 * gain[1] + 0.0722 * gain[2];
+	balance = gain.map((g) => g / lum);
+	console.log(`white balance ${balance.map((b) => b.toFixed(3)).join(' ')}`);
+}
+const [rpx, ppx] = await lay(render, true, balance);
 writeFileSync(args.out, await side.screenshot());
 await browser.close();
 
 console.log(`${args.out}: render (left) beside ${record ? record.id : args.photo} (right)`);
 if (record) {
-	const hex = (c: number[]) =>
-		`#${c.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')}`;
 	let sum = 0;
 	console.log(
 		`\n${args.trace ? `path-traced, ${args.trace} samples` : 'raster'}; exposure ${exposure.toFixed(3)}`,
@@ -271,7 +384,7 @@ if (record) {
 		sum += d;
 		const ratio = luminance(a) / Math.max(luminance(b), 1e-6);
 		console.log(
-			`${name.padEnd(18)} ${hex(a).padEnd(8)} ${hex(b).padEnd(8)} ${d.toFixed(1).padStart(5)}  ×${ratio.toFixed(2)}`,
+			`${name.padEnd(18)} ${hexOf(a).padEnd(8)} ${hexOf(b).padEnd(8)} ${d.toFixed(1).padStart(5)}  ×${ratio.toFixed(2)}`,
 		);
 	}
 	console.log(

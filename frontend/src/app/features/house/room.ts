@@ -31,6 +31,7 @@ import { ThreeView } from './three-view';
  * `?trace=N` is the physically based reference: lit only by the sky outside,
  * through the windows, and path-traced to N samples a pixel, after which the
  * canvas carries `data-traced`. Without it, the approximate everyday view.
+ * `?tone=linear` drops the tone curve, so a pixel is exposure times radiance.
  */
 @Component({
 	selector: 'app-room',
@@ -57,7 +58,8 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 
 	ngAfterViewInit(): void {
 		const view = new ThreeView(this.host().nativeElement, this.zone, (r) => {
-			r.toneMapping = THREE.ACESFilmicToneMapping;
+			// Linear still scales by the exposure; NoToneMapping would drop it too.
+			r.toneMapping = this.query.linear ? THREE.LinearToneMapping : THREE.ACESFilmicToneMapping;
 			r.outputColorSpace = THREE.SRGBColorSpace;
 			r.shadowMap.enabled = true;
 			r.shadowMap.type = THREE.PCFSoftShadowMap;

@@ -15,6 +15,11 @@ describe('cameraFromQuery', () => {
 		expect(cameraFromQuery('?trace=0&exposure=-1')).toEqual({});
 	});
 
+	it('reads a linear tone, and nothing else as one', () => {
+		expect(cameraFromQuery('?tone=linear')).toEqual({ linear: true });
+		expect(cameraFromQuery('?tone=aces')).toEqual({});
+	});
+
 	it('takes only what is given', () => {
 		expect(cameraFromQuery('?fov=50')).toEqual({ fov: 50 });
 		expect(cameraFromQuery('')).toEqual({});
