@@ -28,6 +28,34 @@
         {"what": "sideboard top, front edge, right end", "at": [-0.075, 0.8125, 0], "px": [358.25, 442]},
         {"what": "mantel shelf, front left top corner", "at": [0.135, 1.04, 0.21], "px": [424, 381.5]}
       ]
+    },
+    {
+      "id": "living-kf822",
+      "room": "living",
+      "note": "The bay from the room: the three windows, frosted lower panes in sun, the bay sofa, the IKEA cupboard at the left edge.",
+      "source": {"capture": "capture_20260926_154507", "keyframe": 822, "rotate": 90},
+      "camera": {"eye": [-0.59, 0.951, 1.059], "look": [2.383, 0.563, 1.154], "fov": 69, "roll": -0.7},
+      "regions": {
+        "ceiling": {"x": 150, "y": 8, "w": 330, "h": 22},
+        "wall-left": {"x": 26, "y": 130, "w": 64, "h": 220},
+        "bay-reveal": {"x": 112, "y": 160, "w": 18, "h": 180},
+        "curtain": {"x": 152, "y": 160, "w": 26, "h": 180},
+        "bay-sofa-seat": {"x": 330, "y": 480, "w": 90, "h": 50},
+        "carpet": {"x": 330, "y": 640, "w": 190, "h": 55}
+      },
+      "sightings": [
+        {"what": "bay opening, top edge on the room side", "line": [[2.58, 2.22, 0.46], [2.58, 2.22, 2.86]], "px": [250, 88.75]},
+        {"what": "bay opening, top edge on the room side", "line": [[2.58, 2.22, 0.46], [2.58, 2.22, 2.86]], "px": [350, 88.75]},
+        {"what": "bay opening, left edge on the room side", "line": [[2.58, 0, 0.46], [2.58, 2.22, 0.46]], "px": [84, 100]},
+        {"what": "bay opening, left edge on the room side", "line": [[2.58, 0, 0.46], [2.58, 2.22, 0.46]], "px": [93, 240]},
+        {"what": "IKEA cupboard, front corner on the bay side", "line": [[2.11, 0, 0.47], [2.11, 0.9, 0.47]], "px": [84, 425]},
+        {"what": "IKEA cupboard, front corner on the bay side", "line": [[2.11, 0, 0.47], [2.11, 0.9, 0.47]], "px": [85.5, 590]},
+        {"what": "IKEA cupboard, top of that corner", "at": [2.11, 0.9, 0.47], "px": [83.5, 401.5]},
+        {"what": "bay middle window, top of its frame", "line": [[3.3, 2.15, 0.96], [3.3, 2.15, 2.36]], "px": [300, 158]},
+        {"what": "bay middle window, top of its frame", "line": [[3.3, 2.15, 0.96], [3.3, 2.15, 2.36]], "px": [425, 159.5]},
+        {"what": "bay middle window, the mullion between its openers", "line": [[3.3, 1.82, 1.66], [3.3, 2.15, 1.66]], "px": [345.5, 170]},
+        {"what": "bay middle window, the mullion between its openers", "line": [[3.3, 1.82, 1.66], [3.3, 2.15, 1.66]], "px": [345, 205]}
+      ]
     }
   ]
 }

@@ -32,18 +32,21 @@ how it is judged done.
 
 ## Next up
 
-1. **Windows that light like windows.** A pane is drawn as a diffuse light, sending
-   as much up to the ceiling as down to the floor; daylight through a window comes
-   mostly down from the sky, and only the ground's reflection goes up. Under the
-   solved camera the trace has the ceiling ×1.53 too bright and the carpet ×0.70
-   too dark: that pattern. Done when a pane's light leaves by direction, sky above
-   the horizon and ground below.
-2. **Record keyframe 421** (the bay) in `scenes/photos.json` with its sightings,
-   solved camera and regions; the fireplace-side IKEA cupboard is on its left.
-3. **Fit the paints (step 2)** from keyframe 1 under the traced light, anchored on
-   the ceiling, and check them against keyframe 421.
-4. **Bake the traced light into the everyday view (step 5).**
-5. Whatever the measuring session brings: replace each estimate and delete its note.
+1. **Fit the paints (step 2)** under the traced light, anchored on the ceiling,
+   and check them on keyframe 822: the wall, ceiling and carpet must come out the
+   same from both photos. Its window frames cannot be the second anchor the plan
+   hoped for: about 10 px wide, backlit, in the glare of panes that clip to white.
+   Keyframe 1's trace has the ceiling ×1.53 too bright against the walls and the
+   carpet ×0.70: either the wall paint is lighter than its estimate (about 0.55
+   instead of 0.39 would explain the ceiling alone), or the windows light the
+   ceiling too much. They are drawn as even diffusers, which suits the frosted
+   lower panes but not the clear openers above, whose daylight mostly goes down.
+   If the two photos disagree, the windows are the suspect: give a pane's light
+   its direction, sky above the horizon and ground below. Keyframe 822 shows the
+   garden in sun, which the overcast sky does not have; its brightness says less
+   about the light than its colours do.
+2. **Bake the traced light into the everyday view (step 5).**
+3. Whatever the measuring session brings: replace each estimate and delete its note.
 
 ## Where it stands
 
@@ -51,12 +54,14 @@ how it is judged done.
   tape-measured; doorways have their wall thickness (floor, soffit, jambs). Ceiling
   height is the house-wide 2.4 m, not measured in this room.
 - **Windows:** the bay's three, as glazing in their openings (frame, transom,
-  frosted lower pane, clear openers), estimates from keyframe 421.
+  frosted lower pane, clear openers), estimates from keyframe 822.
 - **Furniture:** the sideboard as a real assembly (top, carcass, legs, two sliding
   drawers, three hinged doors, knobs); the TV on its wall bracket; the hearth, fire
   surround, mantel shelf and two IKEA cupboards as boxes; the curtains on their
   pole, both sofas, the armchair, the bean bag, the mat and the ceiling light as
-  estimated blocks. `./scripts/estimates.mjs` lists every estimate.
+  estimated blocks. The mat is placed through the two solved cameras (it runs
+  toward the bay, not across the room as first drawn), and the bean bag rests on
+  its far end. `./scripts/estimates.mjs` lists every estimate.
 - **Physics:** `physics.ts`, run on the real scene by `scene-physics.spec.ts`; the
   kitchen's known findings are listed there by name.
 - **Materials:** physically based, with procedural wood grain and carpet; the
@@ -71,14 +76,18 @@ how it is judged done.
   `node e2e/solve-camera.ts --photo-id ID`, through the lens its recording names:
   keyframe 1 was taken at 0.84 m, not the 1.45 m first guessed, pitched 3.7° down
   and rolled 1.4°, missing its sightings by 4 px rms (the TV's and sideboard's
-  sizes are estimates). The phone's portrait keyframes have a 69° vertical field
+  sizes are estimates). Keyframe 822, the bay, from 0.95 m by the sideboard alcove,
+  looking at the bay, 2.4 px rms; its sightings are the bay opening (measured), the
+  middle window's head and mullion and the IKEA cupboard (estimates). The phone's portrait keyframes have a 69° vertical field
   of view and their principal point 12 px left of centre; compare-view turns the
   photo back by its roll about that point, so both frame the same level view,
   which leaves a blank strip down the photo's left edge that regions keep clear of.
 - **Comparison:** `node e2e/compare-view.ts --photo-id living-kf1 [--trace 256]`,
   scored region by region; the photo is cut from observe's recording
   (`$OBSERVE_ARCHIVE`). Traces need the real GPU (headless Chromium with Metal);
-  256 samples take about 1.5 minutes a render.
+  256 samples take about 1.5 minutes a render. A keyframe's number, here and in
+  the scene's estimates, is its place among the recording's keyframes, as
+  `e2e/keyframe.ts` counts them (822 in `capture_20260926_154507`).
 
 ## What realistic light needs that is missing
 
@@ -112,7 +121,7 @@ how it is judged done.
 Done when the physics passes and the side-by-side shows each piece where the photo
 has it.
 
-**Done so far, from keyframe 421 (estimates until the tape replaces them):** the
+**Done so far, from keyframe 822 (estimates until the tape replaces them):** the
 bay has no net curtains; its soft light comes through **frosted lower panes**,
 with clear top openers above. Windows are part of an opening (`glazing`: frame,
 transom, upper panes, materials), drawn along whatever wall holds them, the angled
@@ -127,8 +136,8 @@ outlines, which showed as a white strip on the floor.
 A photo's brightness is paint times light; with the light simulated (step 4), each
 material's colour is fitted so its regions match the photo. One overall scale is
 left, which the exposure absorbs; it is anchored on the ceiling (white emulsion,
-about 0.85), with the white window frames (about 0.8) and the black TV (about
-0.05) as checks. A second photo (keyframe 421) checks the fit: the same paint must
+about 0.85), with the black TV (about 0.05) as a check, and the white window
+frames (about 0.8) once a photo shows them larger than keyframe 822 does. A second photo (keyframe 822) checks the fit: the same paint must
 come out the same from both. Only if they disagree is a photo with a sheet of white
 paper worth taking.
 
@@ -154,6 +163,10 @@ recording, so no picture of the house is in the repository.
 | Path-traced reference: overcast sky, windows as diffuse area lights, 256 samples | 9.9 | oak top 22.5 (a 7 px strip now in shadow: too thin to judge), alcove side wall 16.6 (×1.58: lit by the bay; the sofas and curtains that shade it are still blocks), fire surround 10.9; sideboard door 11.2 → 6.0 with no paint change |
 | Solved camera (0.84 m high, not 1.45 m), regions reset; raster | 13.2 | TV screen 41.8 (the generic environment's bright lamps, reflected), alcove side wall 15.3, sideboard door 13.6 (×1.60) |
 | The same, path-traced, 256 samples | 7.9 | ceiling 12.7 (×1.53), alcove side wall 12.0, fire surround 11.0, carpet 7.2 (×0.70); TV screen 3.7 |
+
+| Step | living-kf822 score (mean ΔE) | Worst regions |
+| --- | --- | --- |
+| Solved camera, first regions; raster | 12.1 | bay sofa seat 25.9 (×0.15), curtain 20.8 (×0.25): the darks are far too dark; bay reveal 8.6, ceiling 7.7 |
 
 From the solved camera on, scores are not comparable with the rows above: the
 regions moved with it. The oak top is gone as a region (from 0.84 m only its
