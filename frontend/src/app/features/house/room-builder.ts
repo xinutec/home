@@ -42,7 +42,11 @@ export function buildInterior(
 	for (const f of scene.furniture) {
 		const parts = partsOf(f);
 		solidsOf(f).forEach((sol, k) => {
-			const geom = view.own(metricBox(sol.hw * 2, sol.y1 - sol.y0, sol.hd * 2));
+			const geom = view.own(
+				parts[k].shape === 'cylinder'
+					? new THREE.CylinderGeometry(sol.hw, sol.hw, sol.hd * 2, 32).rotateX(Math.PI / 2)
+					: metricBox(sol.hw * 2, sol.y1 - sol.y0, sol.hd * 2),
+			);
 			const mesh = new THREE.Mesh(geom, mats.get(partMaterial(scene, f, parts[k])));
 			mesh.position.set(sol.x, (sol.y0 + sol.y1) / 2, sol.z);
 			mesh.rotation.y = sol.yaw;

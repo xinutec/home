@@ -46,6 +46,9 @@ export interface Part {
 	/** The part this one is fixed to, and moves with. */
 	parent?: string;
 	joint?: Joint;
+	/** Drawn round, its axis front to back: diameter the size's x, length its z. The
+	 *  physics holds it to its box, which contains it. */
+	shape?: 'cylinder';
 }
 
 /** An opening (doorway / window / wide cased passage) cut into one of a room's

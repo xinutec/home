@@ -61,8 +61,11 @@ how it is judged done.
   height is the house-wide 2.4 m, not measured in this room.
 - **Windows:** the bay's three, as glazing in their openings (frame, transom,
   frosted lower pane, clear openers), estimates from keyframe 822.
-- **Furniture:** the sideboard as a real assembly (top, carcass, legs, two sliding
-  drawers, three hinged doors, knobs); the TV on its wall bracket; the hearth, fire
+- **Furniture:** the sideboard as its real construction, laid out from keyframe 53
+  straightened to the front's plane: an oak top with a 2 cm overhang, corner posts
+  that are its legs, a face frame (top rail, apron), two flush sliding drawers,
+  three shaker doors (frame and recessed panel) on hinges, and round knobs
+  (`"shape": "cylinder"`), all held by the physics; the TV on its wall bracket; the hearth, fire
   surround, mantel shelf and two IKEA cupboards as boxes; the curtains on their
   pole, both sofas, the armchair, the bean bag, the mat and the ceiling light as
   estimated blocks. The mat is placed through the two solved cameras (it runs
@@ -177,6 +180,9 @@ recording, so no picture of the house is in the repository.
 | Path-traced reference: overcast sky, windows as diffuse area lights, 256 samples | 9.9 | oak top 22.5 (a 7 px strip now in shadow: too thin to judge), alcove side wall 16.6 (×1.58: lit by the bay; the sofas and curtains that shade it are still blocks), fire surround 10.9; sideboard door 11.2 → 6.0 with no paint change |
 | Solved camera (0.84 m high, not 1.45 m), regions reset; raster | 13.2 | TV screen 41.8 (the generic environment's bright lamps, reflected), alcove side wall 15.3, sideboard door 13.6 (×1.60) |
 | The same, path-traced, 256 samples | 7.9 | ceiling 12.7 (×1.53), alcove side wall 12.0, fire surround 11.0, carpet 7.2 (×0.70); TV screen 3.7 |
+
+| Clear openers drawn as glass (light unchanged otherwise), traced 256 | 8.3 | ceiling 15.3: worse than 7.9, against the rule that a worse change is undone; kept because it is the true light, and with fitted paints the two are level (4.7 and 4.8), while these rows use estimated paints |
+| The sideboard's real construction, A/B under that light (`--scene` the old file) | 8.9 | sideboard door 7.0 → 6.9: unchanged; the rest moved with the exposure (one number fitted over all regions). A region's mean colour cannot see shape: detail is judged on the side-by-side, where the trace now draws the gaps and panel edges as the photo's shadow lines |
 
 | Step | living-kf822 score (mean ΔE) | Worst regions |
 | --- | --- | --- |

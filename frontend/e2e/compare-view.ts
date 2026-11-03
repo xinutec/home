@@ -54,6 +54,7 @@ const { values: args } = parseArgs({
 		'fixed-exposure': { type: 'boolean', default: false },
 		fit: { type: 'string' },
 		anchor: { type: 'string', default: 'ceiling-paint' },
+		scene: { type: 'string' },
 	},
 });
 
@@ -84,7 +85,8 @@ function photoRecord(id: string): PhotoRecord {
 
 const ORIGIN = 'https://home.xinutec.org';
 const DIST = new URL('../dist/frontend/browser', import.meta.url).pathname;
-const SCENE = join(ROOT, 'scenes/house.json');
+// --scene renders another scene file in its place: an A/B against an older version.
+const SCENE = args.scene ? resolve(args.scene) : join(ROOT, 'scenes/house.json');
 // What the page is served as the scene: the file, or the file with fitted paints.
 let sceneBody = readFileSync(SCENE, 'utf8');
 const TYPES: Record<string, string> = {

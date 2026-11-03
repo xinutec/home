@@ -11,7 +11,8 @@ The Angular dashboard. Run the commands here, in the flake's dev shell.
 - `node e2e/compare-view.ts --photo-id living-kf1` — a room render beside the
   photo it should match, from the same spot, scored region by region
   (`scenes/photos.json`; the photo is read from observe's recording);
-  `--trace 128 --fit 3` refits the paints to that photo under the traced light.
+  `--trace 128 --fit 3` refits the paints to that photo under the traced light;
+  `--scene FILE` renders another scene file, for an A/B against an older one.
 - `node e2e/solve-camera.ts --photo-id living-kf1` — where that photo was taken
   from, solved from its sightings, for its record's `camera`.
 - `node e2e/alloc-rate.ts [deployed|local]` — MB allocated per minute on
