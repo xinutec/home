@@ -58,7 +58,8 @@ how it is judged done.
 
 - **Shell:** walls, chimney breast, alcoves, openings to the bay and dining room,
   tape-measured; doorways have their wall thickness (floor, soffit, jambs). Ceiling
-  height is the house-wide 2.4 m, not measured in this room. A coving runs along
+  height 2.4 m, from the hand-measured model; observe's depth of this room's ceiling
+  agrees to about 1 cm (its #2056). A coving runs along
   every wall, 8 cm down and 11 cm across, read from keyframe 1 through its solved
   camera (an estimate).
 - **Windows:** the bay's three, as glazing in their openings (frame, transom,
@@ -107,9 +108,9 @@ how it is judged done.
   the sofa's bay end, standing at 1.74 m by the sofa's other end, 2.1 px rms, from
   the walls' corner, the bay opening's edge and the coving on both walls. The IKEA
   cupboard, measured (0.9 m tall), disagrees with that camera by about 40 px at its
-  top, and with it in the solve the camera drops to 0.81 m: the coving lines assume
-  this room's ceiling is the house-wide 2.4 m, never measured here, so either the
-  ceiling or that camera is off. Measuring the ceiling (session line 5) settles it. A photo whose measured structure is one corner (556, 689) cannot be
+  top, and with it in the solve the camera drops to 0.81 m. The ceiling is measured;
+  the suspects are the estimates the solve leans on: the coving's 8 cm drop, read
+  from keyframe 1, and the reading of the cupboard's top, where things stand on it. A photo whose measured structure is one corner (556, 689) cannot be
   solved: a family of cameras fits it. The phone's portrait keyframes have a 69° vertical field
   of view and their principal point 12 px left of centre; compare-view turns the
   photo back by its roll about that point, so both frame the same level view,
@@ -130,7 +131,6 @@ how it is judged done.
 | Net curtains | they turn the daylight soft and even, likely the photo's main look | photos |
 | Long curtains at the bay sides | they block part of the window | photos; observe measured them 23-28 cm inside the bay opening |
 | The dining room's windows | light enters through the dining doorway | tape |
-| Ceiling height in this room | the ceiling is the largest bounce surface | tape, two corners |
 | The two sofas, the armchair, the bean bag | large and dark: they absorb bounce light | tape (width, depth, height each) |
 | The ceiling light: position, fitting, bulb | the inside light source | look and read the bulb |
 | The bay's compass bearing | sets where the sun comes from | phone compass, at the window |
@@ -145,7 +145,6 @@ how it is judged done.
 - Net curtains as thin, translucent, light-scattering panels across the windows;
   long curtains as heavy fabric either side.
 - The dining room's windows, so the doorway carries light.
-- The ceiling at its measured height.
 - The two sofas, the armchair and the bean bag as measured blocks (assemblies
   with one part each for now; detail later).
 - The ceiling light as a fitting at its real position.
@@ -303,7 +302,7 @@ times are rough.
 | 2 | Bay, side windows | the same, each | 2 min |
 | 3 | Bay | phone compass bearing, standing in the bay facing out | 1 min |
 | 4 | Dining windows | width, height, sill | 2 min |
-| 5 | Living-room ceiling | floor to ceiling, at two corners | 1 min |
+| 5 | Coving | its drop down the wall and its depth across the ceiling (keyframe 714's camera leans on it) | 1 min |
 | 6 | Big sofa | width, depth, height (back), seat height | 1 min |
 | 7 | Bay sofa | the same | 1 min |
 | 8 | Armchair | the same | 1 min |

@@ -68,7 +68,7 @@ hand. The 3D house view (`frontend/.../features/house`) renders from these.
 - **estimate** — on a piece, an opening, a material or a light: the numbers are not
   measured yet, and the text says where they came from and what would settle them
   (`tests/scene.test.ts` holds every estimate to naming its settling). `notes` holds
-  what belongs to no one element (the ceiling height here, the bay's bearing). A
+  what belongs to no one element (the bay's bearing, the dining windows). A
   measurement replaces the numbers and deletes the estimate.
   `./scripts/estimates.mjs` lists them all.
 - **lights** — each lamp's bulb: `at` [x, y, z], `lumens`, colour temperature

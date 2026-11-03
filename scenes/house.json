@@ -133,8 +133,7 @@
     {"id": "living-ceiling-lamp", "name": "Ceiling light bulb", "at": [0.63, 2.3, 1.83], "lumens": 806, "kelvin": 2700, "on": false, "estimate": "a typical LED bulb; read the watts or lumens and the colour temperature off the bulb"}
   ],
   "notes": [
-    "ceiling height: the house-wide 2.4 m, not measured in the living room; measure floor to ceiling at two corners",
-    "the bay's compass bearing is unknown and not guessed; read it with a phone compass, standing in the bay facing out",
+        "the bay's compass bearing is unknown and not guessed; read it with a phone compass, standing in the bay facing out",
     "the dining room's windows are not modelled; measure each one's width, height and sill"
   ]
 }
