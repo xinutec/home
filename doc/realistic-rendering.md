@@ -76,7 +76,8 @@ how it is judged done.
   frame, upholstered seat, cushion and back), checked by eye; both IKEA cupboards
   as carcass, shelf and two hinged doors (keyframe 130 shows one open), whose
   doors the bean bag and the armchair block, as they do in the room (listed in
-  `scene-physics.spec.ts`); the TV on its wall bracket; the hearth, fire
+  `scene-physics.spec.ts`); the bean bag as a dome (`"shape": "dome"`), 0.45 m
+  high from its top in keyframe 822; the TV on its wall bracket; the hearth, fire
   surround, mantel shelf and two IKEA cupboards as boxes; the curtains on their
   pole, both sofas, the armchair, the bean bag, the mat and the ceiling light as
   estimated blocks. The mat is placed through the two solved cameras (it runs

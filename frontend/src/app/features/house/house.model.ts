@@ -46,9 +46,11 @@ export interface Part {
 	/** The part this one is fixed to, and moves with. */
 	parent?: string;
 	joint?: Joint;
-	/** Drawn round, its axis front to back: diameter the size's x, length its z. The
-	 *  physics holds it to its box, which contains it. */
-	shape?: 'cylinder';
+	/** Drawn other than as its box, which contains it and which the physics holds it
+	 *  to: `cylinder`, round about its front-to-back axis (diameter the size's x,
+	 *  length its z); `dome`, the top half of an ellipsoid on its flat base, filling
+	 *  the box (a bean bag). */
+	shape?: 'cylinder' | 'dome';
 }
 
 /** An opening (doorway / window / wide cased passage) cut into one of a room's

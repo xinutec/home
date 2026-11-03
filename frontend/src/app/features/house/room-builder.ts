@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { CameraQuery } from './camera';
-import type { Glazing, HouseScene, Room, WallOpening } from './house.model';
+import type { Glazing, HouseScene, Part, Room, WallOpening } from './house.model';
 import { partsOf, solidsOf } from './assembly';
 import { MaterialLibrary, partMaterial, surfaceMaterial } from './materials';
 import {
@@ -43,11 +43,7 @@ export function buildInterior(
 	for (const f of scene.furniture) {
 		const parts = partsOf(f);
 		solidsOf(f).forEach((sol, k) => {
-			const geom = view.own(
-				parts[k].shape === 'cylinder'
-					? new THREE.CylinderGeometry(sol.hw, sol.hw, sol.hd * 2, 32).rotateX(Math.PI / 2)
-					: metricBox(sol.hw * 2, sol.y1 - sol.y0, sol.hd * 2),
-			);
+			const geom = view.own(partGeometry(parts[k].shape, sol.hw, sol.y1 - sol.y0, sol.hd));
 			const mesh = new THREE.Mesh(geom, mats.get(partMaterial(scene, f, parts[k])));
 			mesh.position.set(sol.x, (sol.y0 + sol.y1) / 2, sol.z);
 			mesh.rotation.y = sol.yaw;
@@ -181,6 +177,26 @@ function addGlazing(
 		mesh.castShadow = frame;
 		mesh.receiveShadow = true;
 		view.scene.add(mesh);
+	}
+}
+
+/** A part's shape, centred on its box (half-width, height, half-depth). */
+function partGeometry(
+	shape: Part['shape'],
+	hw: number,
+	h: number,
+	hd: number,
+): THREE.BufferGeometry {
+	switch (shape) {
+		case 'cylinder':
+			return new THREE.CylinderGeometry(hw, hw, hd * 2, 32).rotateX(Math.PI / 2);
+		case 'dome':
+			// The upper half of a unit sphere, stretched to the box, its base at the box's foot.
+			return new THREE.SphereGeometry(1, 40, 20, 0, Math.PI * 2, 0, Math.PI / 2)
+				.scale(hw, h, hd)
+				.translate(0, -h / 2, 0);
+		default:
+			return metricBox(hw * 2, h, hd * 2);
 	}
 }
 

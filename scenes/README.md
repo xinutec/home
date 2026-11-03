@@ -60,8 +60,9 @@ hand. The 3D house view (`frontend/.../features/house`) renders from these.
   move: `{"type": "slide", "axis", "range": [0, metres]}` or `{"type": "hinge",
   "pivot", "range": [0, degrees]}` about the vertical, its sign the way it opens.
   All `at` are written closed. `"shape": "cylinder"` draws a part round, its axis
-  front to back (diameter its x, length its z); the physics holds it to its box. A
-  piece without parts is one filling its box.
+  front to back (diameter its x, length its z); `"dome"`, as the top half of an
+  ellipsoid on its flat base, filling the box. The physics holds either to its box.
+  A piece without parts is one filling its box.
 - **estimate** — on a piece, an opening, a material or a light: the numbers are not
   measured yet, and the text says where they came from and what would settle them
   (`tests/scene.test.ts` holds every estimate to naming its settling). `notes` holds
