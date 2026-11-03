@@ -93,7 +93,8 @@ how it is judged done.
   glows with daylight from the room behind it; that room is not modelled, and the
   tracer brings light through glass only by chance, so the sheet renders dark
   until the room behind is given its light (a lit panel, as the frosted panes
-  are); the TV on its wall bracket; the hearth, fire
+  are); the ceiling light as its flush fitting from keyframe 720: a dark rim
+  (`"shape": "disc"`), a glass bowl (`"bowl"`) and a finial; the TV on its wall bracket; the hearth, fire
   surround, mantel shelf and two IKEA cupboards as boxes; the curtains on their
   pole, both sofas, the armchair, the bean bag, the mat and the ceiling light as
   estimated blocks. The mat is placed through the two solved cameras (it runs

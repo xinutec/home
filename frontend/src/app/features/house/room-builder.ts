@@ -206,6 +206,13 @@ function partGeometry(
 			return folds(hw * 2, h, hd * 2);
 		case 'arch':
 			return arch(hw * 2, h, hd * 2);
+		case 'bowl':
+			// The lower half of a unit sphere, stretched to the box, its flat top at the box's top.
+			return new THREE.SphereGeometry(1, 40, 20, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2)
+				.scale(hw, h, hd)
+				.translate(0, h / 2, 0);
+		case 'disc':
+			return new THREE.CylinderGeometry(1, 1, h, 40).scale(hw, 1, hd);
 		default:
 			return metricBox(hw * 2, h, hd * 2);
 	}
