@@ -72,7 +72,8 @@ how it is judged done.
   their seams), heights typical, checked by eye only: no photo of it has a solved
   camera (observe #2093 would give every keyframe's); the bay sofa as its
   structure (carved-wood feet, apron and arms, three seat cushions, an upholstered
-  back), heights typical; the TV on its wall bracket; the hearth, fire
+  back), heights typical; the armchair of the same set (carved legs, arms and back
+  frame, upholstered seat, cushion and back), checked by eye; the TV on its wall bracket; the hearth, fire
   surround, mantel shelf and two IKEA cupboards as boxes; the curtains on their
   pole, both sofas, the armchair, the bean bag, the mat and the ceiling light as
   estimated blocks. The mat is placed through the two solved cameras (it runs
