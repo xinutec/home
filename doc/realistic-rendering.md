@@ -72,8 +72,11 @@ how it is judged done.
   their seams), heights typical, checked by eye only: no photo of it has a solved
   camera (observe #2093 would give every keyframe's); the bay sofa as its
   structure (carved-wood feet, apron and arms, three seat cushions, an upholstered
-  back), heights typical; the armchair of the same set (carved legs, arms and back
-  frame, upholstered seat, cushion and back), checked by eye; both IKEA cupboards
+  back), heights typical; two armchairs of the same set, one at each end of the
+  big sofa (carved legs, arms and back frame, upholstered seat, cushion and back),
+  checked by eye; to fit both, the wall between the dining wall and the bay-end
+  cupboard (3.43 m) makes the chairs 0.72 m and the sofa 1.95 m, the sofa moved
+  toward the bay, where observe's placement of the walk has it; both IKEA cupboards
   as carcass, shelf and two hinged doors (keyframe 130 shows one open), whose
   doors the bean bag and the armchair block, as they do in the room (listed in
   `scene-physics.spec.ts`); the bean bag as a dome (`"shape": "dome"`), 0.45 m
@@ -302,6 +305,7 @@ times are rough.
 | 11 | A RAW photo of the bay | the camera app's RAW (DNG) on, lamp off, from the sideboard alcove at waist height, looking at the bay; no tone mapping, so it shows the light as it is | 1 min |
 | 12 | Mantel shelf and fire surround | the shelf's width, depth and top height; the surround's width and leg width. Keyframe 726 (the fireplace from the alcove, ceiling in view, no window) cannot be solved against their estimates: 8 px rms, against 2-4 px for the other photos | 2 min |
 | 13 | The glazed door behind the big sofa | its position along the wall, width and header height; it is not in the scene yet | 1 min |
+| 14 | The big sofa and its two armchairs | each one's width and where it stands along the wall (both chairs and the sofa are estimates fitted to the wall between them) | 2 min |
 
 About twenty minutes. Nothing here is precise beyond a centimetre, and nothing
 needs moving furniture.
