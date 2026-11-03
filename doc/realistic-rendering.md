@@ -75,8 +75,11 @@ how it is judged done.
   cushions and two buttoned back cushions resting on them, all soft-edged with
   `"shape": "cushion"`; its quilting dents are not drawn), heights typical, checked by eye only: no photo of it has a solved
   camera (observe #2093 would give every keyframe's); the bay sofa as its
-  structure (carved-wood feet, apron and arms, three seat cushions, an upholstered
-  back), heights typical; two armchairs of the same set, one at each end of the
+  construction from keyframes 437, 143 and 822, in the armchairs' vocabulary: an
+  upholstered back with an arched top, wooden scroll arms on carved posts, three
+  seat cushions on an upholstered base, a front rail in two halves on carved feet
+  at the corners and the middle; heights typical (the towels and cushions on it
+  are left out); two armchairs of the same set, one at each end of the
   big sofa, as their construction from keyframes 520, 526 and 556: an upholstered
   back with an arched top (`"shape": "arch"` with its `rise`), wooden arms on
   carved turned posts ending in a scroll (`"roll"`), carved front legs, a front
@@ -235,6 +238,7 @@ recording, so no picture of the house is in the repository.
 | Solved camera, first regions; raster | 12.1 | bay sofa seat 25.9 (×0.15), curtain 20.8 (×0.25): the darks are far too dark; bay reveal 8.6, ceiling 7.7 |
 | The bay sofa as its structure, A/B against the block (`--scene`), traced 256, estimated paints | 20.3 → 16.6 | sofa seat 34.1 → 12.2 (the block put a dark front where the photo has a lit cushion), carpet 17.9 → 8.2 (the exposure no longer pulled by it); the left wall 9.2 → 14.6 with the exposure |
 | The curtains as pleated sheets, traced 256 | 18.2 | curtain 23.0 → 32.7 (×0.06): the folds shade themselves, and the fabric's colour, toned on the flat block under the approximate light, is now too dark; kept for the truer shape, the paint fit to settle the colour. In the photo the bunched curtain is about 0.3 m wide, the model's 0.22 |
+| The bay sofa as its construction (arched back, scroll arms, middle foot), traced 256, estimated paints | 17.1 | sofa seat 12.2 → 10.5 |
 | Paints fitted to this photo, traced | 10.8 | no fit: every paint but the ceiling at the 0.95 limit |
 | The same, clear openers as glass | 11.0 | unchanged: not the openers |
 
