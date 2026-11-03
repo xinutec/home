@@ -288,6 +288,14 @@ app; no lazy loading). Within the few hundred kilobytes allowed.
 
 ### 5. Bake it into the everyday view
 
+**Measured so far** (`node e2e/frame-cost.ts`, a Pixel 9's screen on the Mac's
+GPU; on a phone, `/house/living?stats` shows the same numbers): the room was 334
+meshes and 400 draw calls a frame, 42,600 triangles; merged by material
+(`merge.ts`), 41 meshes and 57 draw calls, the everyday view's score unchanged
+(13.2 on keyframe 1). Merged meshes span the house, so off-screen parts are no
+longer skipped: 74,000 triangles drawn, still few. The Mac is capped at 60 fps
+either way; only a phone shows the difference.
+
 The interactive view cannot path-trace on a phone. The photo mode's bounce light
 is baked into lightmaps on the static shell and fixed furniture; moving parts
 (drawers, doors) take their light from probes; ambient occlusion gives contact

@@ -43,6 +43,8 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 	readonly empty = signal(false);
 	readonly error = signal(false);
 	readonly loading = signal(false);
+	/** With `?stats`: what one frame costs, once measured. */
+	readonly stats = signal('');
 	readonly room = inject(ActivatedRoute).snapshot.paramMap.get('room') ?? '';
 
 	private http = inject(HttpClient);
@@ -95,6 +97,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 				const physical = !!this.query.trace;
 				if (!buildInterior(view, scene, this.room, this.query, physical)) this.empty.set(true);
 				else if (this.query.trace) this.trace(view, this.query.trace);
+				else if (this.query.stats) this.measure(view);
 				view.requestFrame();
 			},
 			error: (e) => {
@@ -119,6 +122,40 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			tracer.renderSample();
 			if (tracer.samples >= samples) host.dataset['traced'] = String(Math.floor(tracer.samples));
 			else requestAnimationFrame(step);
+		};
+		this.zone.runOutsideAngular(() => requestAnimationFrame(step));
+	}
+
+	/** Draws frames back to back for 3 s, then puts on the canvas's host what one
+	 *  costs: frames a second, draw calls, triangles and the meshes in the scene. */
+	private measure(view: ThreeView): void {
+		const host = this.host().nativeElement;
+		view.paused = true;
+		const r = view.renderer;
+		let frames = 0;
+		let start = 0;
+		const step = (t: number) => {
+			if (!this.view) return;
+			r.render(view.scene, view.camera);
+			if (frames === 0) start = t;
+			frames++;
+			if (t - start < 3000) {
+				requestAnimationFrame(step);
+				return;
+			}
+			let meshes = 0;
+			view.scene.traverse((o) => {
+				if (o instanceof THREE.Mesh) meshes++;
+			});
+			const fps = Math.round(((frames - 1) * 1000) / (t - start));
+			const { calls, triangles } = r.info.render;
+			const pixels = [r.domElement.width, r.domElement.height];
+			host.dataset['stats'] = JSON.stringify({ fps, calls, triangles, meshes, pixels });
+			this.zone.run(() =>
+				this.stats.set(
+					`${fps} fps · ${calls} draw calls · ${triangles} triangles · ${meshes} meshes · ${pixels.join('×')} px`,
+				),
+			);
 		};
 		this.zone.runOutsideAngular(() => requestAnimationFrame(step));
 	}

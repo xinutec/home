@@ -4,6 +4,7 @@ import type { CameraQuery } from './camera';
 import type { Glazing, HouseScene, Part, Room, WallOpening } from './house.model';
 import { partsOf, solidsOf } from './assembly';
 import { MaterialLibrary, partMaterial, surfaceMaterial } from './materials';
+import { mergeStatic } from './merge';
 import {
 	bounds,
 	covingProfile,
@@ -56,6 +57,9 @@ export function buildInterior(
 		});
 	}
 
+	// The everyday view draws the fixed room as a few dozen meshes, not hundreds; the
+	// physical reference keeps every part as it is.
+	if (!physical) mergeStatic(view.scene, (g) => view.own(g));
 	if (!physical) addLight(view);
 	placeCamera(view, room, camera);
 	return true;

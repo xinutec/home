@@ -20,6 +20,10 @@ describe('cameraFromQuery', () => {
 		expect(cameraFromQuery('?tone=aces')).toEqual({});
 	});
 
+	it('reads a request for frame statistics', () => {
+		expect(cameraFromQuery('?stats')).toEqual({ stats: true });
+	});
+
 	it('takes only what is given', () => {
 		expect(cameraFromQuery('?fov=50')).toEqual({ fov: 50 });
 		expect(cameraFromQuery('')).toEqual({});

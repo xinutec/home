@@ -1,6 +1,10 @@
 <div class="wrap">
 	<div #canvas class="canvas"></div>
 
+	@if (stats()) {
+		<p class="stats">{{ stats() }}</p>
+	}
+
 	<div class="status">
 		@if (loading()) {
 			<mat-progress-bar mode="indeterminate" />

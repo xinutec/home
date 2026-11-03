@@ -15,5 +15,8 @@ The Angular dashboard. Run the commands here, in the flake's dev shell.
   `--scene FILE` renders another scene file, for an A/B against an older one.
 - `node e2e/solve-camera.ts --photo-id living-kf1` — where that photo was taken
   from, solved from its sightings, for its record's `camera`.
+- `node e2e/frame-cost.ts [--deployed]` — what one frame of the room costs at a
+  phone's size: frames a second, draw calls, triangles, meshes
+  (`/house/living?stats` shows the same on the device).
 - `node e2e/alloc-rate.ts [deployed|local]` — MB allocated per minute on
   `/environment`, collected garbage included, and where.

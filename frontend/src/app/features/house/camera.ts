@@ -1,6 +1,6 @@
 /** A camera asked for in the URL, overriding the room's own `view`:
  *  `?eye=x,y,z&look=x,y,z&fov=deg` (vertical field of view), with `trace`,
- *  `exposure` and `tone=linear`. For comparing a render against a photograph
+ *  `exposure`, `tone=linear` and `stats`. For comparing a render against a photograph
  *  taken from the same spot. */
 export interface CameraQuery {
 	eye?: [number, number, number];
@@ -12,6 +12,8 @@ export interface CameraQuery {
 	exposure?: number;
 	/** No tone curve: the canvas holds exposure times radiance, for fitting paints. */
 	linear?: boolean;
+	/** Draw every frame and report the cost of one on the canvas's host. */
+	stats?: boolean;
 }
 
 function triple(raw: string | null): [number, number, number] | undefined {
@@ -33,5 +35,6 @@ export function cameraFromQuery(search: string): CameraQuery {
 	const exposure = Number(q.get('exposure'));
 	if (exposure > 0 && Number.isFinite(exposure)) out.exposure = exposure;
 	if (q.get('tone') === 'linear') out.linear = true;
+	if (q.has('stats')) out.stats = true;
 	return out;
 }
