@@ -70,8 +70,9 @@ hand. The 3D house view (`frontend/.../features/house`) renders from these.
   ellipsoid hanging from its flat top; `"disc"`, round about the vertical;
   `"lathe"`, its `profile` (bottom to top, [radius, height] as fractions of the
   box's half-width and height) spun about the vertical; `"ring"`, a torus facing
-  front, its outer diameter the box's width, its thickness the box's depth. The
-  physics holds each to its box.
+  front, its outer diameter the box's width, its thickness the box's depth;
+  `"cushion"`, the box with its edges and corners rounded. The physics holds each
+  to its box.
   A piece without parts is one filling its box.
 - **estimate** — on a piece, an opening, a material or a light: the numbers are not
   measured yet, and the text says where they came from and what would settle them

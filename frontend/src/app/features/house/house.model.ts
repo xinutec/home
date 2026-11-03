@@ -55,8 +55,9 @@ export interface Part {
 	 *  half of an ellipsoid hanging from its flat top (a light's glass); `disc`, round
 	 *  about the vertical, filling the box (a light's rim); `lathe`, its `profile`
 	 *  spun about the vertical (a bean bag); `ring`, a torus facing front, its outer
-	 *  diameter the box's width, its thickness the box's depth (a wreath). */
-	shape?: 'cylinder' | 'dome' | 'folds' | 'arch' | 'bowl' | 'disc' | 'lathe' | 'ring';
+	 *  diameter the box's width, its thickness the box's depth (a wreath); `cushion`,
+	 *  the box with its edges and corners rounded (upholstery). */
+	shape?: 'cylinder' | 'dome' | 'folds' | 'arch' | 'bowl' | 'disc' | 'lathe' | 'ring' | 'cushion';
 	/** For a `lathe`: its outline from bottom to top, each point [radius, height] as
 	 *  fractions of the box's half-width (and half-depth) and of its height. */
 	profile?: [number, number][];

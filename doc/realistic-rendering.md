@@ -70,9 +70,10 @@ how it is judged done.
   straightened to the front's plane: an oak top with a 2 cm overhang, corner posts
   that are its legs, a face frame (top rail, apron), two flush sliding drawers,
   three shaker doors (frame and recessed panel) on hinges, and round knobs
-  (`"shape": "cylinder"`), all held by the physics; the big sofa as its structure
-  (chrome legs, base, back frame, slim arms, two seat and two back cushions with
-  their seams), heights typical, checked by eye only: no photo of it has a solved
+  (`"shape": "cylinder"`), all held by the physics; the big sofa as its construction
+  (slim round chrome legs, a lifted base, back frame and slim arms, two seat
+  cushions and two buttoned back cushions resting on them, all soft-edged with
+  `"shape": "cushion"`; its quilting dents are not drawn), heights typical, checked by eye only: no photo of it has a solved
   camera (observe #2093 would give every keyframe's); the bay sofa as its
   structure (carved-wood feet, apron and arms, three seat cushions, an upholstered
   back), heights typical; two armchairs of the same set, one at each end of the

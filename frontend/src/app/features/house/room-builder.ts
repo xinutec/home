@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import type { CameraQuery } from './camera';
 import type { Glazing, HouseScene, Part, Room, WallOpening } from './house.model';
 import { partsOf, solidsOf } from './assembly';
@@ -208,6 +209,11 @@ function partGeometry(part: Part, hw: number, h: number, hd: number): THREE.Buff
 				.translate(0, h / 2, 0);
 		case 'disc':
 			return new THREE.CylinderGeometry(1, 1, h, 40).scale(hw, 1, hd);
+		case 'cushion': {
+			// Rounded as soft upholstery is: a third of its thinnest side, at most 6 cm.
+			const r = Math.min(0.06, Math.min(hw * 2, h, hd * 2) / 3);
+			return new RoundedBoxGeometry(hw * 2, h, hd * 2, 4, r);
+		}
 		case 'ring': {
 			const tube = hd;
 			return new THREE.TorusGeometry(Math.max(hw - tube, tube), tube, 16, 48).scale(
