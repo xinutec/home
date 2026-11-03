@@ -56,6 +56,28 @@
         {"what": "bay middle window, the mullion between its openers", "line": [[3.3, 1.82, 1.66], [3.3, 2.15, 1.66]], "px": [345.5, 170]},
         {"what": "bay middle window, the mullion between its openers", "line": [[3.3, 1.82, 1.66], [3.3, 2.15, 1.66]], "px": [345, 205]}
       ]
+    },
+    {
+      "id": "living-kf714",
+      "room": "living",
+      "note": "The bay end of the big sofa: the armchair between it and the IKEA cupboard, the wreath wall, the glazed door at the right.",
+      "source": {"capture": "capture_20260926_154507", "keyframe": 714, "rotate": 90},
+      "camera": {"eye": [-0.732, 1.735, 2.586], "look": [2.012, 0.642, 3.109], "fov": 69, "roll": -0.1},
+      "regions": {},
+      "sightings": [
+        {"what": "corner of the wreath wall and the sofa wall", "line": [[2.58, 0, 3.65], [2.58, 2.4, 3.65]], "px": [354, 150]},
+        {"what": "corner of the wreath wall and the sofa wall", "line": [[2.58, 0, 3.65], [2.58, 2.4, 3.65]], "px": [351, 225]},
+        {"what": "corner of the wreath wall and the sofa wall", "line": [[2.58, 0, 3.65], [2.58, 2.4, 3.65]], "px": [344.5, 300]},
+        {"what": "bay opening, its edge on the room side, sofa end", "line": [[2.58, 0, 2.86], [2.58, 2.22, 2.86]], "px": [177, 150]},
+        {"what": "bay opening, its edge on the room side, sofa end", "line": [[2.58, 0, 2.86], [2.58, 2.22, 2.86]], "px": [179, 225]},
+        {"what": "bay opening, its edge on the room side, sofa end", "line": [[2.58, 0, 2.86], [2.58, 2.22, 2.86]], "px": [180, 300]},
+        {"what": "coving, its lower edge on the wreath wall", "line": [[2.58, 2.32, 2.86], [2.58, 2.32, 3.65]], "px": [225, 52.5]},
+        {"what": "coving, its lower edge on the wreath wall", "line": [[2.58, 2.32, 2.86], [2.58, 2.32, 3.65]], "px": [275, 57.5]},
+        {"what": "coving, its lower edge on the wreath wall", "line": [[2.58, 2.32, 2.86], [2.58, 2.32, 3.65]], "px": [310, 61]},
+        {"what": "coving, its lower edge on the sofa wall", "line": [[-1.32, 2.32, 3.65], [2.58, 2.32, 3.65]], "px": [360, 52]},
+        {"what": "coving, its lower edge on the sofa wall", "line": [[-1.32, 2.32, 3.65], [2.58, 2.32, 3.65]], "px": [390, 36]},
+        {"what": "coving, its lower edge on the sofa wall", "line": [[-1.32, 2.32, 3.65], [2.58, 2.32, 3.65]], "px": [420, 22]}
+      ]
     }
   ]
 }
