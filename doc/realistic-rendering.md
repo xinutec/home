@@ -32,19 +32,25 @@ how it is judged done.
 
 ## Next up
 
-1. **Windows that light like windows.** The paint fit (step 2) found the light
-   wrong, not the paints: anchored on the ceiling, keyframe 1 fits plausible
-   paints (wall 0.5, sideboard 0.65) but a carpet of 0.37 and oak of 0.55, both
-   too light, and keyframe 822, nearer the bay, cannot fit at all: its ceiling is
-   so much brighter than the rest that every other paint, the charcoal sofa
-   included, is pushed to the 0.95 limit. The ceiling gets too much light, more so
-   near the windows: a pane is drawn as an even diffuser, sending as much up as
-   down, where daylight comes mostly down from the sky, and only the ground's
-   share goes up. Done when a pane's light leaves by direction, and both photos fit
-   the same paints. Keyframe 822 has the garden in sun, which the overcast sky
-   lacks.
-2. **Fit the paints** with `compare-view --fit`, then check them on the other
-   photo; write them into the scene once both agree.
+1. **Find out why keyframe 822 cannot be fitted.** Anchored on the ceiling,
+   keyframe 1 fits plausible paints (wall 0.5, sideboard 0.65; carpet 0.37 and
+   oak 0.6, both light) and scores 4.8; keyframe 822, the bay, cannot fit at all:
+   its ceiling is so much brighter than the rest that every other paint, the
+   charcoal sofa included, is pushed to the 0.95 limit. Two causes fit:
+   - **The phone's processing.** Keyframe 822 has panes that clip to white in
+     frame; the phone's HDR tone mapping compresses the bright parts of such a
+     scene and lifts the dark ones, region by region, which no single curve undoes.
+     Keyframe 1, with no window in frame, fits.
+   - **The window light.** The clear openers are now drawn as glass the tracer sees
+     the sky through (light down from the sky, up only from the ground); that
+     changed nothing, so it is not them. The frosted panes stay even diffusers,
+     which frosted glass is.
+   A linear photo settles it: one RAW (DNG) shot of the bay, lamp off, from where
+   keyframe 822 was taken, has no tone mapping. Until then, fit only on photos
+   with no window in frame.
+2. **Fit the paints** with `compare-view --fit` on photos without a window in
+   frame, check them on a second such photo, and write them into the scene once
+   both agree.
 3. **Bake the traced light into the everyday view (step 5).**
 4. Whatever the measuring session brings: replace each estimate and delete its note.
 
@@ -176,6 +182,7 @@ recording, so no picture of the house is in the repository.
 | --- | --- | --- |
 | Solved camera, first regions; raster | 12.1 | bay sofa seat 25.9 (×0.15), curtain 20.8 (×0.25): the darks are far too dark; bay reveal 8.6, ceiling 7.7 |
 | Paints fitted to this photo, traced | 10.8 | no fit: every paint but the ceiling at the 0.95 limit |
+| The same, clear openers as glass | 11.0 | unchanged: not the openers |
 
 On keyframe 1, paints fitted to it score 4.7 traced (sideboard door 1.2, fire
 surround 1.7, carpet 2.1; alcove side wall 10.1, TV 8.0), but they are not in the
@@ -205,9 +212,10 @@ their true values; until then raster and traced scores are not comparable.
 **Built:** `/house/living?trace=N` lights the room only from the sky outside
 (`sky.ts`: a CIE overcast sky over a ground of albedo 0.2), through its windows,
 and path-traces N samples a pixel with `three-gpu-pathtracer` on the GPU (Metal,
-headless). A pane is drawn as the diffuse light it lets in (`windowRadiance`: its
+headless). A frosted pane is drawn as the diffuse light it lets in (`windowRadiance`: its
 transmittance times the vertical daylight on it, over π), not as a hole onto the
-sky: paths seldom find a small hole, and the image came out as noise.
+sky: paths seldom find a small hole, and the image came out as noise. Clear panes
+are glass, so the sky through them keeps its direction.
 `compare-view --trace N` sets the exposure like a camera, one number for the
 whole picture, from the regions' total brightness. No direct sun yet: keyframe 1
 shows none, and the bay's bearing is unknown.
@@ -270,6 +278,7 @@ times are rough.
 | 8 | Armchair | the same | 1 min |
 | 9 | Ceiling light | where it hangs (distance from two walls), drop below the ceiling, the bulb's watts or lumens and colour temperature (printed on the bulb) | 2 min |
 | 10 | White paper (only if step 2's two photos disagree) | one photo of the fireplace wall with an A4 sheet on the mantel, lamp off | 1 min |
+| 11 | A RAW photo of the bay | the camera app's RAW (DNG) on, lamp off, from the sideboard alcove at waist height, looking at the bay; no tone mapping, so it shows the light as it is | 1 min |
 
 About fifteen minutes. Nothing here is precise beyond a centimetre, and nothing
 needs moving furniture.

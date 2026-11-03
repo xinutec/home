@@ -148,9 +148,12 @@ function addGlazing(
 		const frame = p.kind === 'frame';
 		const along = (p.a0 + p.a1) / 2;
 		const key = frame ? g.frameMaterial : p.kind === 'lower' ? g.lower : (g.upper ?? g.lower);
-		if (physical && !frame) {
-			// The pane as the light it lets in: a diffuse emitter facing the room, which a
-			// path tracer can aim at, instead of a small hole onto the sky it would rarely find.
+		// Clear glass is drawn as glass, and the tracer sees the sky through it, so its
+		// light keeps its direction: down from the sky, up only from the ground.
+		const clear = (spec(key).roughness ?? 1) <= CLEAR_GLASS_ROUGHNESS;
+		if (physical && !frame && !clear) {
+			// A diffusing pane as the light it lets in: an even emitter facing the room,
+			// which a path tracer can aim at, as frosted glass sends light every way.
 			const light = new THREE.RectAreaLight(
 				new THREE.Color(...SKY),
 				windowRadiance(spec(key).transmission ?? 1),
@@ -173,6 +176,9 @@ function addGlazing(
 		view.scene.add(mesh);
 	}
 }
+
+/** Glass this smooth transmits without scattering: a window to see the sky through. */
+const CLEAR_GLASS_ROUGHNESS = 0.1;
 
 /** One solid slab of a wall, with UVs in metres so a texture keeps its scale. */
 function wallPanel(
