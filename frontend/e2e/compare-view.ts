@@ -17,18 +17,18 @@
 // live site instead. --fov is the photo's vertical field of view: 69 for the
 // Pixel 9's portrait keyframes (fx 1397 px on a 1920 px side).
 import { chromium } from '@playwright/test';
-import { closeSync, existsSync, openSync, readFileSync, readSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { deltaE, luminance, regionMean } from '../src/app/features/house/colour-match.ts';
 import type { Rect } from '../src/app/features/house/colour-match.ts';
+import { keyframe, uprightLens } from './keyframe.ts';
 
 interface PhotoRecord {
 	id: string;
 	room: string;
 	source: { capture: string; keyframe: number; rotate: 0 | 90 };
-	camera: { eye: number[]; look: number[]; fov: number };
+	camera: { eye: number[]; look: number[]; fov: number; roll?: number };
 	regions: Record<string, Rect>;
 }
 
@@ -60,9 +60,8 @@ if (!eye || !look || (!record && !args.photo)) {
 	);
 	process.exit(2);
 }
-const photoJpeg = record
-	? keyframe(record.source.capture, record.source.keyframe)
-	: readFileSync(resolve(args.photo ?? ''));
+const frame = record ? keyframe(record.source.capture, record.source.keyframe) : undefined;
+const photoJpeg = frame ? frame.jpeg : readFileSync(resolve(args.photo ?? ''));
 const rotate = record ? record.source.rotate : 0;
 
 function photoRecord(id: string): PhotoRecord {
@@ -72,49 +71,6 @@ function photoRecord(id: string): PhotoRecord {
 	const hit = all.photos.find((p) => p.id === id);
 	if (!hit) throw new Error(`scenes/photos.json has no photo "${id}"`);
 	return hit;
-}
-
-/**
- * The capture's `n`th full-resolution keyframe (1-based), as JPEG bytes. In a v6+
- * stream each sits behind its header: width, height, fx, fy, cx, cy (big-endian
- * int, int, float x4) and its length (int). Read in chunks: a capture runs to
- * hundreds of megabytes.
- */
-function keyframe(capture: string, n: number): Buffer {
-	const archive = process.env['OBSERVE_ARCHIVE'] ?? join(homedir(), 'Code/observe/data/archive');
-	const fd = openSync(join(archive, `${capture}.stream`), 'r');
-	try {
-		const CHUNK = 16 << 20;
-		const HEAD = 28;
-		const buf = Buffer.alloc(CHUNK + HEAD);
-		let base = 0; // file offset of buf[HEAD]
-		let carried = 0;
-		let seen = 0;
-		for (;;) {
-			const got = readSync(fd, buf, HEAD, CHUNK, base);
-			if (got === 0) break;
-			const end = HEAD + got;
-			for (let i = HEAD; i + 3 <= end; i++) {
-				if (buf[i] !== 0xff || buf[i + 1] !== 0xd8 || buf[i + 2] !== 0xff) continue;
-				if (i - HEAD + carried < HEAD) continue;
-				const w = buf.readInt32BE(i - 28);
-				const h = buf.readInt32BE(i - 24);
-				const len = buf.readInt32BE(i - 4);
-				if (w < 640 || h < 360 || len < 50_000 || len > 20_000_000) continue;
-				if (++seen < n) continue;
-				const jpeg = Buffer.alloc(len);
-				readSync(fd, jpeg, 0, len, base + (i - HEAD));
-				return jpeg;
-			}
-			// Keep the tail so a header split across chunks is still seen.
-			buf.copy(buf, 0, end - HEAD, end);
-			carried = HEAD;
-			base += got;
-		}
-	} finally {
-		closeSync(fd);
-	}
-	throw new Error(`${capture} has fewer than ${n} keyframes`);
 }
 
 const ORIGIN = 'https://home.xinutec.org';
@@ -134,6 +90,14 @@ const TYPES: Record<string, string> = {
 // The photo's shape: portrait 9:16.
 const W = 540;
 const H = 960;
+// The photo is levelled and centred as the render is: turned back by its camera's
+// roll about its lens's centre, which lands on the frame's centre.
+const lens = frame && record ? uprightLens(frame, record.source.rotate, H) : undefined;
+const level = {
+	cx: lens?.cx ?? W / 2,
+	cy: lens?.cy ?? H / 2,
+	roll: ((record?.camera.roll ?? 0) * Math.PI) / 180,
+};
 
 // The real GPU (Metal, on the Mac): path tracing on the software one takes minutes a sample.
 const browser = await chromium.launch({
@@ -201,7 +165,7 @@ async function lay(
 			`<canvas id="r" width="${W}" height="${H}"></canvas><canvas id="p" width="${W}" height="${H}"></canvas></body>`,
 	);
 	const data = await side.evaluate(
-		async ({ render, photo, rotate, W, H, regions, outline }) => {
+		async ({ render, photo, rotate, level, W, H, regions, outline }) => {
 			const load = (src: string) =>
 				new Promise<HTMLImageElement>((ok, fail) => {
 					const img = new Image();
@@ -209,9 +173,14 @@ async function lay(
 					img.onerror = () => fail(new Error('image did not load'));
 					img.src = src;
 				});
-			const draw = (id: string, img: HTMLImageElement, turn: number) => {
+			const draw = (id: string, img: HTMLImageElement, turn: number, lv?: typeof level) => {
 				const c = document.getElementById(id) as HTMLCanvasElement;
 				const g = c.getContext('2d')!;
+				if (lv) {
+					g.translate(W / 2, H / 2);
+					g.rotate(-lv.roll);
+					g.translate(-lv.cx, -lv.cy);
+				}
 				if (turn === 90) {
 					g.translate(W, 0);
 					g.rotate(Math.PI / 2);
@@ -221,7 +190,7 @@ async function lay(
 				return g;
 			};
 			const gr = draw('r', await load(render), 0);
-			const gp = draw('p', await load(photo), rotate);
+			const gp = draw('p', await load(photo), rotate, level);
 			const out = [
 				Array.from(gr.getImageData(0, 0, W, H).data),
 				Array.from(gp.getImageData(0, 0, W, H).data),
@@ -244,6 +213,7 @@ async function lay(
 			render: `data:image/png;base64,${render.toString('base64')}`,
 			photo: `data:image/jpeg;base64,${photoJpeg.toString('base64')}`,
 			rotate,
+			level,
 			W,
 			H,
 			regions,

@@ -35,7 +35,7 @@
         {"wall": 6, "offset": 1.37, "width": 1.5, "height": 1.94, "sill": 0, "leads": "dining"}
       ],
       "surfaces": {"walls": "wall-paint", "floor": "carpet", "ceiling": "ceiling-paint"},
-      "view": {"eye": [-0.25, 1.45, 2.65], "look": [-0.45, 0.72, 0]}
+      "view": {"eye": [-0.423, 0.842, 2.709], "look": [-0.469, 0.649, -0.284]}
     },
     {
       "name": "dining",

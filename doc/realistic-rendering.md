@@ -32,12 +32,14 @@ how it is judged done.
 
 ## Next up
 
-1. **Widen the thin regions** in `scenes/photos.json` (living-kf1's `oak-top` is a
-   7 px strip, too thin to judge; take the top's upper face).
-2. **Record keyframe 421** (the bay) in `scenes/photos.json` with its camera and
-   regions. A first estimate, to refine by the side-by-side: eye
-   [-0.3, 1.4, 2.6], look [3.0, 1.0, 1.25], fov 69; the fireplace-side IKEA
-   cupboard is on its left.
+1. **Windows that light like windows.** A pane is drawn as a diffuse light, sending
+   as much up to the ceiling as down to the floor; daylight through a window comes
+   mostly down from the sky, and only the ground's reflection goes up. Under the
+   solved camera the trace has the ceiling ×1.53 too bright and the carpet ×0.70
+   too dark: that pattern. Done when a pane's light leaves by direction, sky above
+   the horizon and ground below.
+2. **Record keyframe 421** (the bay) in `scenes/photos.json` with its sightings,
+   solved camera and regions; the fireplace-side IKEA cupboard is on its left.
 3. **Fit the paints (step 2)** from keyframe 1 under the traced light, anchored on
    the ceiling, and check them against keyframe 421.
 4. **Bake the traced light into the everyday view (step 5).**
@@ -64,8 +66,15 @@ how it is judged done.
   fill, hard sun). `?trace=N` is the physical reference: an overcast sky through
   the windows, path-traced on the GPU.
 - **Camera:** `?eye&look&fov&exposure` on `/house/:room`; the living room opens
-  where keyframe 1 was taken. The phone's portrait keyframes have a 69° vertical
-  field of view (fx 1397 px on a 1920 px side, read from the capture stream).
+  where keyframe 1 was taken. A photo's camera is solved from its `sightings`
+  (room points and wall corners, with the pixel each is seen at) by
+  `node e2e/solve-camera.ts --photo-id ID`, through the lens its recording names:
+  keyframe 1 was taken at 0.84 m, not the 1.45 m first guessed, pitched 3.7° down
+  and rolled 1.4°, missing its sightings by 4 px rms (the TV's and sideboard's
+  sizes are estimates). The phone's portrait keyframes have a 69° vertical field
+  of view and their principal point 12 px left of centre; compare-view turns the
+  photo back by its roll about that point, so both frame the same level view,
+  which leaves a blank strip down the photo's left edge that regions keep clear of.
 - **Comparison:** `node e2e/compare-view.ts --photo-id living-kf1 [--trace 256]`,
   scored region by region; the photo is cut from observe's recording
   (`$OBSERVE_ARCHIVE`). Traces need the real GPU (headless Chromium with Metal);
@@ -143,6 +152,12 @@ recording, so no picture of the house is in the repository.
 | Baseline: estimated paints, generic environment, hard sun | 7.0 | alcove side wall 12.7 (the photo's is bluish: sky light), sideboard door 11.2 (×1.46 too bright), oak top 9.3 |
 | Bay glazing, curtains, passages (light unchanged) | 6.9 | the same three; carpet 3.2 → 1.9 |
 | Path-traced reference: overcast sky, windows as diffuse area lights, 256 samples | 9.9 | oak top 22.5 (a 7 px strip now in shadow: too thin to judge), alcove side wall 16.6 (×1.58: lit by the bay; the sofas and curtains that shade it are still blocks), fire surround 10.9; sideboard door 11.2 → 6.0 with no paint change |
+| Solved camera (0.84 m high, not 1.45 m), regions reset; raster | 13.2 | TV screen 41.8 (the generic environment's bright lamps, reflected), alcove side wall 15.3, sideboard door 13.6 (×1.60) |
+| The same, path-traced, 256 samples | 7.9 | ceiling 12.7 (×1.53), alcove side wall 12.0, fire surround 11.0, carpet 7.2 (×0.70); TV screen 3.7 |
+
+From the solved camera on, scores are not comparable with the rows above: the
+regions moved with it. The oak top is gone as a region (from 0.84 m only its
+2.5 cm front edge shows, about 6 px); oak is judged on the fire surround's leg.
 
 **The paints were toned to the approximate light, so under correct light they are
 off the other way:** part of the raster score was paint compensating for wrong
