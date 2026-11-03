@@ -105,10 +105,11 @@ how it is judged done.
   looking at the bay, 2.4 px rms; its sightings are the bay opening (measured), the
   middle window's head and mullion and the IKEA cupboard (estimates). Keyframe 714,
   the sofa's bay end, standing at 1.74 m by the sofa's other end, 2.1 px rms, from
-  the walls' corner, the bay opening's edge and the coving on both walls; a point
-  on the IKEA cupboard first pulled it down to 0.81 m (the cupboard's estimates are
-  off: its top shows higher than 0.9 m), so only measured structure goes into a
-  solve. A photo whose measured structure is one corner (556, 689) cannot be
+  the walls' corner, the bay opening's edge and the coving on both walls. The IKEA
+  cupboard, measured (0.9 m tall), disagrees with that camera by about 40 px at its
+  top, and with it in the solve the camera drops to 0.81 m: the coving lines assume
+  this room's ceiling is the house-wide 2.4 m, never measured here, so either the
+  ceiling or that camera is off. Measuring the ceiling (session line 5) settles it. A photo whose measured structure is one corner (556, 689) cannot be
   solved: a family of cameras fits it. The phone's portrait keyframes have a 69° vertical field
   of view and their principal point 12 px left of centre; compare-view turns the
   photo back by its roll about that point, so both frame the same level view,
