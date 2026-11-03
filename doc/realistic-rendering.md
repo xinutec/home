@@ -85,7 +85,9 @@ how it is judged done.
   `scene-physics.spec.ts`); the bean bag, 0.45 m high from its top in keyframe
   822, as a dark navy base and a light-blue body narrowing to a gathered top, each
   an outline spun about the vertical (`"shape": "lathe"`; its top flopping to one
-  side would need a sculpted shape); the curtains as pleated sheets (`"shape":
+  side would need a sculpted shape); the painting above the mantel (a flat board in
+  its mean colour, its picture not drawn) and the wreath on the bay-end wall
+  (`"shape": "ring"`), placed from keyframes 769 and 714; the curtains as pleated sheets (`"shape":
   "folds"`, a fold every 5.5 cm); the fire surround in its measured size, laid out
   from keyframe 769 straightened: oak legs and frieze, a black back panel, the
   polished arch (`"shape": "arch"`) with its dark opening, and the cast-iron fire

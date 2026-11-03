@@ -208,6 +208,14 @@ function partGeometry(part: Part, hw: number, h: number, hd: number): THREE.Buff
 				.translate(0, h / 2, 0);
 		case 'disc':
 			return new THREE.CylinderGeometry(1, 1, h, 40).scale(hw, 1, hd);
+		case 'ring': {
+			const tube = hd;
+			return new THREE.TorusGeometry(Math.max(hw - tube, tube), tube, 16, 48).scale(
+				1,
+				h / (hw * 2),
+				1,
+			);
+		}
 		case 'lathe': {
 			if (!part.profile || part.profile.length < 2)
 				throw new Error(`part ${part.id} is a lathe without a profile`);
