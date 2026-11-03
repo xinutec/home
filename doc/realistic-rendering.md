@@ -85,7 +85,13 @@ how it is judged done.
   "folds"`, a fold every 5.5 cm); the fire surround in its measured size, laid out
   from keyframe 769 straightened: oak legs and frieze, a black back panel, the
   polished arch (`"shape": "arch"`) with its dark opening, and the cast-iron fire
-  front, both in black-lead (polished iron); the TV on its wall bracket; the hearth, fire
+  front, both in black-lead (polished iron); the glazed door behind the big sofa
+  (white architrave and a lining 0.25 m deep, a wooden leaf with three tall panes,
+  the orange sheet behind them), placed from keyframe 714. In the photos the sheet
+  glows with daylight from the room behind it; that room is not modelled, and the
+  tracer brings light through glass only by chance, so the sheet renders dark
+  until the room behind is given its light (a lit panel, as the frosted panes
+  are); the TV on its wall bracket; the hearth, fire
   surround, mantel shelf and two IKEA cupboards as boxes; the curtains on their
   pole, both sofas, the armchair, the bean bag, the mat and the ceiling light as
   estimated blocks. The mat is placed through the two solved cameras (it runs
