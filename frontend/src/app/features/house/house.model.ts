@@ -53,8 +53,12 @@ export interface Part {
 	 *  box's depth deep (a hanging curtain); `arch`, the box with its top rounded to a
 	 *  half circle across its width (a fireplace's arched insert); `bowl`, the bottom
 	 *  half of an ellipsoid hanging from its flat top (a light's glass); `disc`, round
-	 *  about the vertical, filling the box (a light's rim). */
-	shape?: 'cylinder' | 'dome' | 'folds' | 'arch' | 'bowl' | 'disc';
+	 *  about the vertical, filling the box (a light's rim); `lathe`, its `profile`
+	 *  spun about the vertical (a bean bag). */
+	shape?: 'cylinder' | 'dome' | 'folds' | 'arch' | 'bowl' | 'disc' | 'lathe';
+	/** For a `lathe`: its outline from bottom to top, each point [radius, height] as
+	 *  fractions of the box's half-width (and half-depth) and of its height. */
+	profile?: [number, number][];
 }
 
 /** An opening (doorway / window / wide cased passage) cut into one of a room's

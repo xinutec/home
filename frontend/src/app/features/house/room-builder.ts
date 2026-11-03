@@ -44,7 +44,7 @@ export function buildInterior(
 	for (const f of scene.furniture) {
 		const parts = partsOf(f);
 		solidsOf(f).forEach((sol, k) => {
-			const geom = view.own(partGeometry(parts[k].shape, sol.hw, sol.y1 - sol.y0, sol.hd));
+			const geom = view.own(partGeometry(parts[k], sol.hw, sol.y1 - sol.y0, sol.hd));
 			// A sheet has two faces to see; a solid shows only its outside.
 			const side = parts[k].shape === 'folds' ? THREE.DoubleSide : THREE.FrontSide;
 			const mesh = new THREE.Mesh(geom, mats.get(partMaterial(scene, f, parts[k]), side));
@@ -188,13 +188,8 @@ function addGlazing(
 }
 
 /** A part's shape, centred on its box (half-width, height, half-depth). */
-function partGeometry(
-	shape: Part['shape'],
-	hw: number,
-	h: number,
-	hd: number,
-): THREE.BufferGeometry {
-	switch (shape) {
+function partGeometry(part: Part, hw: number, h: number, hd: number): THREE.BufferGeometry {
+	switch (part.shape) {
 		case 'cylinder':
 			return new THREE.CylinderGeometry(hw, hw, hd * 2, 32).rotateX(Math.PI / 2);
 		case 'dome':
@@ -213,6 +208,12 @@ function partGeometry(
 				.translate(0, h / 2, 0);
 		case 'disc':
 			return new THREE.CylinderGeometry(1, 1, h, 40).scale(hw, 1, hd);
+		case 'lathe': {
+			if (!part.profile || part.profile.length < 2)
+				throw new Error(`part ${part.id} is a lathe without a profile`);
+			const pts = part.profile.map(([r, y]) => new THREE.Vector2(r, y - 0.5));
+			return new THREE.LatheGeometry(pts, 48).scale(hw, h, hd);
+		}
 		default:
 			return metricBox(hw * 2, h, hd * 2);
 	}
