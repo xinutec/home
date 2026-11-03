@@ -40,6 +40,9 @@ hand. The 3D house view (`frontend/.../features/house`) renders from these.
   `width`×`height` size the hole; `sill` lifts the bottom off the floor (0 = a
   doorway). A full-width floor-to-`height` opening leaves just a header.
   `depth`/`leads` are informational.
+- **coving** (optional, per room) — the moulding along every wall's top: `drop`
+  metres down the wall, `depth` across the ceiling, drawn in the ceiling's
+  material.
 - **shared walls** — adjacent rooms each include the shared wall in their own
   outline (it's simply drawn by both), and a connecting doorway is an opening in
   each room's copy. There are no special "partition" or "between-rooms" objects —

@@ -96,6 +96,9 @@ export interface Room {
 	surfaces?: { walls?: string; floor?: string; ceiling?: string };
 	/** Where the room view starts: eye and a point looked at, [x, y, z] metres. */
 	view?: { eye: [number, number, number]; look: [number, number, number] };
+	/** The moulding where every wall meets the ceiling: `drop` down the wall and
+	 *  `depth` across the ceiling, metres, curved into the corner. */
+	coving?: { drop: number; depth: number; estimate?: string };
 }
 
 /** Hand-authored house geometry (scenes/house.json): a set of rooms (each its own

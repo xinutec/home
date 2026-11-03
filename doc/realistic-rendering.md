@@ -58,7 +58,9 @@ how it is judged done.
 
 - **Shell:** walls, chimney breast, alcoves, openings to the bay and dining room,
   tape-measured; doorways have their wall thickness (floor, soffit, jambs). Ceiling
-  height is the house-wide 2.4 m, not measured in this room.
+  height is the house-wide 2.4 m, not measured in this room. A coving runs along
+  every wall, 8 cm down and 11 cm across, read from keyframe 1 through its solved
+  camera (an estimate).
 - **Windows:** the bay's three, as glazing in their openings (frame, transom,
   frosted lower pane, clear openers), estimates from keyframe 822.
 - **Furniture:** the sideboard as its real construction, laid out from keyframe 53

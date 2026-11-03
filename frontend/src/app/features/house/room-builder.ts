@@ -5,6 +5,7 @@ import { partsOf, solidsOf } from './assembly';
 import { MaterialLibrary, partMaterial, surfaceMaterial } from './materials';
 import {
 	bounds,
+	covingProfile,
 	glazingLayout,
 	passages,
 	roomPerimeter,
@@ -70,6 +71,7 @@ function addRoomShell(
 	const pts = roomPerimeter(room);
 	const centre = bounds(pts);
 	const wallMat = mats.get(surfaceMaterial(scene, room, 'walls'), THREE.DoubleSide);
+	const covingMat = mats.get(surfaceMaterial(scene, room, 'ceiling'), THREE.DoubleSide);
 	segments(pts).forEach((s, i) => {
 		const len = Math.hypot(s.bx - s.ax, s.bz - s.az);
 		if (len < 1e-6) return;
@@ -86,6 +88,7 @@ function addRoomShell(
 		const inward: [number, number] = toCentre >= 0 ? [nx, nz] : [-nx, -nz];
 		for (const o of ops)
 			if (o.glazing) addGlazing(view, mats, scene, s, len, o, o.glazing, inward, physical);
+		if (room.coving) view.scene.add(coving(view, s, inward, scene.height, room.coving, covingMat));
 	});
 	view.scene.add(
 		flat(view, pts, 0, mats.get(surfaceMaterial(scene, room, 'floor'), THREE.DoubleSide)),
@@ -179,6 +182,38 @@ function addGlazing(
 		mesh.receiveShadow = true;
 		view.scene.add(mesh);
 	}
+}
+
+/** A wall's coving: its profile swept along the wall's top, into the room. Strips
+ *  meet at the corners by overlapping, which the eye does not see. */
+function coving(
+	view: ThreeView,
+	s: WallSeg,
+	inward: [number, number],
+	height: number,
+	c: { drop: number; depth: number },
+	mat: THREE.Material,
+): THREE.Mesh {
+	const prof = covingProfile(c.drop, c.depth);
+	const pos: number[] = [];
+	for (const [u, v] of prof)
+		for (const [x, z] of [
+			[s.ax, s.az],
+			[s.bx, s.bz],
+		])
+			pos.push(x + inward[0] * u, height - v, z + inward[1] * u);
+	const index: number[] = [];
+	for (let k = 0; k < prof.length - 1; k++) {
+		const [a, b, c2, d] = [2 * k, 2 * k + 1, 2 * k + 2, 2 * k + 3];
+		index.push(a, b, c2, b, d, c2);
+	}
+	const geom = view.own(new THREE.BufferGeometry());
+	geom.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+	geom.setIndex(index);
+	geom.computeVertexNormals();
+	const mesh = new THREE.Mesh(geom, mat);
+	mesh.castShadow = mesh.receiveShadow = true;
+	return mesh;
 }
 
 /** Glass this smooth transmits without scattering: a window to see the sky through. */

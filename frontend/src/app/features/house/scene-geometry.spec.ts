@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { Room } from './house.model';
 import {
 	bounds,
+	covingProfile,
 	glazingLayout,
 	passages,
 	perimeter,
@@ -194,5 +195,18 @@ describe('passages', () => {
 			openings: [{ wall: 0, offset: 0.5, width: 1, height: 1, sill: 1, leads: 'outside' }],
 		};
 		expect(passages({ height: 2.4, rooms: [lone], furniture: [] })).toEqual([]);
+	});
+});
+
+describe('covingProfile', () => {
+	it('runs from the wall, its drop down, to the ceiling, its depth out, bowed into the corner', () => {
+		const p = covingProfile(0.08, 0.11);
+		expect(p[0][0]).toBeCloseTo(0, 9);
+		expect(p[0][1]).toBeCloseTo(0.08, 9);
+		expect(p[p.length - 1][0]).toBeCloseTo(0.11, 9);
+		expect(p[p.length - 1][1]).toBeCloseTo(0, 9);
+		// Its middle is nearer the corner than the straight chamfer's.
+		const [u, v] = p[Math.floor(p.length / 2)];
+		expect(u / 0.11 + v / 0.08).toBeLessThan(1);
 	});
 });

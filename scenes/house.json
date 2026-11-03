@@ -35,7 +35,7 @@
         {"wall": 6, "offset": 1.37, "width": 1.5, "height": 1.94, "sill": 0, "leads": "dining"}
       ],
       "surfaces": {"walls": "wall-paint", "floor": "carpet", "ceiling": "ceiling-paint"},
-      "view": {"eye": [-0.423, 0.842, 2.709], "look": [-0.469, 0.649, -0.284]}
+      "view": {"eye": [-0.423, 0.842, 2.709], "look": [-0.469, 0.649, -0.284]}, "coving": {"drop": 0.08, "depth": 0.11, "estimate": "its edges in keyframe 1, through the solved camera, on the alcove's back wall; measure its drop down the wall and its depth across the ceiling"}
     },
     {
       "name": "dining",

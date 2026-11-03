@@ -216,3 +216,12 @@ export function passages(scene: HouseScene): Passage[] {
 	});
 	return out;
 }
+
+/** A coving's profile, wall to ceiling: points [across the ceiling from the wall,
+ *  down from the ceiling], a quarter ellipse bowed into the corner. */
+export function covingProfile(drop: number, depth: number, steps = 8): [number, number][] {
+	return Array.from({ length: steps + 1 }, (_, k) => {
+		const t = ((k / steps) * Math.PI) / 2;
+		return [depth * (1 - Math.cos(t)), drop * (1 - Math.sin(t))];
+	});
+}
