@@ -279,6 +279,7 @@ times are rough.
 | 9 | Ceiling light | where it hangs (distance from two walls), drop below the ceiling, the bulb's watts or lumens and colour temperature (printed on the bulb) | 2 min |
 | 10 | White paper (only if step 2's two photos disagree) | one photo of the fireplace wall with an A4 sheet on the mantel, lamp off | 1 min |
 | 11 | A RAW photo of the bay | the camera app's RAW (DNG) on, lamp off, from the sideboard alcove at waist height, looking at the bay; no tone mapping, so it shows the light as it is | 1 min |
+| 12 | Mantel shelf and fire surround | the shelf's width, depth and top height; the surround's width and leg width. Keyframe 726 (the fireplace from the alcove, ceiling in view, no window) cannot be solved against their estimates: 8 px rms, against 2-4 px for the other photos | 2 min |
 
-About fifteen minutes. Nothing here is precise beyond a centimetre, and nothing
+About twenty minutes. Nothing here is precise beyond a centimetre, and nothing
 needs moving furniture.
