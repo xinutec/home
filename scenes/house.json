@@ -38,7 +38,7 @@
         {"wall": 5, "offset": 1.12, "width": 1.12, "height": 1.98, "sill": 0, "estimate": "the glazed door behind the big sofa, from keyframe 714 through the solved camera; measure its position along the wall, its width and height"},
         {"wall": 6, "offset": 1.37, "width": 1.5, "height": 1.94, "sill": 0, "leads": "dining"}
       ],
-      "surfaces": {"walls": "wall-paint", "floor": "carpet", "ceiling": "ceiling-paint"},
+      "surfaces": {"walls": "wall-paint", "floor": "carpet", "ceiling": "ceiling-paint", "skirting": "pvc-white"}, "skirting": {"height": 0.17, "depth": 0.02, "estimate": "its top at 0.17 m as observe's lines read it along the dining wall (#2056), 2 cm thick; the furniture is not yet held 2 cm off the walls by it; measure its height and thickness"},
       "view": {"eye": [-0.423, 0.842, 2.709], "look": [-0.469, 0.649, -0.284]}, "coving": {"drop": 0.08, "depth": 0.11, "estimate": "its edges in keyframe 1, through the solved camera, on the alcove's back wall; measure its drop down the wall and its depth across the ceiling"}
     },
     {
@@ -74,7 +74,7 @@
         {"wall": 2, "offset": 0.07, "width": 0.52, "height": 1.25, "sill": 0.9, "leads": "outside", "glazing": {"frame": 0.06, "transom": 0.92, "upperPanes": 1, "lower": "glass-frosted", "upper": "glass-clear", "frameMaterial": "pvc-white"}, "estimate": "estimate from keyframe 822 of the 26 September walk; measure the frame's width and height, the sill, the transom, and whether the lower pane is frosted"},
         {"wall": 3, "offset": 0, "width": 2.4, "height": 2.22, "sill": 0, "leads": "living"}
       ],
-      "surfaces": {"walls": "wall-paint", "floor": "carpet", "ceiling": "ceiling-paint"}
+      "surfaces": {"walls": "wall-paint", "floor": "carpet", "ceiling": "ceiling-paint", "skirting": "pvc-white"}, "skirting": {"height": 0.17, "depth": 0.02, "estimate": "its top at 0.17 m as observe's lines read it along the dining wall (#2056), 2 cm thick; the furniture is not yet held 2 cm off the walls by it; measure its height and thickness"}
     }
   ],
   "furniture": [

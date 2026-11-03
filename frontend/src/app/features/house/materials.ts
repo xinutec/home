@@ -2,10 +2,11 @@ import * as THREE from 'three';
 import type { Furniture, HouseScene, MaterialSpec, Part, Room } from './house.model';
 
 /** What a room surface looks like when its room names nothing. */
-const SURFACE_DEFAULTS: Record<'walls' | 'floor' | 'ceiling', MaterialSpec> = {
+const SURFACE_DEFAULTS: Record<'walls' | 'floor' | 'ceiling' | 'skirting', MaterialSpec> = {
 	walls: { color: '#c9cbc4', roughness: 0.9 },
 	floor: { color: '#6b6870', roughness: 1, texture: 'carpet', textureScale: 0.5 },
 	ceiling: { color: '#f4f3ef', roughness: 0.95 },
+	skirting: { color: '#f1f1ec', roughness: 0.4 },
 };
 
 function named(scene: HouseScene, key: string): MaterialSpec {
@@ -31,7 +32,7 @@ export function partMaterial(scene: HouseScene, f: Furniture, p: Part): Material
 export function surfaceMaterial(
 	scene: HouseScene,
 	room: Room,
-	surface: 'walls' | 'floor' | 'ceiling',
+	surface: 'walls' | 'floor' | 'ceiling' | 'skirting',
 ): MaterialSpec {
 	const key = room.surfaces?.[surface];
 	return key ? named(scene, key) : SURFACE_DEFAULTS[surface];

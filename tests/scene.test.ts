@@ -50,7 +50,11 @@ describe("scenes/house.json", () => {
 	it("has every estimate say what would settle it", () => {
 		const all = JSON.parse(readFileSync("scenes/house.json", "utf8")) as {
 			furniture: { estimate?: string }[];
-			rooms: { openings?: { estimate?: string }[]; coving?: { estimate?: string } }[];
+			rooms: {
+				openings?: { estimate?: string }[];
+				coving?: { estimate?: string };
+				skirting?: { estimate?: string };
+			}[];
 			materials?: Record<string, { estimate?: string }>;
 			lights?: { estimate?: string }[];
 		};
@@ -58,6 +62,7 @@ describe("scenes/house.json", () => {
 			...all.furniture.map((f) => f.estimate),
 			...all.rooms.flatMap((r) => (r.openings ?? []).map((o) => o.estimate)),
 			...all.rooms.map((r) => r.coving?.estimate),
+			...all.rooms.map((r) => r.skirting?.estimate),
 			...Object.values(all.materials ?? {}).map((m) => m.estimate),
 			...(all.lights ?? []).map((l) => l.estimate),
 		].filter((e): e is string => e !== undefined);

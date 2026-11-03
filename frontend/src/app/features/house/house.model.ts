@@ -97,12 +97,15 @@ export interface Room {
 	walls: [number, number][];
 	openings?: WallOpening[];
 	/** Material keys for the room view's surfaces. */
-	surfaces?: { walls?: string; floor?: string; ceiling?: string };
+	surfaces?: { walls?: string; floor?: string; ceiling?: string; skirting?: string };
 	/** Where the room view starts: eye and a point looked at, [x, y, z] metres. */
 	view?: { eye: [number, number, number]; look: [number, number, number] };
 	/** The moulding where every wall meets the ceiling: `drop` down the wall and
 	 *  `depth` across the ceiling, metres, curved into the corner. */
 	coving?: { drop: number; depth: number; estimate?: string };
+	/** The board along the foot of every wall, wherever the wall reaches the floor:
+	 *  `height` up the wall, `depth` out from it, metres. */
+	skirting?: { height: number; depth: number; estimate?: string };
 }
 
 /** Hand-authored house geometry (scenes/house.json): a set of rooms (each its own

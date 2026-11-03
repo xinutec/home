@@ -61,7 +61,9 @@ how it is judged done.
   height 2.4 m, from the hand-measured model; observe's depth of this room's ceiling
   agrees to about 1 cm (its #2056). A coving runs along
   every wall, 8 cm down and 11 cm across, read from keyframe 1 through its solved
-  camera (an estimate).
+  camera (an estimate), and a skirting at every wall's foot, 0.17 m tall and 2 cm
+  thick, broken at doorways, running on under windows (an estimate, from observe's
+  lines; the physics does not yet hold the furniture 2 cm off the walls by it).
 - **Windows:** the bay's three, as glazing in their openings (frame, transom,
   frosted lower pane, clear openers), estimates from keyframe 822.
 - **Furniture:** the sideboard as its real construction, laid out from keyframe 53

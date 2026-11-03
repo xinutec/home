@@ -4,6 +4,7 @@ import type { Room } from './house.model';
 import {
 	bounds,
 	covingProfile,
+	skirtingRuns,
 	glazingLayout,
 	passages,
 	perimeter,
@@ -208,5 +209,20 @@ describe('covingProfile', () => {
 		// Its middle is nearer the corner than the straight chamfer's.
 		const [u, v] = p[Math.floor(p.length / 2)];
 		expect(u / 0.11 + v / 0.08).toBeLessThan(1);
+	});
+});
+
+describe('skirtingRuns', () => {
+	it('runs the length of a plain wall', () => {
+		expect(skirtingRuns(3, [], 2.4)).toEqual([[0, 3]]);
+	});
+
+	it('breaks at a doorway and runs on under a window', () => {
+		const door = { wall: 0, offset: 1, width: 0.8, height: 2, sill: 0 };
+		const window = { wall: 0, offset: 2.2, width: 0.5, height: 1, sill: 0.9 };
+		expect(skirtingRuns(3, [door, window], 2.4)).toEqual([
+			[0, 1],
+			[1.8, 3],
+		]);
 	});
 });

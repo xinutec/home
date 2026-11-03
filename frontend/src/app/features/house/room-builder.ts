@@ -10,6 +10,7 @@ import {
 	passages,
 	roomPerimeter,
 	segments,
+	skirtingRuns,
 	wallPanels,
 } from './scene-geometry';
 import type { P3, Passage } from './scene-geometry';
@@ -70,6 +71,7 @@ function addRoomShell(
 	const centre = bounds(pts);
 	const wallMat = mats.get(surfaceMaterial(scene, room, 'walls'), THREE.DoubleSide);
 	const covingMat = mats.get(surfaceMaterial(scene, room, 'ceiling'), THREE.DoubleSide);
+	const skirtingMat = mats.get(surfaceMaterial(scene, room, 'skirting'));
 	segments(pts).forEach((s, i) => {
 		const len = Math.hypot(s.bx - s.ax, s.bz - s.az);
 		if (len < 1e-6) return;
@@ -87,6 +89,9 @@ function addRoomShell(
 		for (const o of ops)
 			if (o.glazing) addGlazing(view, mats, scene, s, len, o, o.glazing, inward, physical);
 		if (room.coving) view.scene.add(coving(view, s, inward, scene.height, room.coving, covingMat));
+		if (room.skirting)
+			for (const [a0, a1] of skirtingRuns(len, ops, scene.height))
+				view.scene.add(skirting(view, s, len, a0, a1, inward, room.skirting, skirtingMat));
 	});
 	view.scene.add(
 		flat(view, pts, 0, mats.get(surfaceMaterial(scene, room, 'floor'), THREE.DoubleSide)),
@@ -277,6 +282,32 @@ function coving(
 	geom.setIndex(index);
 	geom.computeVertexNormals();
 	const mesh = new THREE.Mesh(geom, mat);
+	mesh.castShadow = mesh.receiveShadow = true;
+	return mesh;
+}
+
+/** One run of skirting: a board `a1 - a0` long at the wall's foot, its depth into
+ *  the room. */
+function skirting(
+	view: ThreeView,
+	s: WallSeg,
+	len: number,
+	a0: number,
+	a1: number,
+	inward: [number, number],
+	k: { height: number; depth: number },
+	mat: THREE.Material,
+): THREE.Mesh {
+	const dx = (s.bx - s.ax) / len;
+	const dz = (s.bz - s.az) / len;
+	const along = (a0 + a1) / 2;
+	const mesh = new THREE.Mesh(view.own(metricBox(a1 - a0, k.height, k.depth)), mat);
+	mesh.position.set(
+		s.ax + dx * along + (inward[0] * k.depth) / 2,
+		k.height / 2,
+		s.az + dz * along + (inward[1] * k.depth) / 2,
+	);
+	mesh.rotation.y = -Math.atan2(s.bz - s.az, s.bx - s.ax);
 	mesh.castShadow = mesh.receiveShadow = true;
 	return mesh;
 }

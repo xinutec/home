@@ -225,3 +225,18 @@ export function covingProfile(drop: number, depth: number, steps = 8): [number, 
 		return [depth * (1 - Math.cos(t)), drop * (1 - Math.sin(t))];
 	});
 }
+
+/** Where a wall's skirting runs, as spans along it: wherever the wall reaches the
+ *  floor, so under a window but not across a doorway. */
+export function skirtingRuns(len: number, ops: WallOpening[], h: number): [number, number][] {
+	const runs: [number, number][] = [];
+	const low = wallPanels(len, ops, h)
+		.filter((p) => p.yb <= 1e-6)
+		.sort((p, q) => p.a0 - q.a0);
+	for (const p of low) {
+		const last = runs[runs.length - 1];
+		if (last && p.a0 <= last[1] + 1e-6) last[1] = Math.max(last[1], p.a1);
+		else runs.push([p.a0, p.a1]);
+	}
+	return runs;
+}

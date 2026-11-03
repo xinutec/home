@@ -43,6 +43,9 @@ hand. The 3D house view (`frontend/.../features/house`) renders from these.
 - **coving** (optional, per room) — the moulding along every wall's top: `drop`
   metres down the wall, `depth` across the ceiling, drawn in the ceiling's
   material.
+- **skirting** (optional, per room) — the board along every wall's foot, wherever
+  the wall reaches the floor: `height` up the wall, `depth` out from it, in the
+  room's `surfaces.skirting` material. Drawn only; the physics does not see it.
 - **shared walls** — adjacent rooms each include the shared wall in their own
   outline (it's simply drawn by both), and a connecting doorway is an opening in
   each room's copy. There are no special "partition" or "between-rooms" objects —
