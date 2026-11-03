@@ -77,8 +77,12 @@ how it is judged done.
   camera (observe #2093 would give every keyframe's); the bay sofa as its
   structure (carved-wood feet, apron and arms, three seat cushions, an upholstered
   back), heights typical; two armchairs of the same set, one at each end of the
-  big sofa (carved legs, arms and back frame, upholstered seat, cushion and back),
-  checked by eye; to fit both, the wall between the dining wall and the bay-end
+  big sofa, as their construction from keyframes 520, 526 and 556: an upholstered
+  back with an arched top (`"shape": "arch"` with its `rise`), wooden arms on
+  carved turned posts ending in a scroll (`"roll"`), carved front legs, a front
+  rail with a rosette, an upholstered seat and cushion; checked by eye. Not yet:
+  the arms' slope (parts do not tilt), the deep carving and paw feet, the
+  scalloped rail; to fit both, the wall between the dining wall and the bay-end
   cupboard (3.43 m) makes the chairs 0.72 m and the sofa 1.95 m, the sofa moved
   toward the bay, where observe's placement of the walk has it; both IKEA cupboards
   as carcass, shelf and two hinged doors (keyframe 130 shows one open), whose

@@ -201,7 +201,9 @@ function partGeometry(part: Part, hw: number, h: number, hd: number): THREE.Buff
 		case 'folds':
 			return folds(hw * 2, h, hd * 2);
 		case 'arch':
-			return arch(hw * 2, h, hd * 2);
+			return arch(hw * 2, h, hd * 2, part.rise);
+		case 'roll':
+			return new THREE.CylinderGeometry(1, 1, hw * 2, 32).rotateZ(Math.PI / 2).scale(1, h / 2, hd);
 		case 'bowl':
 			// The lower half of a unit sphere, stretched to the box, its flat top at the box's top.
 			return new THREE.SphereGeometry(1, 40, 20, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2)
@@ -233,17 +235,22 @@ function partGeometry(part: Part, hw: number, h: number, hd: number): THREE.Buff
 	}
 }
 
-/** A slab `w` wide, `h` tall and `d` deep whose top is a half circle across its
- *  width, centred. Taller than it is half wide, or its top is all arch. */
-function arch(w: number, h: number, d: number): THREE.BufferGeometry {
-	const r = w / 2;
-	const spring = Math.max(-h / 2, h / 2 - r);
+/** A slab `w` wide, `h` tall and `d` deep whose top arches `rise` above its
+ *  shoulders (a half circle across its width when absent), centred. */
+function arch(w: number, h: number, d: number, rise = w / 2): THREE.BufferGeometry {
+	const half = w / 2;
+	const up = Math.min(rise, h);
+	// The circle through both shoulders and the crown.
+	const r = (up * up + half * half) / (2 * up);
+	const shoulder = h / 2 - up;
+	const centre = shoulder - (r - up);
+	const a = Math.atan2(shoulder - centre, half);
 	const outline = new THREE.Shape();
-	outline.moveTo(-r, -h / 2);
-	outline.lineTo(r, -h / 2);
-	outline.lineTo(r, spring);
-	outline.absarc(0, spring, r, 0, Math.PI, false);
-	outline.lineTo(-r, -h / 2);
+	outline.moveTo(-half, -h / 2);
+	outline.lineTo(half, -h / 2);
+	outline.lineTo(half, shoulder);
+	outline.absarc(0, centre, r, a, Math.PI - a, false);
+	outline.lineTo(-half, -h / 2);
 	return new THREE.ExtrudeGeometry(outline, {
 		depth: d,
 		bevelEnabled: false,
