@@ -82,7 +82,10 @@ how it is judged done.
   doors the bean bag and the armchair block, as they do in the room (listed in
   `scene-physics.spec.ts`); the bean bag as a dome (`"shape": "dome"`), 0.45 m
   high from its top in keyframe 822; the curtains as pleated sheets (`"shape":
-  "folds"`, a fold every 5.5 cm); the TV on its wall bracket; the hearth, fire
+  "folds"`, a fold every 5.5 cm); the fire surround in its measured size, laid out
+  from keyframe 769 straightened: oak legs and frieze, a black back panel, the
+  polished arch (`"shape": "arch"`) with its dark opening, and the cast-iron fire
+  front, both in black-lead (polished iron); the TV on its wall bracket; the hearth, fire
   surround, mantel shelf and two IKEA cupboards as boxes; the curtains on their
   pole, both sofas, the armchair, the bean bag, the mat and the ceiling light as
   estimated blocks. The mat is placed through the two solved cameras (it runs
@@ -309,7 +312,7 @@ times are rough.
 | 9 | Ceiling light | where it hangs (distance from two walls), drop below the ceiling, the bulb's watts or lumens and colour temperature (printed on the bulb) | 2 min |
 | 10 | White paper (only if step 2's two photos disagree) | one photo of the fireplace wall with an A4 sheet on the mantel, lamp off | 1 min |
 | 11 | A RAW photo of the bay | the camera app's RAW (DNG) on, lamp off, from the sideboard alcove at waist height, looking at the bay; no tone mapping, so it shows the light as it is | 1 min |
-| 12 | Mantel shelf and fire surround | the shelf's width, depth and top height; the surround's width and leg width. Keyframe 726 (the fireplace from the alcove, ceiling in view, no window) cannot be solved against their estimates: 8 px rms, against 2-4 px for the other photos | 2 min |
+| 12 | Mantel shelf and fire surround | (the shelf, surround and hearth are measured) a leg's width, the arch's width and height, the fire front's. Keyframe 726 (the fireplace from the alcove, ceiling in view, no window) cannot be solved against their estimates: 8 px rms, against 2-4 px for the other photos | 2 min |
 | 13 | The glazed door behind the big sofa | its position along the wall, width and header height; it is not in the scene yet | 1 min |
 | 14 | The big sofa and its two armchairs | each one's width and where it stands along the wall (both chairs and the sofa are estimates fitted to the wall between them) | 2 min |
 

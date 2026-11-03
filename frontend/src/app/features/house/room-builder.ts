@@ -199,9 +199,29 @@ function partGeometry(
 				.translate(0, -h / 2, 0);
 		case 'folds':
 			return folds(hw * 2, h, hd * 2);
+		case 'arch':
+			return arch(hw * 2, h, hd * 2);
 		default:
 			return metricBox(hw * 2, h, hd * 2);
 	}
+}
+
+/** A slab `w` wide, `h` tall and `d` deep whose top is a half circle across its
+ *  width, centred. Taller than it is half wide, or its top is all arch. */
+function arch(w: number, h: number, d: number): THREE.BufferGeometry {
+	const r = w / 2;
+	const spring = Math.max(-h / 2, h / 2 - r);
+	const outline = new THREE.Shape();
+	outline.moveTo(-r, -h / 2);
+	outline.lineTo(r, -h / 2);
+	outline.lineTo(r, spring);
+	outline.absarc(0, spring, r, 0, Math.PI, false);
+	outline.lineTo(-r, -h / 2);
+	return new THREE.ExtrudeGeometry(outline, {
+		depth: d,
+		bevelEnabled: false,
+		curveSegments: 32,
+	}).translate(0, 0, -d / 2);
 }
 
 /** Pleats a curtain bunches into: one about every FOLD_PITCH metres across. */

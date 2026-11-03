@@ -50,8 +50,9 @@ export interface Part {
 	 *  to: `cylinder`, round about its front-to-back axis (diameter the size's x,
 	 *  length its z); `dome`, the top half of an ellipsoid on its flat base, filling
 	 *  the box (a bean bag); `folds`, a sheet rippled across its width, its folds the
-	 *  box's depth deep (a hanging curtain). */
-	shape?: 'cylinder' | 'dome' | 'folds';
+	 *  box's depth deep (a hanging curtain); `arch`, the box with its top rounded to a
+	 *  half circle across its width (a fireplace's arched insert). */
+	shape?: 'cylinder' | 'dome' | 'folds' | 'arch';
 }
 
 /** An opening (doorway / window / wide cased passage) cut into one of a room's
