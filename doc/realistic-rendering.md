@@ -77,7 +77,8 @@ how it is judged done.
   as carcass, shelf and two hinged doors (keyframe 130 shows one open), whose
   doors the bean bag and the armchair block, as they do in the room (listed in
   `scene-physics.spec.ts`); the bean bag as a dome (`"shape": "dome"`), 0.45 m
-  high from its top in keyframe 822; the TV on its wall bracket; the hearth, fire
+  high from its top in keyframe 822; the curtains as pleated sheets (`"shape":
+  "folds"`, a fold every 5.5 cm); the TV on its wall bracket; the hearth, fire
   surround, mantel shelf and two IKEA cupboards as boxes; the curtains on their
   pole, both sofas, the armchair, the bean bag, the mat and the ceiling light as
   estimated blocks. The mat is placed through the two solved cameras (it runs
@@ -200,6 +201,7 @@ recording, so no picture of the house is in the repository.
 | --- | --- | --- |
 | Solved camera, first regions; raster | 12.1 | bay sofa seat 25.9 (×0.15), curtain 20.8 (×0.25): the darks are far too dark; bay reveal 8.6, ceiling 7.7 |
 | The bay sofa as its structure, A/B against the block (`--scene`), traced 256, estimated paints | 20.3 → 16.6 | sofa seat 34.1 → 12.2 (the block put a dark front where the photo has a lit cushion), carpet 17.9 → 8.2 (the exposure no longer pulled by it); the left wall 9.2 → 14.6 with the exposure |
+| The curtains as pleated sheets, traced 256 | 18.2 | curtain 23.0 → 32.7 (×0.06): the folds shade themselves, and the fabric's colour, toned on the flat block under the approximate light, is now too dark; kept for the truer shape, the paint fit to settle the colour. In the photo the bunched curtain is about 0.3 m wide, the model's 0.22 |
 | Paints fitted to this photo, traced | 10.8 | no fit: every paint but the ceiling at the 0.95 limit |
 | The same, clear openers as glass | 11.0 | unchanged: not the openers |
 

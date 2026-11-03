@@ -49,8 +49,9 @@ export interface Part {
 	/** Drawn other than as its box, which contains it and which the physics holds it
 	 *  to: `cylinder`, round about its front-to-back axis (diameter the size's x,
 	 *  length its z); `dome`, the top half of an ellipsoid on its flat base, filling
-	 *  the box (a bean bag). */
-	shape?: 'cylinder' | 'dome';
+	 *  the box (a bean bag); `folds`, a sheet rippled across its width, its folds the
+	 *  box's depth deep (a hanging curtain). */
+	shape?: 'cylinder' | 'dome' | 'folds';
 }
 
 /** An opening (doorway / window / wide cased passage) cut into one of a room's

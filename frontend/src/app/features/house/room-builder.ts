@@ -44,7 +44,9 @@ export function buildInterior(
 		const parts = partsOf(f);
 		solidsOf(f).forEach((sol, k) => {
 			const geom = view.own(partGeometry(parts[k].shape, sol.hw, sol.y1 - sol.y0, sol.hd));
-			const mesh = new THREE.Mesh(geom, mats.get(partMaterial(scene, f, parts[k])));
+			// A sheet has two faces to see; a solid shows only its outside.
+			const side = parts[k].shape === 'folds' ? THREE.DoubleSide : THREE.FrontSide;
+			const mesh = new THREE.Mesh(geom, mats.get(partMaterial(scene, f, parts[k]), side));
 			mesh.position.set(sol.x, (sol.y0 + sol.y1) / 2, sol.z);
 			mesh.rotation.y = sol.yaw;
 			mesh.castShadow = mesh.receiveShadow = true;
@@ -195,9 +197,36 @@ function partGeometry(
 			return new THREE.SphereGeometry(1, 40, 20, 0, Math.PI * 2, 0, Math.PI / 2)
 				.scale(hw, h, hd)
 				.translate(0, -h / 2, 0);
+		case 'folds':
+			return folds(hw * 2, h, hd * 2);
 		default:
 			return metricBox(hw * 2, h, hd * 2);
 	}
+}
+
+/** Pleats a curtain bunches into: one about every FOLD_PITCH metres across. */
+const FOLD_PITCH = 0.055;
+
+/** A sheet `w` wide and `h` tall, rippled `d` deep across its width, centred. */
+function folds(w: number, h: number, d: number): THREE.BufferGeometry {
+	const n = Math.max(1, Math.round(w / FOLD_PITCH));
+	const steps = n * 12;
+	const pos: number[] = [];
+	for (let i = 0; i <= steps; i++) {
+		const x = -w / 2 + (w * i) / steps;
+		const z = (d / 2) * Math.sin((2 * Math.PI * n * i) / steps);
+		pos.push(x, -h / 2, z, x, h / 2, z);
+	}
+	const index: number[] = [];
+	for (let i = 0; i < steps; i++) {
+		const [a, b, c, e] = [2 * i, 2 * i + 1, 2 * i + 2, 2 * i + 3];
+		index.push(a, c, b, b, c, e);
+	}
+	const geom = new THREE.BufferGeometry();
+	geom.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+	geom.setIndex(index);
+	geom.computeVertexNormals();
+	return geom;
 }
 
 /** A wall's coving: its profile swept along the wall's top, into the room. Strips
