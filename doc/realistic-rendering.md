@@ -67,7 +67,10 @@ how it is judged done.
   straightened to the front's plane: an oak top with a 2 cm overhang, corner posts
   that are its legs, a face frame (top rail, apron), two flush sliding drawers,
   three shaker doors (frame and recessed panel) on hinges, and round knobs
-  (`"shape": "cylinder"`), all held by the physics; the TV on its wall bracket; the hearth, fire
+  (`"shape": "cylinder"`), all held by the physics; the big sofa as its structure
+  (chrome legs, base, back frame, slim arms, two seat and two back cushions with
+  their seams), heights typical, checked by eye only: no photo of it has a solved
+  camera (observe #2093 would give every keyframe's); the TV on its wall bracket; the hearth, fire
   surround, mantel shelf and two IKEA cupboards as boxes; the curtains on their
   pole, both sofas, the armchair, the bean bag, the mat and the ceiling light as
   estimated blocks. The mat is placed through the two solved cameras (it runs
@@ -288,6 +291,7 @@ times are rough.
 | 10 | White paper (only if step 2's two photos disagree) | one photo of the fireplace wall with an A4 sheet on the mantel, lamp off | 1 min |
 | 11 | A RAW photo of the bay | the camera app's RAW (DNG) on, lamp off, from the sideboard alcove at waist height, looking at the bay; no tone mapping, so it shows the light as it is | 1 min |
 | 12 | Mantel shelf and fire surround | the shelf's width, depth and top height; the surround's width and leg width. Keyframe 726 (the fireplace from the alcove, ceiling in view, no window) cannot be solved against their estimates: 8 px rms, against 2-4 px for the other photos | 2 min |
+| 13 | The glazed door behind the big sofa | its position along the wall, width and header height; it is not in the scene yet | 1 min |
 
 About twenty minutes. Nothing here is precise beyond a centimetre, and nothing
 needs moving furniture.
