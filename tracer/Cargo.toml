@@ -1,0 +1,24 @@
+[package]
+name = "tracer"
+version = "0.1.0"
+edition = "2024"
+
+# The house's path tracer on horus's RTX 4090: OptiX on its ray-tracing cores,
+# CUDA for the shading. Reads the scene the page exports (frontend/e2e/export.ts),
+# writes a still. See README.md.
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+# The driver API, opened at run time: the Mac, with no CUDA, still builds and
+# checks the host code.
+cudarc = { version = "0.19", default-features = false, features = ["std", "driver", "cuda-13040", "dynamic-loading"] }
+gltf = { version = "1.4", features = ["KHR_texture_transform", "KHR_materials_transmission", "KHR_materials_volume", "KHR_materials_ior", "extras"] }
+libloading = "0.9"
+png = "0.18"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
+
+[build-dependencies]
+bindgen = "0.73"

@@ -146,6 +146,25 @@ in  { name = "home"
         , env = G.nonInteractive
         , timeout_s = 1800
         }
+      , {-  The path tracer (tracer/): its host code. Its device code needs nvcc,
+            which only horus has; build.rs skips it here, and the tracer then
+            refuses to run.
+        -}
+        G.Check::{
+        , name = "tracer formatting"
+        , cwd = "tracer"
+        , argv = G.inDevShell [ "cargo", "fmt", "--check" ]
+        , timeout_s = 180
+        }
+      , G.Check::{
+        , name = "tracer clippy"
+        , cwd = "tracer"
+        , argv =
+            G.inDevShell
+              [ "cargo", "clippy", "--all-targets", "--", "-D", "warnings" ]
+        , env = G.clippyTarget
+        , timeout_s = 1800
+        }
       , G.checkTable "../dev-lint"
       , G.devLint "../"
       ]

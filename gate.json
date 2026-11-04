@@ -289,6 +289,43 @@
     {
       "argv": [
         "nix",
+        "develop",
+        "--no-warn-dirty",
+        "--command",
+        "cargo",
+        "fmt",
+        "--check"
+      ],
+      "artifacts": [],
+      "cwd": "tracer",
+      "env": {},
+      "name": "tracer formatting",
+      "timeout_s": 180
+    },
+    {
+      "argv": [
+        "nix",
+        "develop",
+        "--no-warn-dirty",
+        "--command",
+        "cargo",
+        "clippy",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "artifacts": [],
+      "cwd": "tracer",
+      "env": {
+        "CARGO_TARGET_DIR": "target/clippy"
+      },
+      "name": "tracer clippy",
+      "timeout_s": 1800
+    },
+    {
+      "argv": [
+        "nix",
         "run",
         "git+file:../dev-lint?ref=HEAD#gate",
         "--",

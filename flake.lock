@@ -16,9 +16,27 @@
         "type": "github"
       }
     },
+    "optix": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1765499288,
+        "narHash": "sha256-DZqsXSbuvCsh1EXFS29H4zCm20zwBYxVKj/pvZRvSTE=",
+        "owner": "NVIDIA",
+        "repo": "optix-dev",
+        "rev": "f1f6dd803f3159992d248178f6e09421c6eb8b6d",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NVIDIA",
+        "ref": "v9.1.0",
+        "repo": "optix-dev",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": "nixpkgs",
+        "optix": "optix"
       }
     }
   },

@@ -18,14 +18,31 @@ export function overcastRadiance(altitude: number): number {
 export const SKY: [number, number, number] = [0.86, 0.91, 1.0]; // overcast daylight, a little blue
 export const GROUND: [number, number, number] = [0.42, 0.46, 0.36]; // grass and paving
 
+/** The sky as an equirectangular image: linear RGBA floats, row by row. */
+export interface SkyImage {
+	width: number;
+	height: number;
+	data: Float32Array;
+}
+
 /** The sky as an equirectangular image, for `scene.environment`. */
 export function overcastSky(): THREE.DataTexture {
+	const { width, height, data } = overcastSkyImage();
+	const tex = new THREE.DataTexture(data, width, height, THREE.RGBAFormat, THREE.FloatType);
+	tex.mapping = THREE.EquirectangularReflectionMapping;
+	tex.needsUpdate = true;
+	return tex;
+}
+
+/** overcastSky's pixels, for those that read them (room.ts's export). */
+export function overcastSkyImage(): SkyImage {
 	const w = 256;
 	const h = 128;
 	const data = new Float32Array(w * h * 4);
 	for (let y = 0; y < h; y++) {
-		// Row 0 is the top of the image: the zenith.
-		const altitude = Math.PI / 2 - ((y + 0.5) / h) * Math.PI;
+		// Row 0 is straight down: three samples an equirectangular DataTexture with v
+		// rising with the view's height (equirectUv), and row 0 at v = 0.
+		const altitude = ((y + 0.5) / h) * Math.PI - Math.PI / 2;
 		const l = overcastRadiance(altitude);
 		const tint = altitude < 0 ? GROUND : SKY;
 		for (let x = 0; x < w; x++) {
@@ -36,10 +53,7 @@ export function overcastSky(): THREE.DataTexture {
 			data[i + 3] = 1;
 		}
 	}
-	const tex = new THREE.DataTexture(data, w, h, THREE.RGBAFormat, THREE.FloatType);
-	tex.mapping = THREE.EquirectangularReflectionMapping;
-	tex.needsUpdate = true;
-	return tex;
+	return { width: w, height: h, data };
 }
 
 /** The radiance a diffusing window of transmittance `t` sends into the room under

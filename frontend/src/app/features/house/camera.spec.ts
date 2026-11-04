@@ -15,6 +15,11 @@ describe('cameraFromQuery', () => {
 		expect(cameraFromQuery('?trace=0&exposure=-1')).toEqual({});
 	});
 
+	it('reads an export of the physical scene', () => {
+		expect(cameraFromQuery('?export')).toEqual({ export: true });
+		expect(cameraFromQuery('?trace=64')).not.toHaveProperty('export');
+	});
+
 	it('reads a linear tone, and nothing else as one', () => {
 		expect(cameraFromQuery('?tone=linear')).toEqual({ linear: true });
 		expect(cameraFromQuery('?tone=aces')).toEqual({});

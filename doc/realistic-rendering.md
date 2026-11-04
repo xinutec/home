@@ -39,12 +39,16 @@ how it is judged done.
    door. Next: the bay sofa, the sideboard and TV, the bay's three windows, the
    curtains and pole, the fireplace's leg and arch, the coving and skirting, the
    ceiling light.
-2. **Tilted parts**, so the chairs' and bay sofa's arms can slope (the chairs' elbow
+2. **Score keyframe 1 again under the corrected trace** (`tracer/horus.sh`, or
+   `compare-view --trace` on horus): the path-traced rows below were made with the
+   sky upside down and the frosted panes counted twice. Then find which tracer is
+   right where they still differ, by about 11% (tracer/README.md).
+3. **Tilted parts**, so the chairs' and bay sofa's arms can slope (the chairs' elbow
    rests fall toward the back, the front scrolls rise to 0.71); and a wedge for the
    big sofa's back frame (6 cm at its top, thicker below).
-3. **Reflections**: one baked capture of the room, for the glass, TV, metal and
+4. **Reflections**: one baked capture of the room, for the glass, TV, metal and
    the fireplace's iron.
-4. Find out why keyframe 822 cannot be fitted (the phone's tone mapping or the
+5. Find out why keyframe 822 cannot be fitted (the phone's tone mapping or the
    window light): a RAW photo of the bay settles it; then fit the paints.
 
 ## Where it stands
@@ -223,6 +227,13 @@ recording, so no picture of the house is in the repository.
 | Solved camera (0.84 m high, not 1.45 m), regions reset; raster | 13.2 | TV screen 41.8 (the generic environment's bright lamps, reflected), alcove side wall 15.3, sideboard door 13.6 (×1.60) |
 | The same, path-traced, 256 samples | 7.9 | ceiling 12.7 (×1.53), alcove side wall 12.0, fire surround 11.0, carpet 7.2 (×0.70); TV screen 3.7 |
 
+The path-traced rows were made under two faults of `?trace`, found by comparing it
+with the tracer crate and fixed on 2026-11-04: the sky's image was upside down
+(three reads an equirectangular row 0 as straight down; `sky.ts` wrote the zenith
+there), so the bright sky lit the room from below the horizon, which would explain
+the ceiling at ×1.53 (not checked); and a frosted pane was its light and a hole onto
+that sky both, counting it twice (a black pane now stands behind the light).
+
 | Clear openers drawn as glass (light unchanged otherwise), traced 256 | 8.3 | ceiling 15.3: worse than 7.9, against the rule that a worse change is undone; kept because it is the true light, and with fitted paints the two are level (4.7 and 4.8), while these rows use estimated paints |
 | The sideboard's real construction, A/B under that light (`--scene` the old file) | 8.9 | sideboard door 7.0 → 6.9: unchanged; the rest moved with the exposure (one number fitted over all regions). A region's mean colour cannot see shape: detail is judged on the side-by-side, where the trace now draws the gaps and panel edges as the photo's shadow lines |
 
@@ -267,6 +278,8 @@ on horus's 4090 a 1040 × 724 still takes about 50 s at 1024 samples and 2.5
 minutes at 4096 (`shot.ts --trace N` times it), against about 6 minutes at 1024
 on the Mac. Trace on horus: on the Mac's Metal the glazed door's clear panes come
 out black, where D3D12 shows the orange sheet 2 cm behind them, as the scene has it.
+The tracer crate (`tracer/`, OptiX on the 4090's ray-tracing cores) draws the same
+scene, exported with `?export`, at 4096 samples in about 7 s.
 A frosted pane is drawn as the diffuse light it lets in (`windowRadiance`: its
 transmittance times the vertical daylight on it, over π), not as a hole onto the
 sky: paths seldom find a small hole, and the image came out as noise. Clear panes

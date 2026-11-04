@@ -1,6 +1,6 @@
 /** A camera asked for in the URL, overriding the room's own `view`:
  *  `?eye=x,y,z&look=x,y,z&fov=deg` (vertical field of view), with `trace`,
- *  `exposure`, `tone=linear`, `stats` and `bake`. For comparing a render against a photograph
+ *  `exposure`, `tone=linear`, `stats`, `bake` and `export`. For comparing a render against a photograph
  *  taken from the same spot. */
 export interface CameraQuery {
 	eye?: [number, number, number];
@@ -16,6 +16,8 @@ export interface CameraQuery {
 	stats?: boolean;
 	/** Bake the room's light with this many samples a vertex, for e2e/bake.ts. */
 	bake?: number;
+	/** Write the physical scene `trace` would draw as glTF, for the tracer crate. */
+	export?: boolean;
 }
 
 function triple(raw: string | null): [number, number, number] | undefined {
@@ -40,5 +42,6 @@ export function cameraFromQuery(search: string): CameraQuery {
 	if (q.has('stats')) out.stats = true;
 	const bake = Math.round(Number(q.get('bake')));
 	if (bake > 0 && bake <= 100_000) out.bake = bake;
+	if (q.has('export')) out.export = true;
 	return out;
 }

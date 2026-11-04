@@ -211,6 +211,15 @@ function addGlazing(
 			light.position.set(x, (p.yb + p.yt) / 2, z);
 			light.lookAt(x + inward[0], (p.yb + p.yt) / 2, z + inward[1]);
 			view.scene.add(light);
+			// The pane behind it, black: the light is all it sends in. Left open, a
+			// path that passed the light went on to the sky, and the pane counted twice.
+			const back = new THREE.Mesh(
+				view.own(metricBox(p.a1 - p.a0, p.yt - p.yb, 0.006)),
+				mats.get({ color: '#000000', roughness: 1 }, THREE.DoubleSide),
+			);
+			back.position.set(s.ax + dx * along, (p.yb + p.yt) / 2, s.az + dz * along);
+			back.rotation.y = -Math.atan2(s.bz - s.az, s.bx - s.ax);
+			view.scene.add(back);
 			continue;
 		}
 		const geom = view.own(metricBox(p.a1 - p.a0, p.yt - p.yb, frame ? 0.07 : 0.006));

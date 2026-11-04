@@ -17,6 +17,7 @@ import { ActivatedRoute } from '@angular/router';
 import { scaffoldTitle } from '@xinutec/ui-scaffold';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { WebGLPathTracer } from 'three-gpu-pathtracer';
 
 import { decodeLightmap, encodeLightmap } from './bake-file';
@@ -27,7 +28,7 @@ import { cameraFromQuery } from './camera';
 import type { CameraQuery } from './camera';
 import { buildInterior } from './room-builder';
 import type { Lit } from './room-builder';
-import { overcastSky } from './sky';
+import { overcastSky, overcastSkyImage } from './sky';
 import { ThreeView } from './three-view';
 import { WalkControls, obstaclesOf } from './walk';
 
@@ -35,6 +36,14 @@ import { WalkControls, obstaclesOf } from './walk';
 async function gunzip(bytes: Uint8Array): Promise<Uint8Array> {
 	const stream = new Blob([bytes.slice()]).stream().pipeThrough(new DecompressionStream('gzip'));
 	return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+/** Bytes as base64, in slices: a spread of the whole would overflow the stack. */
+function base64(bytes: Uint8Array): string {
+	let s = '';
+	for (let i = 0; i < bytes.length; i += 0x8000)
+		s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+	return btoa(s);
 }
 
 /** The everyday view's exposure in baked light (the sky's zenith is 1): between
@@ -91,7 +100,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			r.toneMappingExposure = this.query.exposure ?? 1;
 		});
 		this.view = view;
-		if (this.query.trace) {
+		if (this.query.trace || this.query.export) {
 			// The physical reference: the room lit by the sky outside, through its windows alone.
 			const sky = view.own(overcastSky());
 			view.scene.environment = sky;
@@ -121,9 +130,10 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 				this.loading.set(false);
 				const view = this.view;
 				if (!view) return;
-				const physical = !!this.query.trace;
+				const physical = !!this.query.trace || !!this.query.export;
 				const lit = buildInterior(view, scene, this.room, this.query, physical);
 				if (!lit) this.empty.set(true);
+				else if (this.query.export) this.export(view);
 				else if (this.query.trace) this.trace(view, this.query.trace);
 				else if (this.query.bake) this.bake(view, lit, this.query.bake);
 				else {
@@ -195,6 +205,66 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		view.renderer.toneMappingExposure = this.query.exposure ?? (applied ? BAKED_EXPOSURE : 1);
 		view.requestFrame();
 		if (this.query.stats) this.measure(view);
+	}
+
+	/** Writes the physical scene, as `trace` would draw it, as binary glTF on
+	 *  `window.houseExport` for e2e/export.ts; the canvas's host then carries
+	 *  `data-exported`. glTF has no area lights and no environment, so the scene's
+	 *  extras carry them: each frosted pane's light (centre, facing, size, radiance),
+	 *  the sky as an equirectangular image of linear RGB floats (row 0 the nadir),
+	 *  and the camera, the canvas's size and the exposure. */
+	private export(view: ThreeView): void {
+		const host = this.host().nativeElement;
+		view.paused = true;
+		const run = async () => {
+			const scene = view.scene;
+			scene.updateMatrixWorld(true);
+			const lights: object[] = [];
+			scene.traverse((o) => {
+				if (!(o instanceof THREE.RectAreaLight)) return;
+				const facing = new THREE.Vector3(0, 0, -1).applyQuaternion(
+					o.getWorldQuaternion(new THREE.Quaternion()),
+				);
+				const up = new THREE.Vector3(0, 1, 0).applyQuaternion(
+					o.getWorldQuaternion(new THREE.Quaternion()),
+				);
+				lights.push({
+					centre: o.getWorldPosition(new THREE.Vector3()).toArray(),
+					facing: facing.toArray(),
+					up: up.toArray(),
+					size: [o.width, o.height],
+					radiance: o.color.clone().multiplyScalar(o.intensity).toArray(),
+				});
+			});
+			// The image scene.environment was made from (the constructor's overcastSky).
+			const { width, height, data } = overcastSkyImage();
+			const rgb = new Float32Array(width * height * 3);
+			for (let i = 0; i < width * height; i++) rgb.set(data.subarray(i * 4, i * 4 + 3), i * 3);
+			const cam = view.camera;
+			const canvas = view.renderer.domElement;
+			const ratio = view.renderer.getPixelRatio();
+			scene.userData = {
+				lights,
+				sky: { width, height, rgb: base64(new Uint8Array(rgb.buffer)) },
+				camera: {
+					position: cam.position.toArray(),
+					quaternion: cam.quaternion.toArray(),
+					fov: cam.fov,
+				},
+				image: [Math.round(canvas.width / ratio), Math.round(canvas.height / ratio)],
+				exposure: view.renderer.toneMappingExposure,
+			};
+			const glb = await new GLTFExporter().parseAsync(scene, { binary: true });
+			if (!(glb instanceof ArrayBuffer))
+				throw new Error('the exporter wrote JSON, not binary glTF');
+			Object.assign(window, { houseExport: new Uint8Array(glb) });
+			host.dataset['exported'] = JSON.stringify({ bytes: glb.byteLength, lights: lights.length });
+		};
+		this.zone.runOutsideAngular(() => {
+			void run().catch(
+				(e: unknown) => (host.dataset['exported'] = JSON.stringify({ error: String(e) })),
+			);
+		});
 	}
 
 	/** Bakes the room's lightmap, `samples` a pixel, and leaves it, as scenes/house.bake
