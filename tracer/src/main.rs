@@ -43,12 +43,18 @@ struct Args {
     /// Bounces off surfaces a path may take; room.ts sets the page's tracer to 8.
     #[arg(long, default_value_t = 8)]
     bounces: u32,
+    /// The exposure, in place of the export's: compare-view solves for the photo's.
+    #[arg(long)]
+    exposure: Option<f32>,
 }
 
 fn main() -> Result<()> {
     let a = <Args as clap::Parser>::parse();
     let start = Instant::now();
-    let scene = scene::load(&a.scene)?;
+    let mut scene = scene::load(&a.scene)?;
+    if let Some(e) = a.exposure {
+        scene.exposure = e;
+    }
     let loaded = start.elapsed().as_secs_f64();
     // As room.ts sets three-gpu-pathtracer: 8 bounces, 6 more through glass.
     let depth = Depth {

@@ -39,10 +39,11 @@ how it is judged done.
    door. Next: the bay sofa, the sideboard and TV, the bay's three windows, the
    curtains and pole, the fireplace's leg and arch, the coving and skirting, the
    ceiling light.
-2. **Score keyframe 1 again under the corrected trace** (`tracer/horus.sh`, or
-   `compare-view --trace` on horus): the path-traced rows below were made with the
-   sky upside down and the frosted panes counted twice. Then find which tracer is
-   right where they still differ, by about 11% (tracer/README.md).
+2. **Refit the paints under the corrected light**: scored again on the tracer
+   (8.3, see the table), every pale surface is 1.2 to 1.4 times too bright beside
+   the carpet. `compare-view --fit` needs the tracer route first (an export of
+   each round's scene). Then find which tracer is right where they still differ,
+   by about 11% (tracer/README.md).
 3. **Tilted parts**, so the chairs' and bay sofa's arms can slope (the chairs' elbow
    rests fall toward the back, the front scrolls rise to 0.71); and a wedge for the
    big sofa's back frame (6 cm at its top, thicker below).
@@ -230,9 +231,17 @@ recording, so no picture of the house is in the repository.
 The path-traced rows were made under two faults of `?trace`, found by comparing it
 with the tracer crate and fixed on 2026-11-04: the sky's image was upside down
 (three reads an equirectangular row 0 as straight down; `sky.ts` wrote the zenith
-there), so the bright sky lit the room from below the horizon, which would explain
-the ceiling at ×1.53 (not checked); and a frosted pane was its light and a hole onto
-that sky both, counting it twice (a black pane now stands behind the light).
+there), so the bright sky lit the room from below the horizon; and a frosted pane
+was its light and a hole onto that sky both, counting it twice (a black pane now
+stands behind the light). Scored again with both fixed:
+
+| Step | living-kf1 score (mean ΔE) | Worst regions |
+| --- | --- | --- |
+| Both faults fixed; the tracer crate, 4096 samples (`compare-view --tracer --trace 4096`) | 8.3 | alcove side wall 13.3 (×1.40), fire surround 13.2 (×1.23), sideboard door 10.3 (×1.42), ceiling 10.0 (×1.38); carpet 7.2 → 2.9 (×0.70 → ×0.88) |
+
+The floor was what the upturned sky starved. Every pale surface now comes out 1.2
+to 1.4 times the carpet's share, under paints fitted under the faulty light: refit
+them under this one (`--fit` does not yet run on the tracer).
 
 | Clear openers drawn as glass (light unchanged otherwise), traced 256 | 8.3 | ceiling 15.3: worse than 7.9, against the rule that a worse change is undone; kept because it is the true light, and with fitted paints the two are level (4.7 and 4.8), while these rows use estimated paints |
 | The sideboard's real construction, A/B under that light (`--scene` the old file) | 8.9 | sideboard door 7.0 → 6.9: unchanged; the rest moved with the exposure (one number fitted over all regions). A region's mean colour cannot see shape: detail is judged on the side-by-side, where the trace now draws the gaps and panel edges as the photo's shadow lines |

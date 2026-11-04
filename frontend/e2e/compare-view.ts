@@ -2,6 +2,7 @@
 // photo right, both portrait at the photo's size), and how close they are.
 //
 //   node e2e/compare-view.ts --photo-id living-kf1 [--out compare.png] [--deployed]
+//   node e2e/compare-view.ts --photo-id living-kf1 --tracer --trace 4096
 //   node e2e/compare-view.ts --photo P.jpg --eye=x,y,z --look=x,y,z [--fov 69] [--room living]
 //
 // --photo-id takes the photo, camera and regions from scenes/photos.json. The
@@ -15,8 +16,12 @@
 // The render is the local build (`pnpm run build` first) fed the local
 // scenes/house.json, so an edit is judged before it ships; --deployed renders the
 // live site instead. --fov is the photo's vertical field of view: 69 for the
-// Pixel 9's portrait keyframes (fx 1397 px on a 1920 px side).
+// Pixel 9's portrait keyframes (fx 1397 px on a 1920 px side). --tracer renders
+// with the tracer crate on horus (tracer/horus.sh: the same physical scene as
+// --trace, seconds a still), --trace giving its samples; wake horus first.
 import { chromium } from '@playwright/test';
+import { execFileSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -55,8 +60,15 @@ const { values: args } = parseArgs({
 		fit: { type: 'string' },
 		anchor: { type: 'string', default: 'ceiling-paint' },
 		scene: { type: 'string' },
+		tracer: { type: 'boolean', default: false },
 	},
 });
+if (args.tracer && (!args.trace || args.fit || args.scene || args.deployed)) {
+	console.error(
+		'--tracer needs --trace N, and renders the local scene: no --fit, --scene or --deployed',
+	);
+	process.exit(2);
+}
 
 const ROOT = new URL('../..', import.meta.url).pathname;
 const record = args['photo-id'] ? photoRecord(args['photo-id']) : undefined;
@@ -150,8 +162,25 @@ if (!args.deployed) {
 	);
 }
 
+/** The scene exported on horus yet: the first render exports it, the rest trace it again. */
+let exported = false;
+
+/** The room drawn by the tracer crate on horus from the photo's camera, at the
+ *  photo's frame size, as PNG bytes (tracer/horus.sh). */
+function traceOnHorus(exposure: number): Buffer {
+	const out = join(tmpdir(), `compare-view-${process.pid}.png`);
+	const common = ['--exposure', String(exposure), '--samples', args.trace ?? '', '--out', out];
+	const first = [`--eye=${eye}`, `--look=${look}`, '--fov', fov ?? '69', '--size', `${W}x${H}`];
+	execFileSync(join(ROOT, 'tracer/horus.sh'), [...(exported ? ['--reuse'] : first), ...common], {
+		stdio: ['ignore', 'ignore', 'inherit'],
+	});
+	exported = true;
+	return readFileSync(out);
+}
+
 /** The room drawn from the photo's camera at `exposure`, as PNG bytes. */
 async function renderAt(exposure: number): Promise<Buffer> {
+	if (args.tracer) return traceOnHorus(exposure);
 	const page = await ctx.newPage();
 	const q = new URLSearchParams({
 		eye: eye ?? '',
@@ -381,7 +410,7 @@ console.log(`${args.out}: render (left) beside ${record ? record.id : args.photo
 if (record) {
 	let sum = 0;
 	console.log(
-		`\n${args.trace ? `path-traced, ${args.trace} samples` : 'raster'}; exposure ${exposure.toFixed(3)}`,
+		`\n${args.trace ? `path-traced${args.tracer ? ' (tracer crate)' : ''}, ${args.trace} samples` : 'raster'}; exposure ${exposure.toFixed(3)}`,
 	);
 	console.log(
 		`${'region'.padEnd(18)} ${'render'.padEnd(8)} ${'photo'.padEnd(8)}    ΔE  brightness`,
