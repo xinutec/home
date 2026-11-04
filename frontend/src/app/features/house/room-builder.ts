@@ -61,7 +61,7 @@ export function buildInterior(
 	// The everyday view draws the fixed room as a few dozen meshes, not hundreds, split
 	// fine enough for light baked onto its vertices; the physical reference keeps
 	// every part as it is.
-	const merged = physical ? [] : mergeStatic(view.scene, (g) => view.own(g), BAKE_EDGE);
+	const merged = physical ? [] : mergeStatic(view.scene, (g) => view.own(g), BAKE_SPLIT);
 	if (!physical) addLight(view);
 	placeCamera(view, room, camera);
 	return merged;
@@ -84,27 +84,40 @@ function addRoomShell(
 		if (len < 1e-6) return;
 		const ops = (room.openings ?? []).filter((o) => o.wall === i);
 		for (const p of wallPanels(len, ops, scene.height)) {
-			view.scene.add(wallPanel(view, s, len, p.a0, p.a1, p.yb, p.yt, wallMat));
+			view.scene.add(shell(wallPanel(view, s, len, p.a0, p.a1, p.yb, p.yt, wallMat)));
 		}
 		const inward = into[i];
 		for (const o of ops)
 			if (o.glazing) addGlazing(view, mats, scene, s, len, o, o.glazing, inward, physical);
-		if (room.coving) view.scene.add(coving(view, s, inward, scene.height, room.coving, covingMat));
+		if (room.coving)
+			view.scene.add(shell(coving(view, s, inward, scene.height, room.coving, covingMat), 'trim'));
 		if (room.skirting)
 			for (const [a0, a1] of skirtingRuns(len, ops, scene.height))
-				view.scene.add(skirting(view, s, len, a0, a1, inward, room.skirting, skirtingMat));
+				view.scene.add(
+					shell(skirting(view, s, len, a0, a1, inward, room.skirting, skirtingMat), 'trim'),
+				);
 	});
 	view.scene.add(
-		flat(view, pts, 0, mats.get(surfaceMaterial(scene, room, 'floor'), THREE.DoubleSide)),
+		shell(flat(view, pts, 0, mats.get(surfaceMaterial(scene, room, 'floor'), THREE.DoubleSide))),
 	);
 	view.scene.add(
-		flat(
-			view,
-			pts,
-			scene.height,
-			mats.get(surfaceMaterial(scene, room, 'ceiling'), THREE.DoubleSide),
+		shell(
+			flat(
+				view,
+				pts,
+				scene.height,
+				mats.get(surfaceMaterial(scene, room, 'ceiling'), THREE.DoubleSide),
+			),
 		),
 	);
+}
+
+/** Marks a mesh as the room's own surface, split finely only near furniture; trim
+ *  (skirting, coving) is a thin strip whose shadow lines fall on the wall beside
+ *  it, so it is never split finely. */
+function shell(mesh: THREE.Mesh, kind: 'surface' | 'trim' = 'surface'): THREE.Mesh {
+	mesh.userData['shell'] = kind;
+	return mesh;
 }
 
 /** The wall's thickness at a doorway: floor, soffit and jambs between the two
@@ -120,7 +133,7 @@ function addPassage(view: ThreeView, mats: MaterialLibrary, scene: HouseScene, p
 		const mesh = new THREE.Mesh(view.own(quadGeometry(quad)), mat);
 		mesh.receiveShadow = true;
 		mesh.castShadow = true;
-		view.scene.add(mesh);
+		view.scene.add(shell(mesh));
 	}
 }
 
@@ -188,14 +201,29 @@ function addGlazing(
 	}
 }
 
+/** Sides for a round shape of this radius: one about every 3 cm of its rim, 8
+ *  for a button, 48 at most. Finer is invisible, and each side is vertices the
+ *  phone draws and the bake lights. */
+function around(radius: number): number {
+	return Math.max(8, Math.min(48, Math.round((2 * Math.PI * radius) / 0.03)));
+}
+
 /** A part's shape, centred on its box (half-width, height, half-depth). */
 function partGeometry(part: Part, hw: number, h: number, hd: number): THREE.BufferGeometry {
 	switch (part.shape) {
 		case 'cylinder':
-			return new THREE.CylinderGeometry(hw, hw, hd * 2, 32).rotateX(Math.PI / 2);
+			return new THREE.CylinderGeometry(hw, hw, hd * 2, around(hw)).rotateX(Math.PI / 2);
 		case 'dome':
 			// The upper half of a unit sphere, stretched to the box, its base at the box's foot.
-			return new THREE.SphereGeometry(1, 40, 20, 0, Math.PI * 2, 0, Math.PI / 2)
+			return new THREE.SphereGeometry(
+				1,
+				around(Math.max(hw, hd)),
+				12,
+				0,
+				Math.PI * 2,
+				0,
+				Math.PI / 2,
+			)
 				.scale(hw, h, hd)
 				.translate(0, -h / 2, 0);
 		case 'folds':
@@ -203,18 +231,28 @@ function partGeometry(part: Part, hw: number, h: number, hd: number): THREE.Buff
 		case 'arch':
 			return arch(hw * 2, h, hd * 2, part.rise);
 		case 'roll':
-			return new THREE.CylinderGeometry(1, 1, hw * 2, 32).rotateZ(Math.PI / 2).scale(1, h / 2, hd);
+			return new THREE.CylinderGeometry(1, 1, hw * 2, around(Math.max(h / 2, hd)))
+				.rotateZ(Math.PI / 2)
+				.scale(1, h / 2, hd);
 		case 'bowl':
 			// The lower half of a unit sphere, stretched to the box, its flat top at the box's top.
-			return new THREE.SphereGeometry(1, 40, 20, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2)
+			return new THREE.SphereGeometry(
+				1,
+				around(Math.max(hw, hd)),
+				8,
+				0,
+				Math.PI * 2,
+				Math.PI / 2,
+				Math.PI / 2,
+			)
 				.scale(hw, h, hd)
 				.translate(0, h / 2, 0);
 		case 'disc':
-			return new THREE.CylinderGeometry(1, 1, h, 40).scale(hw, 1, hd);
+			return new THREE.CylinderGeometry(1, 1, h, around(Math.max(hw, hd))).scale(hw, 1, hd);
 		case 'cushion': {
 			// Rounded as soft upholstery is: a third of its thinnest side, at most 6 cm.
 			const r = Math.min(0.06, Math.min(hw * 2, h, hd * 2) / 3);
-			return new RoundedBoxGeometry(hw * 2, h, hd * 2, 4, r);
+			return new RoundedBoxGeometry(hw * 2, h, hd * 2, 2, r);
 		}
 		case 'ring': {
 			const tube = hd;
@@ -228,7 +266,7 @@ function partGeometry(part: Part, hw: number, h: number, hd: number): THREE.Buff
 			if (!part.profile || part.profile.length < 2)
 				throw new Error(`part ${part.id} is a lathe without a profile`);
 			const pts = part.profile.map(([r, y]) => new THREE.Vector2(r, y - 0.5));
-			return new THREE.LatheGeometry(pts, 48).scale(hw, h, hd);
+			return new THREE.LatheGeometry(pts, around(Math.max(hw, hd))).scale(hw, h, hd);
 		}
 		default:
 			return metricBox(hw * 2, h, hd * 2);
@@ -341,9 +379,10 @@ function skirting(
 	return mesh;
 }
 
-/** The longest triangle edge in the everyday view, metres: light baked onto the
- *  vertices changes no faster across a surface than this. */
-const BAKE_EDGE = 0.15;
+/** The longest triangle edges in the everyday view, metres: light baked onto the
+ *  vertices changes no faster across a surface than its triangles. Fine where a
+ *  part meets a wall or the floor, whose shadow line is sharp; coarse on open wall. */
+const BAKE_SPLIT = { part: 0.15, contact: 0.04, open: 0.3, reach: 0.06 };
 
 /** Glass this smooth transmits without scattering: a window to see the sky through. */
 const CLEAR_GLASS_ROUGHNESS = 0.1;
