@@ -30,6 +30,25 @@ describe('one-sided surfaces', () => {
 		expect(scene.children).toHaveLength(1);
 	});
 
+	it('turns a floor whose first triangle is degenerate by the others', () => {
+		const scene = new THREE.Scene();
+		const geom = new THREE.BufferGeometry();
+		// A zero-area triangle first, then a real one facing down.
+		geom.setAttribute(
+			'position',
+			new THREE.Float32BufferAttribute([0, 0, 0, 1, 0, 0, 2, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], 3),
+		);
+		geom.computeVertexNormals();
+		const floor = new THREE.Mesh(geom, new THREE.MeshStandardMaterial({ side: THREE.DoubleSide }));
+		floor.userData['facing'] = new THREE.Vector3(0, 1, 0);
+		scene.add(floor);
+		oneSided(scene, () => undefined);
+		const p = floor.geometry.getAttribute('position');
+		const v = (i: number) => new THREE.Vector3().fromBufferAttribute(p, i);
+		const n = new THREE.Triangle(v(3), v(4), v(5)).getNormal(new THREE.Vector3());
+		expect(n.y).toBeCloseTo(1, 9);
+	});
+
 	it('gives a two-sided sheet that says nothing a back of its own', () => {
 		const scene = new THREE.Scene();
 		const curtain = new THREE.Mesh(

@@ -104,6 +104,28 @@ export async function bakeLightmap(
 	world.setAttribute('surface', surfaceAttr);
 	world.setIndex(index);
 	const bvh = new MeshBVH(world, { strategy: SAH, maxLeafSize: 4 });
+	// Daylight comes only through a pane with the outside behind it: one side seeing
+	// no opaque surface, through any other glass. A pane between two rooms (the
+	// glazed door's) is not a source; light through it is the bounces'. Counted as
+	// one, a point millimetres behind it could find, once in thousands, a line on
+	// through the bay to the sky, and that one sample lit its pixel alone.
+	const glassVertex = (i: number) => surface[i * 4 + 3] === 1;
+	const seesOut = (from: THREE.Vector3, dir: THREE.Vector3) => {
+		const hits = bvh.raycast(new THREE.Ray(from, dir), THREE.DoubleSide);
+		return !hits.some((h) => h.face && !glassVertex(h.face.a));
+	};
+	const outdoor = lights.filter((l) => {
+		const centre = l.a
+			.clone()
+			.addScaledVector(l.e1, 1 / 3)
+			.addScaledVector(l.e2, 1 / 3);
+		const n = l.e1.clone().cross(l.e2).normalize();
+		return (
+			seesOut(centre.clone().addScaledVector(n, 1e-3), n) ||
+			seesOut(centre.clone().addScaledVector(n, -1e-3), n.clone().negate())
+		);
+	});
+	lights.splice(0, lights.length, ...outdoor);
 	const bvhUniform = new MeshBVHUniformStruct();
 	bvhUniform.updateFrom(bvh);
 	const surfaceTex = new FloatVertexAttributeTexture();

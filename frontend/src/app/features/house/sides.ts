@@ -69,13 +69,21 @@ function own2(
 	return g;
 }
 
-/** The way a mesh's first triangle faces, in the room, by its winding. */
+/** The way a mesh faces in the room, by its triangles' windings summed by area:
+ *  one triangle could be degenerate (three corners in a line, as a floor's
+ *  triangulation can make), and face nowhere. */
 function worldNormal(mesh: THREE.Mesh): THREE.Vector3 {
 	const g = mesh.geometry;
 	const p = g.getAttribute('position');
+	const count = g.index ? g.index.count : p.count;
 	const at = (k: number) => {
 		const i = g.index ? g.index.getX(k) : k;
 		return new THREE.Vector3().fromBufferAttribute(p, i).applyMatrix4(mesh.matrixWorld);
 	};
-	return new THREE.Triangle(at(0), at(1), at(2)).getNormal(new THREE.Vector3());
+	const sum = new THREE.Vector3();
+	for (let k = 0; k + 2 < count; k += 3) {
+		const [a, b, c] = [at(k), at(k + 1), at(k + 2)];
+		sum.add(b.sub(a).cross(c.sub(a)));
+	}
+	return sum.normalize();
 }
