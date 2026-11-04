@@ -4,7 +4,8 @@
 //
 //   node e2e/export.ts --eye=x,y,z --look=x,y,z --fov 75 [--width 540 --height 960] --out scene.glb
 //
-// The local build (`pnpm run build` first), fed the local scenes/house.json.
+// The local build (`pnpm run build` first), fed the local scenes/house.json, or
+// --scene's file (compare-view's fitted paints).
 import { chromium } from '@playwright/test';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { extname, join } from 'node:path';
@@ -20,6 +21,7 @@ const { values: a } = parseArgs({
 		out: { type: 'string', default: 'scene.glb' },
 		width: { type: 'string' },
 		height: { type: 'string' },
+		scene: { type: 'string' },
 	},
 });
 const ORIGIN = 'https://home.xinutec.org';
@@ -64,7 +66,7 @@ await ctx.route(new RegExp(`^${ORIGIN}/(?!api/|auth/|login)`), (route) => {
 });
 await ctx.route('**/api/house', (route) =>
 	route.fulfill({
-		body: readFileSync(join(ROOT, 'scenes/house.json')),
+		body: readFileSync(a.scene ?? join(ROOT, 'scenes/house.json')),
 		contentType: 'application/json',
 	}),
 );

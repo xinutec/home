@@ -39,18 +39,17 @@ how it is judged done.
    door. Next: the bay sofa, the sideboard and TV, the bay's three windows, the
    curtains and pole, the fireplace's leg and arch, the coving and skirting, the
    ceiling light.
-2. **Refit the paints under the corrected light**: scored again on the tracer
-   (8.3, see the table), every pale surface is 1.2 to 1.4 times too bright beside
-   the carpet. `compare-view --fit` needs the tracer route first (an export of
-   each round's scene). Then find which tracer is right where they still differ,
-   by about 11% (tracer/README.md).
+2. **Keyframe 822 against keyframe 1**: under the corrected light, keyframe 1's
+   paints fit (3.5) and keyframe 822's do not (walls 0.95 against 0.42; see the
+   refit table). A RAW photo of the bay settles the phone's tone curve; the bay
+   panes' glass (is the lower pane frosted?) settles the window light. Then the
+   fitted paints go into the scene. And find which tracer is right where they
+   still differ, by about 11% (tracer/README.md).
 3. **Tilted parts**, so the chairs' and bay sofa's arms can slope (the chairs' elbow
    rests fall toward the back, the front scrolls rise to 0.71); and a wedge for the
    big sofa's back frame (6 cm at its top, thicker below).
 4. **Reflections**: one baked capture of the room, for the glass, TV, metal and
    the fireplace's iron.
-5. Find out why keyframe 822 cannot be fitted (the phone's tone mapping or the
-   window light): a RAW photo of the bay settles it; then fit the paints.
 
 ## Where it stands
 
@@ -240,8 +239,24 @@ stands behind the light). Scored again with both fixed:
 | Both faults fixed; the tracer crate, 4096 samples (`compare-view --tracer --trace 4096`) | 8.3 | alcove side wall 13.3 (×1.40), fire surround 13.2 (×1.23), sideboard door 10.3 (×1.42), ceiling 10.0 (×1.38); carpet 7.2 → 2.9 (×0.70 → ×0.88) |
 
 The floor was what the upturned sky starved. Every pale surface now comes out 1.2
-to 1.4 times the carpet's share, under paints fitted under the faulty light: refit
-them under this one (`--fit` does not yet run on the tracer).
+to 1.4 times the carpet's share, under paints fitted under the faulty light.
+
+Refitted under this light (`compare-view --tracer --trace 1024 --fit 3`, anchored
+on the ceiling at 0.85), the two photos still disagree, so the paints stay out of
+the scene:
+
+| Paint (reflectance) | fitted to keyframe 1 | fitted to keyframe 822 |
+| --- | --- | --- |
+| wall-paint | 0.42 | 0.95, the limit |
+| carpet | 0.29 | 0.80 |
+| sideboard-paint, oak | 0.44, 0.39 | not in view |
+| curtain-fabric, sofa-charcoal | not in view | 0.83, 0.23 |
+
+Keyframe 1 then scores 3.5 (alcove side wall 10.1, TV screen 9.1, the rest under
+3.1); keyframe 822, 7.2, its ceiling clipping until the exposure was a quarter of
+keyframe 1's. Keyframe 822 looks into the bay's windows: its walls and carpet are
+far brighter beside its ceiling than this light makes them, which is the phone's
+tone curve on a bright scene or the window light, not the paints.
 
 | Clear openers drawn as glass (light unchanged otherwise), traced 256 | 8.3 | ceiling 15.3: worse than 7.9, against the rule that a worse change is undone; kept because it is the true light, and with fitted paints the two are level (4.7 and 4.8), while these rows use estimated paints |
 | The sideboard's real construction, A/B under that light (`--scene` the old file) | 8.9 | sideboard door 7.0 → 6.9: unchanged; the rest moved with the exposure (one number fitted over all regions). A region's mean colour cannot see shape: detail is judged on the side-by-side, where the trace now draws the gaps and panel edges as the photo's shadow lines |

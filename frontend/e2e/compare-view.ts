@@ -63,10 +63,8 @@ const { values: args } = parseArgs({
 		tracer: { type: 'boolean', default: false },
 	},
 });
-if (args.tracer && (!args.trace || args.fit || args.scene || args.deployed)) {
-	console.error(
-		'--tracer needs --trace N, and renders the local scene: no --fit, --scene or --deployed',
-	);
+if (args.tracer && (!args.trace || args.deployed)) {
+	console.error('--tracer needs --trace N, and renders the local build: no --deployed');
 	process.exit(2);
 }
 
@@ -162,19 +160,26 @@ if (!args.deployed) {
 	);
 }
 
-/** The scene exported on horus yet: the first render exports it, the rest trace it again. */
-let exported = false;
+/** The scene horus last exported, as served: each change (a round of --fit's
+ *  paints) is exported again, and the rest only traced again. */
+let exported: string | undefined;
 
 /** The room drawn by the tracer crate on horus from the photo's camera, at the
- *  photo's frame size, as PNG bytes (tracer/horus.sh). */
+ *  photo's frame size, as PNG bytes (tracer/horus.sh); linear under --fit. */
 function traceOnHorus(exposure: number): Buffer {
 	const out = join(tmpdir(), `compare-view-${process.pid}.png`);
-	const common = ['--exposure', String(exposure), '--samples', args.trace ?? '', '--out', out];
-	const first = [`--eye=${eye}`, `--look=${look}`, '--fov', fov ?? '69', '--size', `${W}x${H}`];
-	execFileSync(join(ROOT, 'tracer/horus.sh'), [...(exported ? ['--reuse'] : first), ...common], {
-		stdio: ['ignore', 'ignore', 'inherit'],
-	});
-	exported = true;
+	const flags = ['--exposure', String(exposure), '--samples', args.trace ?? '', '--out', out];
+	if (args.fit) flags.push('--tone', 'linear');
+	if (exported !== sceneBody) {
+		const scene = join(tmpdir(), `compare-view-${process.pid}.json`);
+		writeFileSync(scene, sceneBody);
+		flags.push('--scene', scene);
+		if (exported === undefined)
+			flags.push(`--eye=${eye}`, `--look=${look}`, '--fov', fov ?? '69', '--size', `${W}x${H}`);
+		else flags.push('--reuse');
+	} else flags.push('--reuse');
+	execFileSync(join(ROOT, 'tracer/horus.sh'), flags, { stdio: ['ignore', 'ignore', 'inherit'] });
+	exported = sceneBody;
 	return readFileSync(out);
 }
 
