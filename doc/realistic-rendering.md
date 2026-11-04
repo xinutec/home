@@ -36,7 +36,11 @@ how it is judged done.
    picture shows (`node e2e/shot.ts --scene` a copy of the scene with only that
    piece, then a line drawn through the same camera), the model's current value
    said with each. Done so far: the big sofa, both carved armchairs, the glazed
-   door. Next: the bay sofa, the sideboard and TV, the bay's three windows, the
+   door. The kitchen's utility wall and the window run were measured before
+   (34 pieces, named and dressed on 4 November); added then from that day's walk,
+   as estimates: the window over the sink, the back door with its side panel, the
+   oven housing, the cooker hood, the tiled pillar and the splashback. Their notes
+   say what to measure (`./scripts/estimates.mjs` lists them). Next: the bay sofa, the sideboard and TV, the bay's three windows, the
    curtains and pole, the fireplace's leg and arch, the coving and skirting, the
    ceiling light.
 2. **The walls' and carpet's paints**: keyframe 1 and the night photo agree on the

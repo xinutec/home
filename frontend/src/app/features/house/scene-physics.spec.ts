@@ -16,14 +16,14 @@ const found = check(scene).map((v) => `${v.kind}: ${v.what}`);
 const KNOWN_KITCHEN = [
 	// The board at the serving hatch, 1.34 m wide, passes through the solid wall
 	// either side of the hatch's 0.84 m opening.
-	'wall: @-3.11,2.97,1/body through dining wall 0',
-	'wall: @-3.11,2.97,1/body through kitchen wall 5',
+	'wall: kitchen-serving-worktop/body through dining wall 0',
+	'wall: kitchen-serving-worktop/body through kitchen wall 5',
 	// A wall shelf's three dividers run 2-3 cm into its back board.
-	'overlap: @-3.65,2.965,2.01/body and @-3.06,2.815,2.01/body overlap by 20 mm',
-	'overlap: @-3.06,2.965,2.01/body and @-3.06,2.815,2.01/body overlap by 30 mm',
-	'overlap: @-2.47,2.965,2.01/body and @-3.06,2.815,2.01/body overlap by 20 mm',
+	'overlap: kitchen-cubbies-left/body and kitchen-cubbies-back/body overlap by 20 mm',
+	'overlap: kitchen-cubbies-divider/body and kitchen-cubbies-back/body overlap by 30 mm',
+	'overlap: kitchen-cubbies-right/body and kitchen-cubbies-back/body overlap by 20 mm',
 	// A thin plate at 0.77 m touches nothing below or behind.
-	'support: @-4.085,5.135,0.77 is held up by nothing (bottom at 0.77 m)',
+	'support: kitchen-sink-bowl is held up by nothing (bottom at 0.77 m)',
 ];
 
 /**
