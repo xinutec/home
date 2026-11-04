@@ -35,9 +35,9 @@ export function buildInterior(
 	camera: CameraQuery = {},
 	/** Light only from the world outside (the path-traced reference), not the approximations. */
 	physical = false,
-): boolean {
+): THREE.Mesh[] | undefined {
 	const room = scene.rooms.find((r) => r.name === roomName);
-	if (!room) return false;
+	if (!room) return undefined;
 	const mats = new MaterialLibrary(<T extends { dispose(): void }>(r: T) => view.own(r));
 
 	for (const r of scene.rooms) addRoomShell(view, mats, scene, r, physical);
@@ -57,12 +57,13 @@ export function buildInterior(
 		});
 	}
 
-	// The everyday view draws the fixed room as a few dozen meshes, not hundreds; the
-	// physical reference keeps every part as it is.
-	if (!physical) mergeStatic(view.scene, (g) => view.own(g));
+	// The everyday view draws the fixed room as a few dozen meshes, not hundreds, split
+	// fine enough for light baked onto its vertices; the physical reference keeps
+	// every part as it is.
+	const merged = physical ? [] : mergeStatic(view.scene, (g) => view.own(g), BAKE_EDGE);
 	if (!physical) addLight(view);
 	placeCamera(view, room, camera);
-	return true;
+	return merged;
 }
 
 function addRoomShell(
@@ -344,6 +345,10 @@ function skirting(
 	mesh.castShadow = mesh.receiveShadow = true;
 	return mesh;
 }
+
+/** The longest triangle edge in the everyday view, metres: light baked onto the
+ *  vertices changes no faster across a surface than this. */
+const BAKE_EDGE = 0.15;
 
 /** Glass this smooth transmits without scattering: a window to see the sky through. */
 const CLEAR_GLASS_ROUGHNESS = 0.1;

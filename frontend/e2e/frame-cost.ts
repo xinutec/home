@@ -48,6 +48,12 @@ if (!args.deployed) {
 			? route.fulfill({ body: readFileSync(file), contentType: type })
 			: route.fulfill({ body: readFileSync(`${DIST}/index.html`), contentType: 'text/html' });
 	});
+	const bake = join(ROOT, 'scenes/house.bake');
+	await ctx.route('**/api/house/bake', (route) =>
+		existsSync(bake)
+			? route.fulfill({ body: readFileSync(bake), contentType: 'application/octet-stream' })
+			: route.fulfill({ status: 404, body: '' }),
+	);
 	await ctx.route('**/api/house', (route) =>
 		route.fulfill({
 			body: readFileSync(join(ROOT, 'scenes/house.json')),

@@ -138,6 +138,13 @@ if (!args.deployed) {
 			? route.fulfill({ body: readFileSync(file), contentType: type })
 			: route.fulfill({ body: readFileSync(`${DIST}/index.html`), contentType: 'text/html' });
 	});
+	// The bake beside the scene, if one has been made; a stale one the page ignores.
+	const bake = SCENE.replace(/\.json$/, '.bake');
+	await ctx.route('**/api/house/bake', (route) =>
+		existsSync(bake) && !args.trace
+			? route.fulfill({ body: readFileSync(bake), contentType: 'application/octet-stream' })
+			: route.fulfill({ status: 404, body: '' }),
+	);
 	await ctx.route('**/api/house', (route) =>
 		route.fulfill({ body: sceneBody, contentType: 'application/json' }),
 	);

@@ -296,6 +296,22 @@ meshes and 400 draw calls a frame, 42,600 triangles; merged by material
 longer skipped: 74,000 triangles drawn, still few. The Mac is capped at 60 fps
 either way; only a phone shows the difference.
 
+**Built: light baked onto the vertices.** The everyday view splits the merged
+room until no triangle edge is longer than 15 cm, shares identical vertices
+(141,000), and lights them from `scenes/house.bake`, served at `/api/house/bake`:
+per vertex the irradiance on its front and its back, half floats, 1.7 MB.
+`node e2e/bake.ts --samples 2048` makes it on the Mac's GPU in about 5 minutes
+(`baker.ts`): the same sky and panes as the trace, four diffuse bounces, the light
+sampled on the panes at every bounce (a vertex has no neighbouring pixels to
+average noise with), bounced light capped per sample, samples that start inside
+another part (a door under its knob) dropped and such points filled from their
+neighbours, then smoothed with neighbours on the same plane. The page applies the
+bake only if it is for exactly this geometry (a checksum of every vertex), and
+`tests/scene.test.ts` fails while the bake is not of the current scene file: after
+any change to the scene, bake again. On keyframe 1 it scores 7.4-9.3 by exposure,
+about as close as the trace; the Mac draws it in 20 calls. Open: in absolute
+units the bake and the trace need exposures of about 180 and 90 for keyframe 1.
+
 The interactive view cannot path-trace on a phone. The photo mode's bounce light
 is baked into lightmaps on the static shell and fixed furniture; moving parts
 (drawers, doors) take their light from probes; ambient occlusion gives contact

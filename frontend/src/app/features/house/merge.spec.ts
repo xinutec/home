@@ -14,7 +14,7 @@ describe('mergeStatic', () => {
 		const a = new THREE.MeshStandardMaterial();
 		const b = new THREE.MeshStandardMaterial();
 		scene.add(box(a, 0), box(a, 5), box(b, 10));
-		expect(mergeStatic(scene, () => undefined)).toEqual([3, 2]);
+		expect(mergeStatic(scene, () => undefined)).toHaveLength(2);
 		const meshes = scene.children.filter((o): o is THREE.Mesh => o instanceof THREE.Mesh);
 		expect(meshes).toHaveLength(2);
 		const merged = meshes.find((m) => m.material === a);
@@ -23,12 +23,22 @@ describe('mergeStatic', () => {
 		expect(bounds.max.x).toBeCloseTo(5.5, 6);
 	});
 
+	it('splits long edges when asked, keeping the merged mesh in place', () => {
+		const scene = new THREE.Scene();
+		const a = new THREE.MeshStandardMaterial();
+		scene.add(box(a, 3));
+		const [mesh] = mergeStatic(scene, () => undefined, 0.3);
+		expect(mesh.geometry.getAttribute('position').count).toBeGreaterThan(36);
+		const bounds = new THREE.Box3().setFromObject(mesh);
+		expect(bounds.min.x).toBeCloseTo(2.5, 6);
+	});
+
 	it('keeps a shadow caster apart from a mesh that casts none', () => {
 		const scene = new THREE.Scene();
 		const a = new THREE.MeshStandardMaterial();
 		const lit = box(a, 0);
 		lit.castShadow = true;
 		scene.add(lit, box(a, 2));
-		expect(mergeStatic(scene, () => undefined)).toEqual([2, 2]);
+		expect(mergeStatic(scene, () => undefined)).toHaveLength(2);
 	});
 });

@@ -116,3 +116,9 @@ live local preview:
 - **Left/right is mirror-prone.** The default camera frames the house from one
   side, so a wall viewed from behind swaps left↔right. Measure and place by
   distance from a landmark (a corner, the hob, a doorway), not "on the left".
+
+## The bake
+
+`house.bake` is the light baked onto the everyday view's vertices
+(`frontend/e2e/bake.ts`, format in `frontend/.../house/bake-file.ts`). It belongs
+to one exact version of `house.json`: bake again after every edit.

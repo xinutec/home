@@ -16,7 +16,7 @@ export function overcastRadiance(altitude: number): number {
 }
 
 export const SKY: [number, number, number] = [0.86, 0.91, 1.0]; // overcast daylight, a little blue
-const GROUND: [number, number, number] = [0.42, 0.46, 0.36]; // grass and paving
+export const GROUND: [number, number, number] = [0.42, 0.46, 0.36]; // grass and paving
 
 /** The sky as an equirectangular image, for `scene.environment`. */
 export function overcastSky(): THREE.DataTexture {

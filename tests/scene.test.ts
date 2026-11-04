@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 // The real scene, not a fixture: these hold the file itself to its rules.
@@ -85,5 +85,16 @@ describe("scenes/house.json", () => {
 			.filter(({ f }) => !f.id || !f.name)
 			.map(({ i }) => i);
 		expect(unnamed).toEqual([]);
+	});
+});
+
+// The light baked for the scene (frontend e2e/bake.ts) records the scene file it was
+// made from; an edit to the scene without a bake would ship the room unlit by it.
+describe("scenes/house.bake", () => {
+	it("is the bake of this scene file: run `node e2e/bake.ts` after editing it", () => {
+		if (!existsSync("scenes/house.bake")) return;
+		let fnv = 0x811c9dc5;
+		for (const byte of readFileSync("scenes/house.json")) fnv = Math.imul(fnv ^ byte, 0x01000193);
+		expect(readFileSync("scenes/house.bake").readUInt32LE(12)).toBe(fnv >>> 0);
 	});
 });

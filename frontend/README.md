@@ -18,5 +18,8 @@ The Angular dashboard. Run the commands here, in the flake's dev shell.
 - `node e2e/frame-cost.ts [--deployed]` — what one frame of the room costs at a
   phone's size: frames a second, draw calls, triangles, meshes
   (`/house/living?stats` shows the same on the device).
+- `node e2e/bake.ts [--samples 2048]` — bake the house's light onto the everyday
+  view's vertices into `scenes/house.bake`; run it after every change to the
+  scene (`tests/scene.test.ts` fails until you do).
 - `node e2e/alloc-rate.ts [deployed|local]` — MB allocated per minute on
   `/environment`, collected garbage included, and where.

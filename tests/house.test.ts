@@ -27,3 +27,20 @@ describe("GET /house", () => {
 		expect(res.status).toBe(500);
 	});
 });
+
+describe("GET /house/bake", () => {
+	it("serves the bake beside the scene, as bytes", async () => {
+		const file = join(dir, "baked.json");
+		writeFileSync(file, "{}");
+		writeFileSync(join(dir, "baked.bake"), Buffer.from([1, 2, 3, 4]));
+		const res = await houseRoutes(file).request("/house/bake");
+		expect(res.status).toBe(200);
+		expect(res.headers.get("content-type")).toBe("application/octet-stream");
+		expect(Array.from(new Uint8Array(await res.arrayBuffer()))).toEqual([1, 2, 3, 4]);
+	});
+
+	it("answers 404 until the scene is baked", async () => {
+		const res = await houseRoutes(join(dir, "house.json")).request("/house/bake");
+		expect(res.status).toBe(404);
+	});
+});
