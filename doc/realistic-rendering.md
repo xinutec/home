@@ -327,6 +327,16 @@ shadows.
 
 Done when the interactive view's region score is close to the photo mode's.
 
+### Walking the room
+
+**Built** (`walk.ts`): the everyday view is walked in the first person, standing
+(eye at 1.6 m, 75° high): drag to look, the room grabbed as a street view is;
+hold the left of the screen and drag for a thumb stick, or W A S D and the arrow
+keys. The walker is a column 0.2 m round that every wall between its feet and head
+stops (a doorway leaves a gap, a window's sill does not) and every furniture part
+in that height (`obstaclesOf`, from the same solids the physics checks), sliding
+along what it meets. A camera placed by the URL (a photo's) keeps its exact pose.
+
 ### 6. Detail, judged in that light
 
 The fire surround (oak frame, arched opening, cast-iron insert, fire screen), the

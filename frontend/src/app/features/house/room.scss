@@ -58,3 +58,47 @@
 	font: var(--mat-sys-body-small);
 	color: var(--on-media);
 }
+
+// The thumb stick, while a thumb holds the left of the screen: a ring where it went
+// down, the knob as far as it has dragged.
+.stick {
+	position: absolute;
+	z-index: 1;
+	width: 120px;
+	height: 120px;
+	margin: -60px 0 0 -60px;
+	border: 2px solid var(--on-media);
+	border-radius: 50%;
+	// Out of the layout until a thumb is down: it waits where none is.
+	display: none;
+	opacity: 0.45;
+	pointer-events: none;
+
+	&::after {
+		content: '';
+		position: absolute;
+		left: 36px;
+		top: 36px;
+		width: 48px;
+		height: 48px;
+		border-radius: 50%;
+		background: var(--on-media);
+		transform: translate(var(--dx, 0), var(--dy, 0));
+	}
+
+	&.held {
+		display: block;
+	}
+}
+
+// How to walk, until the first move.
+.hint {
+	position: absolute;
+	inset: auto 0 2.5rem 0;
+	z-index: 1;
+	margin: 0;
+	text-align: center;
+	font: var(--mat-sys-body-medium);
+	color: var(--on-media);
+	pointer-events: none;
+}

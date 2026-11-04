@@ -29,6 +29,7 @@ import { buildInterior } from './room-builder';
 import type { Lit } from './room-builder';
 import { overcastSky } from './sky';
 import { ThreeView } from './three-view';
+import { WalkControls, obstaclesOf } from './walk';
 
 /** Inflates a gzipped lightmap: the browser's own stream, no library. */
 async function gunzip(bytes: Uint8Array): Promise<Uint8Array> {
@@ -58,6 +59,10 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 	readonly empty = signal(false);
 	readonly error = signal(false);
 	readonly loading = signal(false);
+	/** Walking the room in the first person (not while tracing or baking). */
+	readonly walking = signal(false);
+	/** Whether the walker has looked or moved yet: the hint shows until then. */
+	readonly moved = signal(false);
 	/** With `?stats`: what one frame costs, once measured. */
 	readonly stats = signal('');
 	readonly room = inject(ActivatedRoute).snapshot.paramMap.get('room') ?? '';
@@ -65,6 +70,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 	private http = inject(HttpClient);
 	private zone = inject(NgZone);
 	private host = viewChild.required<ElementRef<HTMLDivElement>>('canvas');
+	private stick = viewChild.required<ElementRef<HTMLDivElement>>('stick');
 	private view?: ThreeView;
 	private tracer?: WebGLPathTracer;
 	private readonly query: CameraQuery = cameraFromQuery(window.location.search);
@@ -118,7 +124,10 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 				if (!lit) this.empty.set(true);
 				else if (this.query.trace) this.trace(view, this.query.trace);
 				else if (this.query.bake) this.bake(view, lit, this.query.bake);
-				else void this.light(view, lit, baked);
+				else {
+					void this.light(view, lit, baked);
+					this.walk(view, scene);
+				}
 				view.requestFrame();
 			},
 			error: (e) => {
@@ -145,6 +154,25 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			else requestAnimationFrame(step);
 		};
 		this.zone.runOutsideAngular(() => requestAnimationFrame(step));
+	}
+
+	/** Hands the camera to a walker: from the room's own view, standing, unless the
+	 *  URL placed the camera (a comparison with a photo keeps its exact pose). */
+	private walk(view: ThreeView, scene: HouseScene): void {
+		const standing = !this.query.eye;
+		const walker = new WalkControls(
+			view.camera,
+			view.renderer.domElement,
+			this.stick().nativeElement,
+			obstaclesOf(scene),
+			() => {
+				if (!this.moved()) this.zone.run(() => this.moved.set(true));
+				view.requestFrame();
+			},
+			standing,
+		);
+		view.useMover(walker);
+		this.walking.set(true);
 	}
 
 	/** Lights the room from its lightmap, if one came and it is for this room as built;

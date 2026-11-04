@@ -19,6 +19,10 @@ export class ThreeView {
 	/** While true, nothing is drawn here: something else owns the canvas (the path tracer). */
 	paused = false;
 
+	/** What moves the camera in place of the orbit controls, once set (walking):
+	 *  its update moves it for a frame and says whether it is still moving. */
+	private mover?: { update(): boolean; dispose(): void };
+
 	private frame = 0;
 	private framePending = false;
 	private readonly owned: { dispose(): void }[] = [];
@@ -56,14 +60,25 @@ export class ThreeView {
 		this.zone.runOutsideAngular(() => {
 			this.frame = requestAnimationFrame(() => {
 				this.framePending = false;
-				this.controls.update();
+				let moving = false;
+				if (this.mover) moving = this.mover.update();
+				else this.controls.update();
 				this.renderer.render(this.scene, this.camera);
+				if (moving) this.requestFrame();
 			});
 		});
 	}
 
+	/** Hands the camera to `mover`; the orbit controls stop. */
+	useMover(mover: { update(): boolean; dispose(): void }): void {
+		this.controls.dispose();
+		this.mover = mover;
+		this.requestFrame();
+	}
+
 	dispose(): void {
 		cancelAnimationFrame(this.frame);
+		this.mover?.dispose();
 		this.resize.disconnect();
 		this.controls.dispose();
 		// A renderer's dispose frees only its own state; geometries, materials and

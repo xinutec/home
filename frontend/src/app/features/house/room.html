@@ -1,5 +1,9 @@
 <div class="wrap">
 	<div #canvas class="canvas"></div>
+	<div #stick class="stick" aria-hidden="true"></div>
+	@if (walking() && !moved()) {
+		<p class="hint">Drag to look · hold the left side to walk</p>
+	}
 
 	@if (stats()) {
 		<p class="stats">{{ stats() }}</p>
