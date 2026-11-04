@@ -3,8 +3,8 @@
 //
 //   node e2e/bake.ts [--samples 1024]
 //
-// The local build (`pnpm run build` first), fed the local scenes/house.json, on the
-// Mac's GPU (headless Chromium on Metal). Bake again after any change to the
+// The local build (`pnpm run build` first), fed the local scenes/house.json, on
+// this machine's GPU in headless Chromium; e2e/bake-horus.sh runs it on horus. Bake again after any change to the
 // scene or to how it is built: a bake for other geometry is never applied, and
 // the page then draws the room without it.
 import { chromium } from '@playwright/test';
@@ -30,8 +30,11 @@ const TYPES: Record<string, string> = {
 	'.ico': 'image/x-icon',
 };
 
+// Metal on the Mac; on Linux, ANGLE over the system's EGL (on horus, Mesa's D3D12
+// driver to the 4090: e2e/bake-horus.sh sets it up).
+const angle = process.platform === 'darwin' ? 'metal' : 'gl-egl';
 const browser = await chromium.launch({
-	args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'],
+	args: [`--use-angle=${angle}`, '--enable-gpu', '--ignore-gpu-blocklist'],
 });
 const ctx = await browser.newContext({
 	serviceWorkers: 'block',
@@ -55,6 +58,18 @@ page.on('console', (m) => {
 	if (m.type() === 'error') console.error(`page: ${m.text()}`);
 });
 await page.goto(`${ORIGIN}/house/living?bake=${args.samples}`, { waitUntil: 'domcontentloaded' });
+// A GPU that failed to start falls back to SwiftShader, on the CPU, without a word.
+const gpu = await page.evaluate(() => {
+	const gl = document.createElement('canvas').getContext('webgl2');
+	const info = gl?.getExtension('WEBGL_debug_renderer_info');
+	return gl && info ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) : 'no WebGL 2';
+});
+console.log(`gpu: ${gpu}`);
+if (/SwiftShader|no WebGL/.test(gpu)) {
+	console.error('no GPU: the bake would run on the CPU');
+	await browser.close();
+	process.exit(1);
+}
 const ticker = setInterval(() => {
 	void page
 		.locator('.canvas')

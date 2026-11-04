@@ -42,11 +42,9 @@ how it is judged done.
 2. **Tilted parts**, so the chairs' and bay sofa's arms can slope (the chairs' elbow
    rests fall toward the back, the front scrolls rise to 0.71); and a wedge for the
    big sofa's back frame (6 cm at its top, thicker below).
-3. **Bake on horus** (RTX 4090), if headless Chromium's WebGL reaches its GPU
-   through WSL: the bake takes about 7.5 minutes on the Mac.
-4. **Reflections**: one baked capture of the room, for the glass, TV, metal and
+3. **Reflections**: one baked capture of the room, for the glass, TV, metal and
    the fireplace's iron.
-5. Find out why keyframe 822 cannot be fitted (the phone's tone mapping or the
+4. Find out why keyframe 822 cannot be fitted (the phone's tone mapping or the
    window light): a RAW photo of the bay settles it; then fit the paints.
 
 ## Where it stands
@@ -297,8 +295,9 @@ of a wall between two rooms no longer meet in one plane; a curtain or a doorway'
 lining gains a back), merges the fixed room by material (41 meshes, about 10,800
 triangles), and lays every surface out in one atlas at 2 cm a pixel (`unwrap.ts`:
 charts of neighbouring triangles facing within 45°, packed in rows; 2048 × 752
-pixels). `node e2e/bake.ts --samples 2048` fills it on the Mac's GPU in about 8
-minutes (`baker.ts`): every surface drawn at its lightmap coordinates gives each
+pixels). `e2e/bake-horus.sh --samples 2048` fills it on horus's RTX 4090 in about
+40 s, a minute with the copy and build (`node e2e/bake.ts` does it on the Mac's
+GPU in about 8 minutes; `baker.ts`): every surface drawn at its lightmap coordinates gives each
 pixel its place and facing, then the trace's sky and panes with four diffuse
 bounces, the light sampled on the panes at every bounce, bounced light capped per
 sample, samples that start inside another part dropped; the gutters filled ring by
