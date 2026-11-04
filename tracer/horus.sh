@@ -3,7 +3,7 @@
 # Wake horus first.
 #
 #   tracer/horus.sh --eye=x,y,z --look=x,y,z [--fov 75] [--exposure 150] \
-#       [--size WxH] [--samples 4096] [--tone aces|linear] [--bounces 8] --out still.png
+#       [--size WxH] [--night] [--samples 4096] [--tone aces|linear] [--bounces 8] --out still.png
 #   tracer/horus.sh --reuse [--scene F] [--exposure E] [--samples N] [--tone T] --out still.png
 #
 # The Mac's working tree goes over (horus-run.sh --repo); horus builds the
@@ -25,6 +25,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --eye=* | --look=*) export_args+=("$1") ;;
     --fov) export_args+=("$1" "$2"); shift ;;
+    --night) export_args+=("$1") ;;
     --exposure) export_args+=("$1" "$2"); trace_args+=("$1" "$2"); shift ;;
     --size) export_args+=(--width "${2%x*}" --height "${2#*x}"); shift ;;
     --samples | --tone | --bounces) trace_args+=("$1" "$2"); shift ;;

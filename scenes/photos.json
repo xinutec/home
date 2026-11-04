@@ -78,6 +78,35 @@
         {"what": "coving, its lower edge on the sofa wall", "line": [[-1.32, 2.32, 3.65], [2.58, 2.32, 3.65]], "px": [390, 36]},
         {"what": "coving, its lower edge on the sofa wall", "line": [[-1.32, 2.32, 3.65], [2.58, 2.32, 3.65]], "px": [420, 22]}
       ]
+    },
+    {
+      "id": "living-night-kf41",
+      "room": "living",
+      "light": "night",
+      "note": "The alcove with the sideboard and TV at night, under the ceiling light and the fairy lights (regions kept clear of the lights' strings), from the room's middle, standing; the mantel at the right edge.",
+      "source": {"capture": "capture_20261104_223839", "keyframe": 41, "rotate": 90},
+      "camera": {"eye": [0.908, 1.741, 1.926], "look": [-0.877, 1.491, -0.472], "fov": 69.5, "roll": 2.1},
+      "regions": {
+        "ceiling": {"x": 100, "y": 30, "w": 250, "h": 60, "material": "ceiling-paint"},
+        "alcove-side-wall": {"x": 20, "y": 500, "w": 80, "h": 110, "material": "wall-paint"},
+        "chimney-breast": {"x": 440, "y": 470, "w": 80, "h": 110, "material": "wall-paint"},
+        "sideboard-door": {"x": 150, "y": 760, "w": 70, "h": 60, "material": "sideboard-paint"},
+        "fire-surround": {"x": 440, "y": 730, "w": 60, "h": 100, "material": "oak"},
+        "carpet": {"x": 10, "y": 890, "w": 100, "h": 60, "material": "carpet"}
+      },
+      "sightings": [
+        {"what": "alcove corner (side wall, back wall), under the coving", "line": [[-1.32, 0, -0.35], [-1.32, 2.4, -0.35]], "px": [180, 284]},
+        {"what": "alcove corner (side wall, back wall), above the TV", "line": [[-1.32, 0, -0.35], [-1.32, 2.4, -0.35]], "px": [179, 410]},
+        {"what": "chimney breast, outer corner, beside the TV's top", "line": [[0, 0, 0], [0, 2.4, 0]], "px": [417, 440]},
+        {"what": "chimney breast, outer corner, at the mantel", "line": [[0, 0, 0], [0, 2.4, 0]], "px": [410, 630]},
+        {"what": "TV screen, top left (the black panel's corner)", "at": [-1.27, 1.675, -0.22], "px": [169, 434]},
+        {"what": "TV screen, top right", "at": [-0.05, 1.675, -0.22], "px": [416, 439.5]},
+        {"what": "TV screen, bottom left (the black panel; a lighter chin below it)", "at": [-1.27, 0.975, -0.22], "px": [167, 591]},
+        {"what": "TV screen, bottom right", "at": [-0.05, 0.975, -0.22], "px": [407.5, 645]},
+        {"what": "sideboard top, front edge, left end (the oak's upper corner)", "at": [-1.245, 0.8125, 0], "px": [121, 638]},
+        {"what": "sideboard top, front edge, right end (the oak's upper corner)", "at": [-0.075, 0.8125, 0], "px": [365, 719]},
+        {"what": "mantel shelf, front left top corner", "at": [0.135, 1.04, 0.21], "px": [414, 688]}
+      ]
     }
   ]
 }

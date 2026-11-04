@@ -45,7 +45,9 @@ export function buildInterior(
 	if (!room) return undefined;
 	const mats = new MaterialLibrary(<T extends { dispose(): void }>(r: T) => view.own(r));
 
-	for (const r of scene.rooms) addRoomShell(view, mats, scene, r, physical);
+	// Night, physically: no daylight; the ceiling lights' glass glows instead.
+	const night = physical && !!camera.night;
+	for (const r of scene.rooms) addRoomShell(view, mats, scene, r, physical, night);
 	for (const p of passages(scene)) addPassage(view, mats, scene, p);
 	// Each piece as its parts, closed; a piece without parts is its box.
 	for (const f of scene.furniture) {
@@ -59,6 +61,7 @@ export function buildInterior(
 			mesh.rotation.y = sol.yaw;
 			mesh.castShadow = mesh.receiveShadow = true;
 			view.scene.add(mesh);
+			if (night && (parts[k].material ?? f.material) === LAMP_MATERIAL) addLampLight(view, mesh);
 		});
 	}
 
@@ -87,6 +90,7 @@ function addRoomShell(
 	scene: HouseScene,
 	room: Room,
 	physical: boolean,
+	night: boolean,
 ): void {
 	const pts = roomPerimeter(room);
 	const into = inwardNormals(pts);
@@ -113,7 +117,7 @@ function addRoomShell(
 			view.scene.add(facing(wallPanel(view, s, len, p.a0, p.a1, p.yb, p.yt, wallMat), inward));
 		}
 		for (const o of ops)
-			if (o.glazing) addGlazing(view, mats, scene, s, len, o, o.glazing, inward, physical);
+			if (o.glazing) addGlazing(view, mats, scene, s, len, o, o.glazing, inward, physical, night);
 		if (room.coving)
 			view.scene.add(
 				facing(coving(view, s, inward, neighbours(i), scene.height, room.coving, covingMat), [
@@ -182,6 +186,7 @@ function addGlazing(
 	g: Glazing,
 	inward: [number, number],
 	physical: boolean,
+	night: boolean,
 ): void {
 	const spec = (key: string) => {
 		const m = scene.materials?.[key];
@@ -210,7 +215,8 @@ function addGlazing(
 			const z = s.az + dz * along + inward[1] * 0.004;
 			light.position.set(x, (p.yb + p.yt) / 2, z);
 			light.lookAt(x + inward[0], (p.yb + p.yt) / 2, z + inward[1]);
-			view.scene.add(light);
+			// At night the pane is dark: only its black back stays.
+			if (!night) view.scene.add(light);
 			// The pane behind it, black: the light is all it sends in. Left open, a
 			// path that passed the light went on to the sky, and the pane counted twice.
 			const back = new THREE.Mesh(
@@ -229,6 +235,42 @@ function addGlazing(
 		mesh.castShadow = frame;
 		mesh.receiveShadow = true;
 		view.scene.add(mesh);
+	}
+}
+
+/** The material of the glass a ceiling light shines through, at night. */
+const LAMP_MATERIAL = 'lamp-shade';
+/** A lit bulb behind frosted glass, warm white (2700 K, linear): the brightness is
+ *  the exposure's to set, as a camera does, so any unit serves. */
+const LAMP: [number, number, number] = [1, 0.4, 0.095];
+const LAMP_RADIANCE = 100;
+
+/** A lit lamp's glass as the light it sends out: an even emitter on each face of
+ *  its box but the top (it is flush with the ceiling), facing out, so a path tracer
+ *  can aim at it as at a frosted pane. */
+function addLampLight(view: ThreeView, glass: THREE.Mesh): void {
+	glass.updateMatrixWorld(true);
+	const box = new THREE.Box3().setFromObject(glass);
+	const [c, size] = [box.getCenter(new THREE.Vector3()), box.getSize(new THREE.Vector3())];
+	const colour = new THREE.Color(...LAMP);
+	const out = 0.002;
+	const bottom = new THREE.RectAreaLight(colour, LAMP_RADIANCE, size.x, size.z);
+	bottom.position.set(c.x, box.min.y - out, c.z);
+	bottom.rotation.x = -Math.PI / 2; // facing straight down
+	view.scene.add(bottom);
+	for (const [dx, dz] of [
+		[1, 0],
+		[-1, 0],
+		[0, 1],
+		[0, -1],
+	] as const) {
+		const across = dx ? size.z : size.x;
+		const side = new THREE.RectAreaLight(colour, LAMP_RADIANCE, across, size.y);
+		const x = c.x + dx * (size.x / 2 + out);
+		const z = c.z + dz * (size.z / 2 + out);
+		side.position.set(x, c.y, z);
+		side.lookAt(x + dx, c.y, z + dz);
+		view.scene.add(side);
 	}
 }
 

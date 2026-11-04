@@ -56,6 +56,12 @@ export function overcastSkyImage(): SkyImage {
 	return { width: w, height: h, data };
 }
 
+/** No sky: the night, as an image of overcastSkyImage's size. */
+export function nightSkyImage(): SkyImage {
+	const { width, height } = overcastSkyImage();
+	return { width, height, data: new Float32Array(width * height * 4) };
+}
+
 /** The radiance a diffusing window of transmittance `t` sends into the room under
  *  this sky: the daylight on a vertical pane, from the sky in front of it and the
  *  ground below, passed on evenly in all directions (L = t·E/π). Frosted glass is

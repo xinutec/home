@@ -5,7 +5,8 @@
 //   node e2e/export.ts --eye=x,y,z --look=x,y,z --fov 75 [--width 540 --height 960] --out scene.glb
 //
 // The local build (`pnpm run build` first), fed the local scenes/house.json, or
-// --scene's file (compare-view's fitted paints).
+// --scene's file (compare-view's fitted paints); --night lights it by its ceiling
+// lights alone (?night).
 import { chromium } from '@playwright/test';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { extname, join } from 'node:path';
@@ -22,6 +23,7 @@ const { values: a } = parseArgs({
 		width: { type: 'string' },
 		height: { type: 'string' },
 		scene: { type: 'string' },
+		night: { type: 'boolean', default: false },
 	},
 });
 const ORIGIN = 'https://home.xinutec.org';
@@ -73,6 +75,7 @@ await ctx.route('**/api/house', (route) =>
 await ctx.route('**/api/house/bake', (route) => route.fulfill({ status: 404, body: '' }));
 const page = await ctx.newPage();
 const q = new URLSearchParams({ fov: a.fov, exposure: a.exposure, export: '' });
+if (a.night) q.set('night', '');
 if (a.eye) q.set('eye', a.eye);
 if (a.look) q.set('look', a.look);
 await page.goto(`${ORIGIN}/house/${a.room}?${q}`, { waitUntil: 'domcontentloaded' });

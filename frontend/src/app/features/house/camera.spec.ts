@@ -15,6 +15,10 @@ describe('cameraFromQuery', () => {
 		expect(cameraFromQuery('?trace=0&exposure=-1')).toEqual({});
 	});
 
+	it('reads the night', () => {
+		expect(cameraFromQuery('?trace=64&night')).toEqual({ trace: 64, night: true });
+	});
+
 	it('reads an export of the physical scene', () => {
 		expect(cameraFromQuery('?export')).toEqual({ export: true });
 		expect(cameraFromQuery('?trace=64')).not.toHaveProperty('export');

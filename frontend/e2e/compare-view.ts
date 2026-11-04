@@ -40,6 +40,8 @@ interface PhotoRecord {
 	id: string;
 	room: string;
 	source: { capture: string; keyframe: number; rotate: 0 | 90 };
+	/** The light it was taken in: daylight, or night under the ceiling lights. */
+	light?: 'night';
 	camera: { eye: number[]; look: number[]; fov: number; roll?: number };
 	regions: Record<string, Rect & { material?: string }>;
 }
@@ -174,9 +176,10 @@ function traceOnHorus(exposure: number): Buffer {
 		const scene = join(tmpdir(), `compare-view-${process.pid}.json`);
 		writeFileSync(scene, sceneBody);
 		flags.push('--scene', scene);
-		if (exported === undefined)
+		if (exported === undefined) {
 			flags.push(`--eye=${eye}`, `--look=${look}`, '--fov', fov ?? '69', '--size', `${W}x${H}`);
-		else flags.push('--reuse');
+			if (record?.light === 'night') flags.push('--night');
+		} else flags.push('--reuse');
 	} else flags.push('--reuse');
 	execFileSync(join(ROOT, 'tracer/horus.sh'), flags, { stdio: ['ignore', 'ignore', 'inherit'] });
 	exported = sceneBody;
@@ -195,6 +198,7 @@ async function renderAt(exposure: number): Promise<Buffer> {
 	});
 	if (args.trace) q.set('trace', args.trace);
 	if (args.fit) q.set('tone', 'linear');
+	if (record?.light === 'night') q.set('night', '');
 	await page.goto(`${ORIGIN}/house/${room}?${q.toString()}`, { waitUntil: 'networkidle' });
 	const canvas = page.locator('.canvas canvas');
 	await canvas.waitFor();

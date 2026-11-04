@@ -28,7 +28,7 @@ import { cameraFromQuery } from './camera';
 import type { CameraQuery } from './camera';
 import { buildInterior } from './room-builder';
 import type { Lit } from './room-builder';
-import { overcastSky, overcastSkyImage } from './sky';
+import { nightSkyImage, overcastSky, overcastSkyImage } from './sky';
 import { ThreeView } from './three-view';
 import { WalkControls, obstaclesOf } from './walk';
 
@@ -100,7 +100,11 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			r.toneMappingExposure = this.query.exposure ?? 1;
 		});
 		this.view = view;
-		if (this.query.trace || this.query.export) {
+		if ((this.query.trace || this.query.export) && this.query.night) {
+			// Night: nothing outside; the room is lit by its ceiling lights (buildInterior).
+			view.scene.environment = null;
+			view.scene.background = new THREE.Color(0, 0, 0);
+		} else if (this.query.trace || this.query.export) {
 			// The physical reference: the room lit by the sky outside, through its windows alone.
 			const sky = view.own(overcastSky());
 			view.scene.environment = sky;
@@ -237,8 +241,9 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 					radiance: o.color.clone().multiplyScalar(o.intensity).toArray(),
 				});
 			});
-			// The image scene.environment was made from (the constructor's overcastSky).
-			const { width, height, data } = overcastSkyImage();
+			// The image scene.environment was made from (the constructor's overcastSky),
+			// or at night a black one.
+			const { width, height, data } = this.query.night ? nightSkyImage() : overcastSkyImage();
 			const rgb = new Float32Array(width * height * 3);
 			for (let i = 0; i < width * height; i++) rgb.set(data.subarray(i * 4, i * 4 + 3), i * 3);
 			const cam = view.camera;

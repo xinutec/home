@@ -2,12 +2,13 @@
 // build and scene, its bake applied.
 //   node e2e/shot.ts --eye=x,y,z --look=x,y,z --fov 50 --out file.png [--trace 1024] [--tone linear]
 // --trace N path-traces it to N samples a pixel instead (room.ts's ?trace), and
-// says how long that took; --tone linear drops the tone curve (?tone=linear).
+// says how long that took; --tone linear drops the tone curve (?tone=linear);
+// --night traces it lit by its ceiling lights alone (?night).
 import { chromium } from '@playwright/test';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { extname, join } from 'node:path';
 import { parseArgs } from 'node:util';
-const { values: a } = parseArgs({ options: { eye: { type: 'string' }, look: { type: 'string' }, fov: { type: 'string', default: '50' }, out: { type: 'string', default: 'shot.png' }, room: { type: 'string', default: 'living' }, scene: { type: 'string' }, exposure: { type: 'string', default: '150' }, trace: { type: 'string' }, tone: { type: 'string' } } });
+const { values: a } = parseArgs({ options: { eye: { type: 'string' }, look: { type: 'string' }, fov: { type: 'string', default: '50' }, out: { type: 'string', default: 'shot.png' }, room: { type: 'string', default: 'living' }, scene: { type: 'string' }, exposure: { type: 'string', default: '150' }, trace: { type: 'string' }, tone: { type: 'string' }, night: { type: 'boolean', default: false } } });
 const ORIGIN = 'https://home.xinutec.org';
 const ROOT = new URL('../..', import.meta.url).pathname;
 const DIST = new URL('../dist/frontend/browser', import.meta.url).pathname;
@@ -25,7 +26,7 @@ await ctx.route(new RegExp(`^${ORIGIN}/(?!api/|auth/|login)`), (r) => {
 await ctx.route('**/api/house/bake', (r) => r.fulfill({ body: readFileSync(join(ROOT, 'scenes/house.bake')), contentType: 'application/octet-stream' }));
 await ctx.route('**/api/house', (r) => r.fulfill({ body: readFileSync(a.scene ?? join(ROOT, 'scenes/house.json')), contentType: 'application/json' }));
 const page = await ctx.newPage();
-const trace = (a.trace ? `&trace=${a.trace}` : '') + (a.tone ? `&tone=${a.tone}` : '');
+const trace = (a.trace ? `&trace=${a.trace}` : '') + (a.tone ? `&tone=${a.tone}` : '') + (a.night ? '&night' : '');
 const start = Date.now();
 await page.goto(`${ORIGIN}/house/${a.room}?eye=${a.eye}&look=${a.look}&fov=${a.fov}&exposure=${a.exposure}${trace}`, { waitUntil: 'networkidle' });
 if (a.trace) await page.locator('.canvas[data-traced]').waitFor({ timeout: 3_600_000 });
