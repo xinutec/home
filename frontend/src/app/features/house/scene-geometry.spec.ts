@@ -4,6 +4,7 @@ import type { Room } from './house.model';
 import {
 	bounds,
 	covingProfile,
+	inwardNormals,
 	skirtingRuns,
 	glazingLayout,
 	passages,
@@ -223,6 +224,51 @@ describe('skirtingRuns', () => {
 		expect(skirtingRuns(3, [door, window], 2.4)).toEqual([
 			[0, 1],
 			[1.8, 3],
+		]);
+	});
+});
+
+describe('inwardNormals', () => {
+	// A point a little way in from each wall's middle is inside the outline.
+	const inside = (pts: { x: number; z: number }[], x: number, z: number) => {
+		let hit = false;
+		for (let i = 0, j = pts.length - 2; i < pts.length - 1; j = i++) {
+			const [a, b] = [pts[i], pts[j]];
+			if (a.z > z !== b.z > z && x < ((b.x - a.x) * (z - a.z)) / (b.z - a.z) + a.x) hit = !hit;
+		}
+		return hit;
+	};
+	const check = (walls: [number, number][]) => {
+		const pts = perimeter(walls);
+		const n = inwardNormals(pts);
+		pts.slice(0, -1).forEach((p, i) => {
+			const q = pts[i + 1];
+			const [mx, mz] = [(p.x + q.x) / 2 + n[i][0] * 0.01, (p.z + q.z) / 2 + n[i][1] * 0.01];
+			expect(inside(pts, mx, mz)).toBe(true);
+		});
+	};
+
+	it('points into a room with a chimney breast, whose centre lies behind the breast', () => {
+		// The living room's outline, the breast's two short returns included.
+		check([
+			[0, 1.38],
+			[-90, 0.35],
+			[90, 1.2],
+			[90, 0.81],
+			[0, 3.19],
+			[90, 3.9],
+			[90, 4],
+			[90, 1.32],
+			[90, 0.35],
+		]);
+	});
+
+	it('points into a room walked the other way round', () => {
+		check([
+			[0, 3],
+			[-90, 2],
+			[-90, 3],
+			[-90, 2],
 		]);
 	});
 });

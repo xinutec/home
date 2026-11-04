@@ -9,6 +9,7 @@ import {
 	bounds,
 	covingProfile,
 	glazingLayout,
+	inwardNormals,
 	passages,
 	roomPerimeter,
 	segments,
@@ -74,7 +75,7 @@ function addRoomShell(
 	physical: boolean,
 ): void {
 	const pts = roomPerimeter(room);
-	const centre = bounds(pts);
+	const into = inwardNormals(pts);
 	const wallMat = mats.get(surfaceMaterial(scene, room, 'walls'), THREE.DoubleSide);
 	const covingMat = mats.get(surfaceMaterial(scene, room, 'ceiling'), THREE.DoubleSide);
 	const skirtingMat = mats.get(surfaceMaterial(scene, room, 'skirting'));
@@ -85,13 +86,7 @@ function addRoomShell(
 		for (const p of wallPanels(len, ops, scene.height)) {
 			view.scene.add(wallPanel(view, s, len, p.a0, p.a1, p.yb, p.yt, wallMat));
 		}
-		// Into the room: the side of the wall facing its centre (every room here is convex).
-		const nx = -(s.bz - s.az) / len;
-		const nz = (s.bx - s.ax) / len;
-		const toCentre = centre
-			? (centre.cx - (s.ax + s.bx) / 2) * nx + (centre.cz - (s.az + s.bz) / 2) * nz
-			: 1;
-		const inward: [number, number] = toCentre >= 0 ? [nx, nz] : [-nx, -nz];
+		const inward = into[i];
 		for (const o of ops)
 			if (o.glazing) addGlazing(view, mats, scene, s, len, o, o.glazing, inward, physical);
 		if (room.coving) view.scene.add(coving(view, s, inward, scene.height, room.coving, covingMat));

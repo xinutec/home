@@ -240,3 +240,18 @@ export function skirtingRuns(len: number, ops: WallOpening[], h: number): [numbe
 	}
 	return runs;
 }
+
+/** Into the room from each of its walls, as unit [x, z]: the inside of an outline
+ *  is on the same hand all the way round (left if it runs anticlockwise, by its
+ *  signed area), whatever its shape. A room with a chimney breast is not convex,
+ *  so its centre can lie behind a wall. */
+export function inwardNormals(pts: Pt[]): [number, number][] {
+	let area = 0;
+	for (let i = 0; i < pts.length - 1; i++)
+		area += pts[i].x * pts[i + 1].z - pts[i + 1].x * pts[i].z;
+	const left = area > 0 ? 1 : -1;
+	return segments(pts).map((s) => {
+		const len = Math.hypot(s.bx - s.ax, s.bz - s.az) || 1;
+		return [(left * -(s.bz - s.az)) / len, (left * (s.bx - s.ax)) / len];
+	});
+}

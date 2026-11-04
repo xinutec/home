@@ -161,7 +161,8 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 				report,
 			);
 			const file = encodeBake({ checksum: roomChecksum(merged), front, back });
-			Object.assign(window, { houseBake: file });
+			// The meshes it is for, beside it, for e2e scripts that inspect the light.
+			Object.assign(window, { houseBake: file, houseRoom: merged, houseLight: { front, back } });
 			host.dataset['baked'] = JSON.stringify({
 				vertices: front.length / 3,
 				samples: summed,
