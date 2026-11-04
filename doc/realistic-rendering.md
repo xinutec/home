@@ -314,7 +314,11 @@ baked for (a checksum of every vertex and coordinate); `tests/scene.test.ts` fai
 while it is not the bake of the current scene file. Light detail no longer depends
 on where triangle corners fall: an earlier bake onto the vertices smeared the
 shadow where a shelf meets a wall. On keyframe 1 it scores 9.7 at the solved
-exposure (180). Open: the bake and the trace need exposures of about 180 and 90.
+exposure (180). On the Pixel 9 (`?stats`, 973×1685 px) it draws at 107 fps while
+the view moves; idle, the phone holds the screen at 60 Hz, so a still reading is
+the screen's cap. Before any bake it was 87 fps (live lights and shadows), and
+with light baked onto split vertices 60 (186,000 triangles). Open: the bake and the
+trace need exposures of about 180 and 90.
 
 The interactive view cannot path-trace on a phone. The photo mode's bounce light
 is baked into lightmaps on the static shell and fixed furniture; moving parts
