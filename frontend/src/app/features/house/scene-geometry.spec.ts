@@ -4,6 +4,7 @@ import type { Room } from './house.model';
 import {
 	bounds,
 	covingProfile,
+	mitre,
 	inwardNormals,
 	skirtingRuns,
 	glazingLayout,
@@ -270,5 +271,22 @@ describe('inwardNormals', () => {
 			[-90, 3],
 			[-90, 2],
 		]);
+	});
+});
+
+describe('mitre', () => {
+	it('meets at the point the same distance from both walls, inside or outside a corner', () => {
+		// An inside corner, walls along x and z, the room in +x +z.
+		const inside = mitre({ x: 0, z: 0 }, [0, 1], [1, 0], 0.1);
+		expect([inside.x, inside.z]).toEqual([0.1, 0.1]);
+		// An outside corner (a chimney breast's): the room wraps round it.
+		const outside = mitre({ x: 0, z: 0 }, [0, -1], [-1, 0], 0.1);
+		expect([outside.x, outside.z]).toEqual([-0.1, -0.1]);
+	});
+
+	it('runs straight on where the wall does', () => {
+		const p = mitre({ x: 1, z: 0 }, [0, 1], [0, 1], 0.1);
+		expect(p.x).toBeCloseTo(1, 12);
+		expect(p.z).toBeCloseTo(0.1, 12);
 	});
 });

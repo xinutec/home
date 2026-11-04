@@ -255,3 +255,14 @@ export function inwardNormals(pts: Pt[]): [number, number][] {
 		return [(left * -(s.bz - s.az)) / len, (left * (s.bx - s.ax)) / len];
 	});
 }
+
+/** Where a strip `u` metres out from two walls meets itself at their corner: the
+ *  point that far from both, as a mitred moulding's cut is. `n1`, `n2` are the
+ *  walls' inward normals; an outside corner and an inside one alike. */
+export function mitre(corner: Pt, n1: [number, number], n2: [number, number], u: number): Pt {
+	const c = n1[0] * n2[0] + n1[1] * n2[1];
+	// Walls doubling back on themselves have no meeting point: keep the square end.
+	if (c < -0.999) return { x: corner.x + n1[0] * u, z: corner.z + n1[1] * u };
+	const k = u / (1 + c);
+	return { x: corner.x + (n1[0] + n2[0]) * k, z: corner.z + (n1[1] + n2[1]) * k };
+}

@@ -13,6 +13,7 @@ import {
 	covingProfile,
 	glazingLayout,
 	inwardNormals,
+	mitre,
 	passages,
 	roomPerimeter,
 	segments,
@@ -92,7 +93,18 @@ function addRoomShell(
 	const wallMat = mats.get(surfaceMaterial(scene, room, 'walls'), THREE.DoubleSide);
 	const covingMat = mats.get(surfaceMaterial(scene, room, 'ceiling'), THREE.DoubleSide);
 	const skirtingMat = mats.get(surfaceMaterial(scene, room, 'skirting'));
-	segments(pts).forEach((s, i) => {
+	const segs = segments(pts);
+	// The inward normals of the walls before and after wall i, round the outline,
+	// skipping any of no length.
+	const real = segs.map((s) => Math.hypot(s.bx - s.ax, s.bz - s.az) > 1e-6);
+	const step = (i: number, by: number) => {
+		let j = i;
+		do j = (j + by + segs.length) % segs.length;
+		while (!real[j] && j !== i);
+		return into[j];
+	};
+	const neighbours = (i: number): [[number, number], [number, number]] => [step(i, -1), step(i, 1)];
+	segs.forEach((s, i) => {
 		const len = Math.hypot(s.bx - s.ax, s.bz - s.az);
 		if (len < 1e-6) return;
 		const ops = (room.openings ?? []).filter((o) => o.wall === i);
@@ -104,7 +116,7 @@ function addRoomShell(
 			if (o.glazing) addGlazing(view, mats, scene, s, len, o, o.glazing, inward, physical);
 		if (room.coving)
 			view.scene.add(
-				facing(coving(view, s, inward, scene.height, room.coving, covingMat), [
+				facing(coving(view, s, inward, neighbours(i), scene.height, room.coving, covingMat), [
 					inward[0],
 					-1,
 					inward[1],
@@ -112,7 +124,9 @@ function addRoomShell(
 			);
 		if (room.skirting)
 			for (const [a0, a1] of skirtingRuns(len, ops, scene.height))
-				view.scene.add(skirting(view, s, len, a0, a1, inward, room.skirting, skirtingMat));
+				view.scene.add(
+					skirting(view, s, len, a0, a1, inward, neighbours(i), room.skirting, skirtingMat),
+				);
 	});
 	const floor = mats.get(surfaceMaterial(scene, room, 'floor'), THREE.DoubleSide);
 	const ceiling = mats.get(surfaceMaterial(scene, room, 'ceiling'), THREE.DoubleSide);
@@ -335,18 +349,19 @@ function coving(
 	view: ThreeView,
 	s: WallSeg,
 	inward: [number, number],
+	[before, after]: [[number, number], [number, number]],
 	height: number,
 	c: { drop: number; depth: number },
 	mat: THREE.Material,
 ): THREE.Mesh {
 	const prof = covingProfile(c.drop, c.depth);
 	const pos: number[] = [];
-	for (const [u, v] of prof)
-		for (const [x, z] of [
-			[s.ax, s.az],
-			[s.bx, s.bz],
-		])
-			pos.push(x + inward[0] * u, height - v, z + inward[1] * u);
+	// Each end cut to meet the next wall's coving, as a mitred moulding is.
+	for (const [u, v] of prof) {
+		const a = mitre({ x: s.ax, z: s.az }, inward, before, u);
+		const b = mitre({ x: s.bx, z: s.bz }, inward, after, u);
+		pos.push(a.x, height - v, a.z, b.x, height - v, b.z);
+	}
 	const index: number[] = [];
 	for (let k = 0; k < prof.length - 1; k++) {
 		const [a, b, c2, d] = [2 * k, 2 * k + 1, 2 * k + 2, 2 * k + 3];
@@ -361,8 +376,10 @@ function coving(
 	return mesh;
 }
 
-/** One run of skirting: a board `a1 - a0` long at the wall's foot, its depth into
- *  the room. */
+/** One run of skirting, `a0` to `a1` along the wall: a board `height` tall and
+ *  `depth` out from it. Where the run reaches a corner its end is mitred to meet
+ *  the next wall's, as a moulding is cut; where it stops at a doorway it ends
+ *  square, closed. */
 function skirting(
 	view: ThreeView,
 	s: WallSeg,
@@ -370,19 +387,56 @@ function skirting(
 	a0: number,
 	a1: number,
 	inward: [number, number],
+	[before, after]: [[number, number], [number, number]],
 	k: { height: number; depth: number },
 	mat: THREE.Material,
 ): THREE.Mesh {
-	const dx = (s.bx - s.ax) / len;
-	const dz = (s.bz - s.az) / len;
-	const along = (a0 + a1) / 2;
-	const mesh = new THREE.Mesh(view.own(metricBox(a1 - a0, k.height, k.depth)), mat);
-	mesh.position.set(
-		s.ax + dx * along + (inward[0] * k.depth) / 2,
-		k.height / 2,
-		s.az + dz * along + (inward[1] * k.depth) / 2,
+	const [dx, dz] = [(s.bx - s.ax) / len, (s.bz - s.az) / len];
+	const atWall = (a: number) => ({ x: s.ax + dx * a, z: s.az + dz * a });
+	const cornerAtStart = a0 < 1e-6;
+	const cornerAtEnd = a1 > len - 1e-6;
+	// The board's two ends, `u` out from the wall.
+	const start = (u: number) =>
+		cornerAtStart
+			? mitre(atWall(0), inward, before, u)
+			: { x: atWall(a0).x + inward[0] * u, z: atWall(a0).z + inward[1] * u };
+	const end = (u: number) =>
+		cornerAtEnd
+			? mitre(atWall(len), inward, after, u)
+			: { x: atWall(a1).x + inward[0] * u, z: atWall(a1).z + inward[1] * u };
+	const pos: number[] = [];
+	const uv: number[] = [];
+	const v3 = (p: { x: number; z: number }, y: number) => new THREE.Vector3(p.x, y, p.z);
+	// A quad, wound to face `want`: two triangles.
+	const quad = (q: THREE.Vector3[], want: THREE.Vector3) => {
+		const n = new THREE.Vector3()
+			.subVectors(q[1], q[0])
+			.cross(new THREE.Vector3().subVectors(q[2], q[0]));
+		const order = n.dot(want) >= 0 ? [0, 1, 2, 0, 2, 3] : [0, 2, 1, 0, 3, 2];
+		for (const i of order) {
+			pos.push(q[i].x, q[i].y, q[i].z);
+			uv.push(q[i].x + q[i].z, q[i].y);
+		}
+	};
+	const out = new THREE.Vector3(inward[0], 0, inward[1]);
+	const [h, d] = [k.height, k.depth];
+	quad([v3(start(d), 0), v3(end(d), 0), v3(end(d), h), v3(start(d), h)], out);
+	quad(
+		[v3(start(0), h), v3(end(0), h), v3(end(d), h), v3(start(d), h)],
+		new THREE.Vector3(0, 1, 0),
 	);
-	mesh.rotation.y = -Math.atan2(s.bz - s.az, s.bx - s.ax);
+	const along = new THREE.Vector3(dx, 0, dz);
+	if (!cornerAtStart)
+		quad(
+			[v3(start(0), 0), v3(start(d), 0), v3(start(d), h), v3(start(0), h)],
+			along.clone().negate(),
+		);
+	if (!cornerAtEnd) quad([v3(end(0), 0), v3(end(d), 0), v3(end(d), h), v3(end(0), h)], along);
+	const geom = view.own(new THREE.BufferGeometry());
+	geom.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+	geom.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+	geom.computeVertexNormals();
+	const mesh = new THREE.Mesh(geom, mat);
 	mesh.castShadow = mesh.receiveShadow = true;
 	return mesh;
 }
