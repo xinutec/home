@@ -39,11 +39,11 @@ how it is judged done.
    door. Next: the bay sofa, the sideboard and TV, the bay's three windows, the
    curtains and pole, the fireplace's leg and arch, the coving and skirting, the
    ceiling light.
-2. **Keyframe 822 against keyframe 1**: under the corrected light, keyframe 1's
-   paints fit (3.5) and keyframe 822's do not (walls 0.95 against 0.42; see the
-   refit table). A RAW photo of the bay settles the phone's tone curve; the bay
-   panes' glass (is the lower pane frosted?) settles the window light. Then the
-   fitted paints go into the scene. And find which tracer is right where they
+2. **The walls' and carpet's paints**: keyframe 1 and the night photo agree on the
+   sideboard and oak (now in the scene), not on the walls (the fairy lights) or the
+   carpet (the dark end of the phone's curve), and keyframe 822 disagrees with both.
+   A RAW photo of the bay settles the phone's tone curve (its lower panes diffuse:
+   the night walk shows them hazy where the upper ones reflect clearly). And find which tracer is right where they
    still differ, by about 11% (tracer/README.md).
 3. **Tilted parts**, so the chairs' and bay sofa's arms can slope (the chairs' elbow
    rests fall toward the back, the front scrolls rise to 0.71); and a wedge for the
@@ -258,6 +258,22 @@ Keyframe 1 then scores 3.5 (alcove side wall 10.1, TV screen 9.1, the rest under
 keyframe 1's. Keyframe 822 looks into the bay's windows: its walls and carpet are
 far brighter beside its ceiling than this light makes them, which is the phone's
 tone curve on a bright scene or the window light, not the paints.
+
+A third light settles part of it: a night photo (`living-night-kf41`, the 4 November
+walk), lit by the ceiling light alone (`?night`: its glass as five even emitters,
+2700 K; no daylight), fitted the same way:
+
+| Paint (reflectance) | keyframe 1, daylight | night, the ceiling light |
+| --- | --- | --- |
+| sideboard-paint | 0.44 | 0.44 |
+| oak | 0.39 | 0.43 |
+| wall-paint | 0.42 | 0.95, the limit: the fairy lights along these walls are not modelled |
+| carpet | 0.29 | 0.11, in the frame's darkest corner, where the phone's curve tells most |
+
+Where neither the windows nor the fairy lights reach, two independent lights agree:
+keyframe 1's fit holds and keyframe 822 is the outlier. The sideboard's and the oak's
+brightness went into the scene; their hue stayed as toned (a fit's hue follows the
+light's assumed colour and the phone's white balance).
 
 | Clear openers drawn as glass (light unchanged otherwise), traced 256 | 8.3 | ceiling 15.3: worse than 7.9, against the rule that a worse change is undone; kept because it is the true light, and with fitted paints the two are level (4.7 and 4.8), while these rows use estimated paints |
 | The sideboard's real construction, A/B under that light (`--scene` the old file) | 8.9 | sideboard door 7.0 → 6.9: unchanged; the rest moved with the exposure (one number fitted over all regions). A region's mean colour cannot see shape: detail is judged on the side-by-side, where the trace now draws the gaps and panel edges as the photo's shadow lines |
