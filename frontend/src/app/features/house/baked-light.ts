@@ -75,3 +75,63 @@ export function applyLightmap(scene: THREE.Scene, lit: Lit, map: Lightmap): bool
 	scene.background = new THREE.Color(SKY[0], SKY[1], SKY[2]);
 	return true;
 }
+
+/** Where the reflection probe sees the room from: its middle, at a standing eye. */
+const PROBE_HEIGHT = 1.4;
+/** The probe's cube faces, pixels a side: sharp enough for the TV's glass. */
+const PROBE_SIZE = 256;
+
+/**
+ * Reflections, as games make them: the lit room captured once into a cube map from
+ * its middle (a reflection probe), prefiltered by roughness, and reflected by every
+ * surface by its Fresnel and roughness. The light on a surface stays the lightmap's
+ * alone: three would add the probe as diffuse light too, which the lightmap already
+ * holds, so that one line goes from the shader. Returns the probe, for disposal.
+ */
+export function addReflections(
+	renderer: THREE.WebGLRenderer,
+	scene: THREE.Scene,
+	lit: Lit,
+): THREE.WebGLRenderTarget[] {
+	const box = new THREE.Box3();
+	for (const m of lit.meshes) box.expandByObject(m);
+	const centre = box.getCenter(new THREE.Vector3());
+	centre.y = PROBE_HEIGHT;
+	// A render target holds linear radiance: three tone maps only the screen.
+	const cube = new THREE.WebGLCubeRenderTarget(PROBE_SIZE, { type: THREE.HalfFloatType });
+	const camera = new THREE.CubeCamera(0.05, 50, cube);
+	camera.position.copy(centre);
+	camera.update(renderer, scene);
+	const pmrem = new THREE.PMREMGenerator(renderer);
+	const probe = pmrem.fromCubemap(cube.texture);
+	pmrem.dispose();
+
+	const specularOnly = specularOnlyChunk();
+	const done = new Set<THREE.Material>();
+	for (const mesh of lit.meshes) {
+		const material = mesh.material;
+		if (Array.isArray(material) || done.has(material)) continue;
+		done.add(material);
+		if (!(material instanceof THREE.MeshStandardMaterial) || !material.lightMap) continue;
+		material.envMap = probe.texture;
+		material.envMapIntensity = 1;
+		material.onBeforeCompile = (shader) => {
+			shader.fragmentShader = shader.fragmentShader.replace(
+				'#include <lights_fragment_maps>',
+				specularOnly,
+			);
+		};
+		material.needsUpdate = true;
+	}
+	return [cube, probe];
+}
+
+/** three's indirect-light chunk without the environment's diffuse light: the
+ *  surface reflects the probe, and its light is the lightmap's. */
+export function specularOnlyChunk(): string {
+	const chunk = THREE.ShaderChunk.lights_fragment_maps;
+	const out = chunk.replace('iblIrradiance += getIBLIrradiance( geometryNormal );', '');
+	if (out === chunk)
+		throw new Error("three's lights_fragment_maps changed: the probe would light surfaces twice");
+	return out;
+}

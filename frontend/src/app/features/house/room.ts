@@ -21,7 +21,7 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { WebGLPathTracer } from 'three-gpu-pathtracer';
 
 import { decodeLightmap, encodeLightmap } from './bake-file';
-import { applyLightmap, roomChecksum } from './baked-light';
+import { addReflections, applyLightmap, roomChecksum } from './baked-light';
 import { bakeLightmap } from './baker';
 import type { HouseScene } from './house.model';
 import { cameraFromQuery } from './camera';
@@ -202,6 +202,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 	private async light(view: ThreeView, lit: Lit, baked: ArrayBuffer | undefined): Promise<void> {
 		const map = baked ? await decodeLightmap(baked, gunzip) : undefined;
 		const applied = !!map && applyLightmap(view.scene, lit, map);
+		if (applied) for (const t of addReflections(view.renderer, view.scene, lit)) view.own(t);
 		view.renderer.toneMappingExposure = this.query.exposure ?? (applied ? BAKED_EXPOSURE : 1);
 		view.requestFrame();
 		if (this.query.stats) this.measure(view);

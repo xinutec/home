@@ -48,8 +48,9 @@ how it is judged done.
 3. **Tilted parts**, so the chairs' and bay sofa's arms can slope (the chairs' elbow
    rests fall toward the back, the front scrolls rise to 0.71); and a wedge for the
    big sofa's back frame (6 cm at its top, thicker below).
-4. **Reflections**: one baked capture of the room, for the glass, TV, metal and
-   the fireplace's iron.
+4. **Reflections, further**: box projection, so the TV and glass reflect the room
+   from where they hang; the clear panes reflecting at all (drawn nearly invisible
+   in baked light); the fireplace iron's real sheen, from the photos.
 
 ## Where it stands
 
@@ -354,6 +355,15 @@ the view moves; idle, the phone holds the screen at 60 Hz, so a still reading is
 the screen's cap. Before any bake it was 87 fps (live lights and shadows), and
 with light baked onto split vertices 60 (186,000 triangles). Open: the bake and the
 trace need exposures of about 180 and 90.
+
+Reflections, as games make them (`addReflections`, `baked-light.ts`): once the
+lightmap is on, the lit room is captured into a cube map from its middle at 1.4 m
+(a reflection probe, 256 px a face), prefiltered by roughness, and every surface
+reflects it by its Fresnel and roughness. Its light stays the lightmap's alone:
+three would add the probe as diffuse light too, which the lightmap already holds,
+so that line goes from the shader (`specularOnlyChunk`). Steel reads as metal and
+the wood takes a sheen; a dark screen reflects its 4% head-on. One probe, not box
+projected: what a flat glossy surface reflects is seen from the middle of the room.
 
 The interactive view cannot path-trace on a phone. The photo mode's bounce light
 is baked into lightmaps on the static shell and fixed furniture; moving parts
