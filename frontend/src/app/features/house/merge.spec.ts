@@ -23,42 +23,6 @@ describe('mergeStatic', () => {
 		expect(bounds.max.x).toBeCloseTo(5.5, 6);
 	});
 
-	it('splits long edges when asked, keeping the merged mesh in place', () => {
-		const scene = new THREE.Scene();
-		const a = new THREE.MeshStandardMaterial();
-		scene.add(box(a, 3));
-		const [mesh] = mergeStatic(scene, () => undefined, {
-			part: 0.3,
-			contact: 0.3,
-			open: 0.3,
-			reach: 0,
-		});
-		expect(mesh.geometry.getAttribute('position').count).toBeGreaterThan(36);
-		const bounds = new THREE.Box3().setFromObject(mesh);
-		expect(bounds.min.x).toBeCloseTo(2.5, 6);
-	});
-
-	it('splits the shell finely only near a part, where a shadow line falls', () => {
-		const scene = new THREE.Scene();
-		const wall = new THREE.Mesh(new THREE.PlaneGeometry(4, 2.4), new THREE.MeshStandardMaterial());
-		wall.userData['shell'] = 'surface';
-		const shelf = box(new THREE.MeshStandardMaterial(), 0);
-		shelf.scale.set(0.5, 0.05, 0.2);
-		shelf.position.set(-1.5, 0, 0.1);
-		scene.add(wall, shelf);
-		const split = { part: 1, contact: 0.05, open: 0.5, reach: 0.05 };
-		const merged = mergeStatic(scene, () => undefined, split);
-		const shell = merged.find((m) => m.userData['shell'] === 'surface');
-		const p = shell?.geometry.getAttribute('position');
-		// Vertices crowd round the shelf, at the wall's left end, and are sparse elsewhere.
-		let left = 0;
-		let right = 0;
-		for (let i = 0; i < (p?.count ?? 0); i++)
-			if ((p?.getX(i) ?? 0) < -1) left++;
-			else if ((p?.getX(i) ?? 0) > 1) right++;
-		expect(left).toBeGreaterThan(right * 4);
-	});
-
 	it('keeps a shadow caster apart from a mesh that casts none', () => {
 		const scene = new THREE.Scene();
 		const a = new THREE.MeshStandardMaterial();

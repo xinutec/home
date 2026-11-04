@@ -1,4 +1,4 @@
-// Bakes the house's light onto the everyday view's vertices and writes it to
+// Bakes the house's light into the everyday view's lightmap and writes it to
 // scenes/house.bake, beside the scene it is for, which /api/house/bake serves.
 //
 //   node e2e/bake.ts [--samples 1024]
@@ -10,7 +10,9 @@
 import { chromium } from '@playwright/test';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { extname, join } from 'node:path';
+import { gzipSync } from 'node:zlib';
 import { parseArgs } from 'node:util';
+import { HEADER } from '../src/app/features/house/bake-file.ts';
 
 const { values: args } = parseArgs({ options: { samples: { type: 'string', default: '1024' } } });
 const ORIGIN = 'https://home.xinutec.org';
@@ -72,18 +74,20 @@ if (!done || 'error' in (JSON.parse(done) as object)) {
 }
 process.stdout.write('\n');
 const b64 = await page.evaluate(() => {
-	const file = (window as unknown as { houseBake: ArrayBuffer }).houseBake;
+	const bytes = (window as unknown as { houseBake: Uint8Array }).houseBake;
 	let s = '';
-	const bytes = new Uint8Array(file);
 	for (let i = 0; i < bytes.length; i += 0x8000)
 		s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
 	return btoa(s);
 });
-const bytes = Buffer.from(b64, 'base64');
-// The scene file this bake is for, by its FNV-1a: tests/scene.test.ts checks it.
+const raw = Buffer.from(b64, 'base64');
+// The header as the page wrote it, the scene file it is for (by its FNV-1a, which
+// tests/scene.test.ts checks), then the pixels gzipped.
+const head = Buffer.from(raw.subarray(0, HEADER));
 let fnv = 0x811c9dc5;
 for (const byte of readFileSync(SCENE)) fnv = Math.imul(fnv ^ byte, 0x01000193);
-bytes.writeUInt32LE(fnv >>> 0, 12);
+head.writeUInt32LE(fnv >>> 0, 16);
+const bytes = Buffer.concat([head, gzipSync(raw.subarray(HEADER), { level: 9 })]);
 writeFileSync(OUT, bytes);
 console.log(`${OUT}: ${(bytes.length / 1e6).toFixed(2)} MB, ${done}`);
 await browser.close();

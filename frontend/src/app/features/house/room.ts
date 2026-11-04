@@ -19,15 +19,22 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { WebGLPathTracer } from 'three-gpu-pathtracer';
 
-import { decodeBake, encodeBake } from './bake-file';
-import { applyBake, roomChecksum } from './baked-light';
-import { bakeIrradiance } from './baker';
+import { decodeLightmap, encodeLightmap } from './bake-file';
+import { applyLightmap, roomChecksum } from './baked-light';
+import { bakeLightmap } from './baker';
 import type { HouseScene } from './house.model';
 import { cameraFromQuery } from './camera';
 import type { CameraQuery } from './camera';
 import { buildInterior } from './room-builder';
+import type { Lit } from './room-builder';
 import { overcastSky } from './sky';
 import { ThreeView } from './three-view';
+
+/** Inflates a gzipped lightmap: the browser's own stream, no library. */
+async function gunzip(bytes: Uint8Array): Promise<Uint8Array> {
+	const stream = new Blob([bytes.slice()]).stream().pipeThrough(new DecompressionStream('gzip'));
+	return new Uint8Array(await new Response(stream).arrayBuffer());
+}
 
 /** The everyday view's exposure in baked light (the sky's zenith is 1): between
  *  what compare-view solves against keyframes 1 and 822 (180, 80). */
@@ -107,16 +114,11 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 				const view = this.view;
 				if (!view) return;
 				const physical = !!this.query.trace;
-				const merged = buildInterior(view, scene, this.room, this.query, physical);
-				if (!merged) this.empty.set(true);
+				const lit = buildInterior(view, scene, this.room, this.query, physical);
+				if (!lit) this.empty.set(true);
 				else if (this.query.trace) this.trace(view, this.query.trace);
-				else if (this.query.bake) this.bake(view, merged, this.query.bake);
-				else {
-					const decoded = baked ? decodeBake(baked) : undefined;
-					const lit = !!decoded && applyBake(view.scene, merged, decoded);
-					view.renderer.toneMappingExposure = this.query.exposure ?? (lit ? BAKED_EXPOSURE : 1);
-					if (this.query.stats) this.measure(view);
-				}
+				else if (this.query.bake) this.bake(view, lit, this.query.bake);
+				else void this.light(view, lit, baked);
 				view.requestFrame();
 			},
 			error: (e) => {
@@ -145,26 +147,32 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		this.zone.runOutsideAngular(() => requestAnimationFrame(step));
 	}
 
-	/** Bakes the room's light, `samples` a vertex, and leaves it, encoded as
-	 *  scenes/house.bake stores it, on `window.houseBake` for e2e/bake.ts; the
+	/** Lights the room from its lightmap, if one came and it is for this room as built;
+	 *  else it keeps the approximate light. */
+	private async light(view: ThreeView, lit: Lit, baked: ArrayBuffer | undefined): Promise<void> {
+		const map = baked ? await decodeLightmap(baked, gunzip) : undefined;
+		const applied = !!map && applyLightmap(view.scene, lit, map);
+		view.renderer.toneMappingExposure = this.query.exposure ?? (applied ? BAKED_EXPOSURE : 1);
+		view.requestFrame();
+		if (this.query.stats) this.measure(view);
+	}
+
+	/** Bakes the room's lightmap, `samples` a pixel, and leaves it, as scenes/house.bake
+	 *  stores it before compression, on `window.houseBake` for e2e/bake.ts; the
 	 *  canvas's host then carries `data-baked`. */
-	private bake(view: ThreeView, merged: THREE.Mesh[], samples: number): void {
+	private bake(view: ThreeView, lit: Lit, samples: number): void {
 		const host = this.host().nativeElement;
 		const started = performance.now();
 		const report = (done: number) => (host.dataset['baking'] = String(done));
 		const run = async () => {
-			const { front, back, summed } = await bakeIrradiance(
-				view.renderer,
-				merged,
-				samples,
-				4,
-				report,
-			);
-			const file = encodeBake({ checksum: roomChecksum(merged), front, back });
-			// The meshes it is for, beside it, for e2e scripts that inspect the light.
-			Object.assign(window, { houseBake: file, houseRoom: merged, houseLight: { front, back } });
+			const { light, summed } = await bakeLightmap(view.renderer, lit, samples, 4, report);
+			const { width, height } = lit.atlas;
+			const file = encodeLightmap(light, width, height, roomChecksum(lit));
+			// The room it is for, beside it, for e2e scripts that inspect the light.
+			Object.assign(window, { houseBake: file, houseRoom: lit, houseLight: light });
 			host.dataset['baked'] = JSON.stringify({
-				vertices: front.length / 3,
+				atlas: [width, height],
+				covered: lit.atlas.charts,
 				samples: summed,
 				seconds: Math.round((performance.now() - started) / 100) / 10,
 			});

@@ -119,6 +119,6 @@ live local preview:
 
 ## The bake
 
-`house.bake` is the light baked onto the everyday view's vertices
-(`frontend/e2e/bake.ts`, format in `frontend/.../house/bake-file.ts`). It belongs
+`house.bake` is the everyday view's lightmap (`frontend/e2e/bake.ts`, format in
+`frontend/.../house/bake-file.ts`). It belongs
 to one exact version of `house.json`: bake again after every edit.

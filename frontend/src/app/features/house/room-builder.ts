@@ -5,6 +5,9 @@ import type { Glazing, HouseScene, Part, Room, WallOpening } from './house.model
 import { partsOf, solidsOf } from './assembly';
 import { MaterialLibrary, partMaterial, surfaceMaterial } from './materials';
 import { mergeStatic } from './merge';
+import { oneSided } from './sides';
+import { unwrap } from './unwrap';
+import type { Atlas } from './unwrap';
 import {
 	bounds,
 	covingProfile,
@@ -36,7 +39,7 @@ export function buildInterior(
 	camera: CameraQuery = {},
 	/** Light only from the world outside (the path-traced reference), not the approximations. */
 	physical = false,
-): THREE.Mesh[] | undefined {
+): Lit | undefined {
 	const room = scene.rooms.find((r) => r.name === roomName);
 	if (!room) return undefined;
 	const mats = new MaterialLibrary(<T extends { dispose(): void }>(r: T) => view.own(r));
@@ -58,13 +61,23 @@ export function buildInterior(
 		});
 	}
 
-	// The everyday view draws the fixed room as a few dozen meshes, not hundreds, split
-	// fine enough for light baked onto its vertices; the physical reference keeps
-	// every part as it is.
-	const merged = physical ? [] : mergeStatic(view.scene, (g) => view.own(g), BAKE_SPLIT);
+	// The everyday view draws the fixed room one-sided, as a few dozen meshes, not
+	// hundreds, laid out in a lightmap; the physical reference keeps every part as it is.
+	let lit: Lit | undefined;
+	if (!physical) {
+		oneSided(view.scene, (g) => view.own(g));
+		const meshes = mergeStatic(view.scene, (g) => view.own(g));
+		lit = {
+			meshes,
+			atlas: unwrap(
+				meshes.map((m) => m.geometry),
+				LIGHTMAP_TEXEL,
+			),
+		};
+	}
 	if (!physical) addLight(view);
 	placeCamera(view, room, camera);
-	return merged;
+	return lit ?? { meshes: [], atlas: { width: 0, height: 0, charts: 0 } };
 }
 
 function addRoomShell(
@@ -83,40 +96,35 @@ function addRoomShell(
 		const len = Math.hypot(s.bx - s.ax, s.bz - s.az);
 		if (len < 1e-6) return;
 		const ops = (room.openings ?? []).filter((o) => o.wall === i);
-		for (const p of wallPanels(len, ops, scene.height)) {
-			view.scene.add(shell(wallPanel(view, s, len, p.a0, p.a1, p.yb, p.yt, wallMat)));
-		}
 		const inward = into[i];
+		for (const p of wallPanels(len, ops, scene.height)) {
+			view.scene.add(facing(wallPanel(view, s, len, p.a0, p.a1, p.yb, p.yt, wallMat), inward));
+		}
 		for (const o of ops)
 			if (o.glazing) addGlazing(view, mats, scene, s, len, o, o.glazing, inward, physical);
 		if (room.coving)
-			view.scene.add(shell(coving(view, s, inward, scene.height, room.coving, covingMat), 'trim'));
+			view.scene.add(
+				facing(coving(view, s, inward, scene.height, room.coving, covingMat), [
+					inward[0],
+					-1,
+					inward[1],
+				]),
+			);
 		if (room.skirting)
 			for (const [a0, a1] of skirtingRuns(len, ops, scene.height))
-				view.scene.add(
-					shell(skirting(view, s, len, a0, a1, inward, room.skirting, skirtingMat), 'trim'),
-				);
+				view.scene.add(skirting(view, s, len, a0, a1, inward, room.skirting, skirtingMat));
 	});
-	view.scene.add(
-		shell(flat(view, pts, 0, mats.get(surfaceMaterial(scene, room, 'floor'), THREE.DoubleSide))),
-	);
-	view.scene.add(
-		shell(
-			flat(
-				view,
-				pts,
-				scene.height,
-				mats.get(surfaceMaterial(scene, room, 'ceiling'), THREE.DoubleSide),
-			),
-		),
-	);
+	const floor = mats.get(surfaceMaterial(scene, room, 'floor'), THREE.DoubleSide);
+	const ceiling = mats.get(surfaceMaterial(scene, room, 'ceiling'), THREE.DoubleSide);
+	view.scene.add(facing(flat(view, pts, 0, floor), [0, 1, 0]));
+	view.scene.add(facing(flat(view, pts, scene.height, ceiling), [0, -1, 0]));
 }
 
-/** Marks a mesh as the room's own surface, split finely only near furniture; trim
- *  (skirting, coving) is a thin strip whose shadow lines fall on the wall beside
- *  it, so it is never split finely. */
-function shell(mesh: THREE.Mesh, kind: 'surface' | 'trim' = 'surface'): THREE.Mesh {
-	mesh.userData['shell'] = kind;
+/** Marks which way a surface faces into its room, [x, z] or [x, y, z]: the lightmap
+ *  view draws it from that side only (`sides.ts`). */
+function facing(mesh: THREE.Mesh, dir: [number, number] | [number, number, number]): THREE.Mesh {
+	const [x, y, z] = dir.length === 2 ? [dir[0], 0, dir[1]] : dir;
+	mesh.userData['facing'] = new THREE.Vector3(x, y, z).normalize();
 	return mesh;
 }
 
@@ -133,7 +141,7 @@ function addPassage(view: ThreeView, mats: MaterialLibrary, scene: HouseScene, p
 		const mesh = new THREE.Mesh(view.own(quadGeometry(quad)), mat);
 		mesh.receiveShadow = true;
 		mesh.castShadow = true;
-		view.scene.add(shell(mesh));
+		view.scene.add(mesh);
 	}
 }
 
@@ -379,10 +387,16 @@ function skirting(
 	return mesh;
 }
 
-/** The longest triangle edges in the everyday view, metres: light baked onto the
- *  vertices changes no faster across a surface than its triangles. Fine where a
- *  part meets a wall or the floor, whose shadow line is sharp; coarse on open wall. */
-const BAKE_SPLIT = { part: 0.15, contact: 0.04, open: 0.3, reach: 0.06 };
+/** The lightmap's resolution, metres a pixel: fine enough for the shadow line where
+ *  a shelf meets a wall. */
+const LIGHTMAP_TEXEL = 0.02;
+
+/** The everyday view's fixed room, merged, and where each surface's light is in
+ *  the lightmap (its geometries' `uv1`). */
+export interface Lit {
+	meshes: THREE.Mesh[];
+	atlas: Atlas;
+}
 
 /** Glass this smooth transmits without scattering: a window to see the sky through. */
 const CLEAR_GLASS_ROUGHNESS = 0.1;

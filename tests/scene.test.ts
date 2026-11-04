@@ -95,6 +95,6 @@ describe("scenes/house.bake", () => {
 		if (!existsSync("scenes/house.bake")) return;
 		let fnv = 0x811c9dc5;
 		for (const byte of readFileSync("scenes/house.json")) fnv = Math.imul(fnv ^ byte, 0x01000193);
-		expect(readFileSync("scenes/house.bake").readUInt32LE(12)).toBe(fnv >>> 0);
+		expect(readFileSync("scenes/house.bake").readUInt32LE(16)).toBe(fnv >>> 0);
 	});
 });

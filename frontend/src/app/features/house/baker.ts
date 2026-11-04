@@ -7,40 +7,41 @@ import {
 	SAH,
 } from 'three-mesh-bvh';
 
+import type { Lit } from './room-builder';
 import { GROUND, GROUND_ALBEDO, SKY, windowRadiance } from './sky';
 
 /** Glass this smooth passes light straight through; rougher glass diffuses it. */
 const CLEAR_GLASS_ROUGHNESS = 0.1;
 
-/** Texels a row in the light and point textures. */
+/** Texels a row in the light textures. */
 const ROW = 1024;
 
 /**
- * The light on every vertex of the merged room, path-traced on the GPU as the
- * physical reference is: an overcast sky outside, the frosted panes as the
- * diffuse daylight they let in, the clear ones as windows onto the sky, and up to
- * `bounces` diffuse bounces off every surface in its material's colour. For each
- * vertex, the irradiance on its front (along its normal) and on its back, RGB,
- * in the same units as the trace: the zenith's radiance is 1.
+ * The house's light, baked into its lightmap: for every pixel of the atlas a
+ * surface covers, the irradiance there, path-traced on the GPU as the physical
+ * reference is: an overcast sky outside, the frosted panes as the diffuse
+ * daylight they let in, the clear ones as windows onto the sky, and up to
+ * `bounces` diffuse bounces off every surface in its material's colour. RGB per
+ * pixel, in the trace's units (the zenith's radiance is 1).
  *
  * At every bounce the light is sampled where it is, on a pane picked by its area
- * (next-event estimation), not left for a random ray to find: a vertex has no
- * neighbouring pixels to average its noise away with.
+ * (next-event estimation), not left for a random ray to find.
  */
-export async function bakeIrradiance(
+export async function bakeLightmap(
 	renderer: THREE.WebGLRenderer,
-	meshes: THREE.Mesh[],
+	lit: Lit,
 	samples: number,
 	bounces = 4,
 	progress: (done: number) => void = () => undefined,
-): Promise<{ front: Float32Array; back: Float32Array; summed: number }> {
+): Promise<{ light: Float32Array; summed: number }> {
+	const meshes = lit.meshes;
+	const { width, height } = lit.atlas;
 	// Everything the rays can hit, as one geometry: its triangles, and per vertex what
 	// a hit there does (albedo and kind: 0 a solid's surface, seen from one side; 1
 	// glass, which light passes; 2 a sheet, seen from both, as a wall or a curtain).
 	const positions: number[] = [];
 	const index: number[] = [];
 	const surface: number[] = [];
-	const normals: number[] = [];
 	// The panes, triangle by triangle: corner, two edges, light let through, area.
 	const lights: {
 		a: THREE.Vector3;
@@ -59,7 +60,6 @@ export async function bakeIrradiance(
 		const frosted = glass && (std?.roughness ?? 1) > CLEAR_GLASS_ROUGHNESS;
 		const albedo = std ? std.color : new THREE.Color(0.5, 0.5, 0.5);
 		const p = mesh.geometry.getAttribute('position');
-		const n = mesh.geometry.getAttribute('normal');
 		const base = positions.length / 3;
 		const tri = mesh.geometry.index
 			? Array.from(
@@ -76,7 +76,6 @@ export async function bakeIrradiance(
 				albedo.b,
 				glass ? 1 : material.side === THREE.DoubleSide ? 2 : 0,
 			);
-			normals.push(n.getX(i), n.getY(i), n.getZ(i));
 		}
 		if (!glass) continue;
 		const glow = frosted ? windowRadiance(transmission) : 0;
@@ -130,28 +129,57 @@ export async function bakeIrradiance(
 	};
 	const lightTexs = [la, lb, lc, ld].map((d) => asTexture(d, lightRows));
 
-	// Each vertex twice, front then back, one per texel.
-	const count = positions.length / 3;
-	const height = Math.ceil((count * 2) / ROW);
-	const pos = new Float32Array(ROW * height * 4);
-	const nrm = new Float32Array(ROW * height * 4);
-	for (let side = 0; side < 2; side++)
-		for (let i = 0; i < count; i++) {
-			const t = (side * count + i) * 4;
-			const s = side === 0 ? 1 : -1;
-			pos.set([positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2], 1], t);
-			nrm.set([s * normals[i * 3], s * normals[i * 3 + 1], s * normals[i * 3 + 2], 1], t);
-		}
-	const posTex = asTexture(pos, height);
-	const nrmTex = asTexture(nrm, height);
-
-	const target = new THREE.WebGLRenderTarget(ROW, height, {
-		type: THREE.FloatType,
-		format: THREE.RGBAFormat,
-		minFilter: THREE.NearestFilter,
-		magFilter: THREE.NearestFilter,
-		depthBuffer: false,
+	// Where each atlas pixel is in the room and which way it faces: every surface
+	// drawn once into the atlas, at its lightmap coordinates.
+	const [posTarget, nrmTarget] = [0, 1].map(() => floatTarget(width, height));
+	const raster = new THREE.ShaderMaterial({
+		glslVersion: THREE.GLSL3,
+		side: THREE.DoubleSide,
+		depthTest: false,
+		depthWrite: false,
+		uniforms: { normals: { value: 0 } },
+		vertexShader: /* glsl */ `
+			in vec2 uv1;
+			out vec3 vPos;
+			out vec3 vNormal;
+			void main() {
+				vPos = position;
+				vNormal = normal;
+				gl_Position = vec4(uv1 * 2.0 - 1.0, 0.0, 1.0);
+			}
+		`,
+		fragmentShader: /* glsl */ `
+			uniform int normals;
+			in vec3 vPos;
+			in vec3 vNormal;
+			out vec4 outColor;
+			void main() { outColor = normals == 1 ? vec4(normalize(vNormal), 1.0) : vec4(vPos, 1.0); }
+		`,
 	});
+	const layout = new THREE.Scene();
+	for (const m of meshes) {
+		const material = m.material;
+		if (Array.isArray(material) || isGlass(material)) continue;
+		const flatMesh = new THREE.Mesh(m.geometry, raster);
+		// Drawn at its lightmap coordinates, not where it stands: three's culling by the
+		// camera's view would drop every mesh beyond a metre of the room's origin.
+		flatMesh.frustumCulled = false;
+		layout.add(flatMesh);
+	}
+	const before = renderer.getRenderTarget();
+	const clear = renderer.getClearColor(new THREE.Color());
+	const clearAlpha = renderer.getClearAlpha();
+	const autoClear = renderer.autoClear;
+	const flat = new THREE.Camera();
+	renderer.setClearColor(0x000000, 0);
+	[posTarget, nrmTarget].forEach((t, i) => {
+		raster.uniforms['normals'].value = i;
+		renderer.setRenderTarget(t);
+		renderer.clear();
+		renderer.render(layout, flat);
+	});
+
+	const target = floatTarget(width, height);
 	// Samples a pass: one short draw at a time, so no draw outlives the GPU's watchdog.
 	const PER_PASS = 1;
 	const material = new THREE.ShaderMaterial({
@@ -172,8 +200,8 @@ export async function bakeIrradiance(
 			lightCount: { value: lights.length },
 			// A pane is a slab: from the room, its two faces are one window.
 			lightArea: { value: totalArea / 2 },
-			pointPos: { value: posTex },
-			pointNormal: { value: nrmTex },
+			pointPos: { value: posTarget.texture },
+			pointNormal: { value: nrmTarget.texture },
 			seed: { value: 0 },
 			skyTint: { value: new THREE.Vector3(...SKY) },
 			groundLight: { value: new THREE.Vector3(...GROUND).multiplyScalar((GROUND_ALBEDO * 7) / 9) },
@@ -333,10 +361,6 @@ export async function bakeIrradiance(
 	scene.add(quad);
 	const camera = new THREE.Camera();
 
-	const before = renderer.getRenderTarget();
-	const clear = renderer.getClearColor(new THREE.Color());
-	const clearAlpha = renderer.getClearAlpha();
-	const autoClear = renderer.autoClear;
 	renderer.setRenderTarget(target);
 	renderer.setClearColor(0x000000, 0);
 	renderer.clear();
@@ -358,80 +382,113 @@ export async function bakeIrradiance(
 			renderer.setRenderTarget(target);
 		}
 	}
-	const read = new Float32Array(ROW * height * 4);
-	renderer.readRenderTargetPixels(target, 0, 0, ROW, height, read);
+	const read = new Float32Array(width * height * 4);
+	renderer.readRenderTargetPixels(target, 0, 0, width, height, read);
+	const normalsRead = new Float32Array(width * height * 4);
+	renderer.readRenderTargetPixels(nrmTarget, 0, 0, width, height, normalsRead);
 	renderer.autoClear = autoClear;
 	renderer.setRenderTarget(before);
 	renderer.setClearColor(clear, clearAlpha);
 
-	// Light per point from the samples that counted, and how many did; the most any
-	// point counted is the check that every pass added up.
+	const light = finish(read, normalsRead, width, height);
 	let summed = 0;
 	for (let t = 3; t < read.length; t += 4) summed = Math.max(summed, read[t]);
-	const front = new Float32Array(count * 3);
-	const back = new Float32Array(count * 3);
-	const weight = [new Float32Array(count), new Float32Array(count)];
-	for (let side = 0; side < 2; side++)
-		for (let i = 0; i < count; i++) {
-			const t = (side * count + i) * 4;
-			weight[side][i] = read[t + 3];
-			const k = read[t + 3] > 0 ? 1 / read[t + 3] : 0;
-			(side === 0 ? front : back).set([read[t] * k, read[t + 1] * k, read[t + 2] * k], i * 3);
-		}
-	// A point most of whose samples started inside another part takes its neighbours'
-	// light, those along its triangles' edges that saw the room.
-	const neighbours: number[][] = Array.from({ length: count }, () => []);
-	for (let k = 0; k < index.length; k += 3)
-		for (let e = 0; e < 3; e++) {
-			const a = index[k + e];
-			const b = index[k + ((e + 1) % 3)];
-			neighbours[a].push(b);
-			neighbours[b].push(a);
-		}
-	[front, back].forEach((light, side) => {
-		const ok = (i: number) => weight[side][i] >= summed / 4;
-		for (let round = 0; round < 6; round++) {
-			for (let i = 0; i < count; i++) {
-				if (ok(i)) continue;
-				const good = neighbours[i].filter(ok);
-				if (good.length === 0) continue;
-				for (let c = 0; c < 3; c++)
-					light[i * 3 + c] = good.reduce((t, j) => t + light[j * 3 + c], 0) / good.length;
-				weight[side][i] = summed;
-			}
-		}
-		// What noise is left, halved: each point meets its neighbours on the same plane
-		// halfway, twice. A corner's points face other ways, so its shading stays.
-		const flat = (i: number, j: number) =>
-			normals[i * 3] * normals[j * 3] +
-				normals[i * 3 + 1] * normals[j * 3 + 1] +
-				normals[i * 3 + 2] * normals[j * 3 + 2] >
-			0.99;
-		for (let round = 0; round < 2; round++) {
-			const next = light.slice();
-			for (let i = 0; i < count; i++) {
-				const same = neighbours[i].filter((j) => flat(i, j));
-				if (same.length === 0) continue;
-				for (let c = 0; c < 3; c++) {
-					const mean = same.reduce((t, j) => t + light[j * 3 + c], 0) / same.length;
-					next[i * 3 + c] = (light[i * 3 + c] + mean) / 2;
-				}
-			}
-			light.set(next);
-		}
-	});
 
 	for (const r of [
 		target,
-		posTex,
-		nrmTex,
+		posTarget,
+		nrmTarget,
 		surfaceTex,
 		...lightTexs,
 		material,
+		raster,
 		quad.geometry,
 		world,
 	])
 		r.dispose();
 	bvhUniform.dispose();
-	return { front, back, summed };
+	return { light, summed };
+}
+
+function floatTarget(width: number, height: number): THREE.WebGLRenderTarget {
+	return new THREE.WebGLRenderTarget(width, height, {
+		type: THREE.FloatType,
+		format: THREE.RGBAFormat,
+		minFilter: THREE.NearestFilter,
+		magFilter: THREE.NearestFilter,
+		depthBuffer: false,
+	});
+}
+
+function isGlass(m: THREE.Material): boolean {
+	return m instanceof THREE.MeshPhysicalMaterial && m.transmission > 0;
+}
+
+/**
+ * The traced sums made into light, pixel by pixel: each pixel's mean over the
+ * samples that counted. A pixel with few (its point inside another part, as a door
+ * under its knob) or none (a chart's gutter) then takes its neighbours' light, ring
+ * by ring, so filtering never reads a chart's edge as dark; last, what noise is
+ * left is halved with the neighbours facing alike (the same surface).
+ */
+function finish(
+	read: Float32Array,
+	normals: Float32Array,
+	width: number,
+	height: number,
+): Float32Array {
+	let most = 0;
+	for (let t = 3; t < read.length; t += 4) most = Math.max(most, read[t]);
+	const n = width * height;
+	const light = new Float32Array(n * 3);
+	const good = new Uint8Array(n);
+	for (let i = 0; i < n; i++) {
+		const w = read[i * 4 + 3];
+		if (w < most / 4) continue;
+		good[i] = 1;
+		for (let c = 0; c < 3; c++) light[i * 3 + c] = read[i * 4 + c] / w;
+	}
+	const facesAlike = (i: number, j: number) =>
+		normals[i * 4 + 3] > 0 &&
+		normals[j * 4 + 3] > 0 &&
+		normals[i * 4] * normals[j * 4] +
+			normals[i * 4 + 1] * normals[j * 4 + 1] +
+			normals[i * 4 + 2] * normals[j * 4 + 2] >
+			0.95;
+	const around = (i: number) => {
+		const x = i % width;
+		const y = (i - x) / width;
+		const out: number[] = [];
+		for (let dy = -1; dy <= 1; dy++)
+			for (let dx = -1; dx <= 1; dx++) {
+				if (!dx && !dy) continue;
+				const [nx, ny] = [x + dx, y + dy];
+				if (nx >= 0 && ny >= 0 && nx < width && ny < height) out.push(ny * width + nx);
+			}
+		return out;
+	};
+	// Ring by ring into the gutters: a pixel takes the mean of its good neighbours.
+	for (let ring = 0; ring < 4; ring++) {
+		const add: number[] = [];
+		for (let i = 0; i < n; i++) {
+			if (good[i]) continue;
+			const from = around(i).filter((j) => good[j]);
+			if (from.length === 0) continue;
+			for (let c = 0; c < 3; c++)
+				light[i * 3 + c] = from.reduce((t, j) => t + light[j * 3 + c], 0) / from.length;
+			add.push(i);
+		}
+		for (const i of add) good[i] = 1;
+	}
+	// Then halfway to the neighbours on the same surface, once.
+	const next = light.slice();
+	for (let i = 0; i < n; i++) {
+		const same = around(i).filter((j) => facesAlike(i, j));
+		if (same.length === 0) continue;
+		for (let c = 0; c < 3; c++) {
+			const mean = same.reduce((t, j) => t + light[j * 3 + c], 0) / same.length;
+			next[i * 3 + c] = (light[i * 3 + c] + mean) / 2;
+		}
+	}
+	return next;
 }

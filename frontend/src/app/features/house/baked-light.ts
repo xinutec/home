@@ -1,39 +1,51 @@
 import * as THREE from 'three';
 
-import type { Bake } from './bake-file';
+import type { Lightmap } from './bake-file';
 import { checksum } from './bake-file';
+import type { Lit } from './room-builder';
 import { SKY, windowRadiance } from './sky';
 
-/** The merged room's fingerprint, as its bake stores it. */
-export function roomChecksum(meshes: THREE.Mesh[]): number {
-	return checksum(meshes.map((m) => m.geometry.getAttribute('position').array));
+/** The merged room's fingerprint, as its lightmap stores it: every vertex's place
+ *  and its lightmap coordinates. */
+export function roomChecksum(lit: Lit): number {
+	return checksum(
+		lit.meshes.flatMap((m) => {
+			const uv = m.geometry.getAttribute('uv1');
+			return [m.geometry.getAttribute('position').array, ...(uv ? [uv.array] : [])];
+		}),
+	);
 }
 
 /**
- * Draws the merged room in its baked light, if the bake is for exactly this
- * geometry: each vertex carries the irradiance on its front and its back, which
- * stands in for every light in the scene. Frosted panes glow with the daylight
- * they let in, clear ones show the sky; no light is computed while drawing, so a
- * phone draws the path-traced look at the cost of a flat one. Returns whether the
- * bake applied; if not, nothing has changed.
+ * Draws the merged room in its baked light, if the lightmap is for exactly this
+ * geometry and layout: every surface reads the light on it from the map, as three
+ * draws a light map (its irradiance), which stands in for every light in the
+ * scene. Frosted panes glow with the daylight they let in, clear ones show the
+ * sky; no light is computed while drawing, so a phone draws the path-traced look
+ * at the cost of a flat one. Returns whether it applied; if not, nothing changed.
  */
-export function applyBake(scene: THREE.Scene, meshes: THREE.Mesh[], bake: Bake): boolean {
-	const count = meshes.reduce((n, m) => n + m.geometry.getAttribute('position').count, 0);
-	if (bake.front.length !== count * 3 || bake.checksum !== roomChecksum(meshes)) return false;
+export function applyLightmap(scene: THREE.Scene, lit: Lit, map: Lightmap): boolean {
+	if (map.width !== lit.atlas.width || map.height !== lit.atlas.height) return false;
+	if (map.checksum !== roomChecksum(lit)) return false;
+	const texture = new THREE.DataTexture(
+		map.data,
+		map.width,
+		map.height,
+		THREE.RGBAFormat,
+		THREE.HalfFloatType,
+	);
+	texture.channel = 1;
+	texture.magFilter = THREE.LinearFilter;
+	texture.minFilter = THREE.LinearFilter;
+	texture.generateMipmaps = false;
+	texture.needsUpdate = true;
 
-	let at = 0;
-	const patched = new Set<THREE.Material>();
-	for (const mesh of meshes) {
-		const n = mesh.geometry.getAttribute('position').count;
-		const span = (a: Float32Array) =>
-			new THREE.Float32BufferAttribute(a.slice(at * 3, (at + n) * 3), 3);
-		mesh.geometry.setAttribute('bakedFront', span(bake.front));
-		mesh.geometry.setAttribute('bakedBack', span(bake.back));
-		at += n;
+	const done = new Set<THREE.Material>();
+	for (const mesh of lit.meshes) {
 		mesh.castShadow = mesh.receiveShadow = false;
 		const material = mesh.material;
-		if (Array.isArray(material) || patched.has(material)) continue;
-		patched.add(material);
+		if (Array.isArray(material) || done.has(material)) continue;
+		done.add(material);
 		if (material instanceof THREE.MeshPhysicalMaterial && material.transmission > 0) {
 			// Glass, cheaply: a frosted pane as the light it lets in, a clear one nearly invisible.
 			const frosted = material.roughness > 0.1;
@@ -46,32 +58,14 @@ export function applyBake(scene: THREE.Scene, meshes: THREE.Mesh[], bake: Bake):
 			material.needsUpdate = true;
 			continue;
 		}
-		material.onBeforeCompile = (shader) => {
-			shader.vertexShader = shader.vertexShader
-				.replace(
-					'#include <common>',
-					'#include <common>\nattribute vec3 bakedFront;\nattribute vec3 bakedBack;\nvarying vec3 vBakedFront;\nvarying vec3 vBakedBack;',
-				)
-				.replace(
-					'#include <begin_vertex>',
-					'#include <begin_vertex>\nvBakedFront = bakedFront;\nvBakedBack = bakedBack;',
-				);
-			shader.fragmentShader = shader.fragmentShader
-				.replace(
-					'#include <common>',
-					'#include <common>\nvarying vec3 vBakedFront;\nvarying vec3 vBakedBack;',
-				)
-				.replace(
-					'#include <lights_fragment_maps>',
-					'#include <lights_fragment_maps>\nirradiance += gl_FrontFacing ? vBakedFront : vBakedBack;',
-				);
-		};
-		material.customProgramCacheKey = () => 'baked';
-		if (material instanceof THREE.MeshStandardMaterial) material.envMapIntensity = 0;
+		if (!(material instanceof THREE.MeshStandardMaterial)) continue;
+		material.lightMap = texture;
+		material.lightMapIntensity = 1;
+		material.envMapIntensity = 0;
 		material.needsUpdate = true;
 	}
 
-	// The bake is all the light there is.
+	// The lightmap is all the light there is.
 	const lights: THREE.Object3D[] = [];
 	scene.traverse((o) => {
 		if (o instanceof THREE.Light) lights.push(o);

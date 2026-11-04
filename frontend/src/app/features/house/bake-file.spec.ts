@@ -1,30 +1,38 @@
+import { DataUtils } from 'three';
 import { describe, expect, it } from 'vitest';
-import { checksum, decodeBake, encodeBake } from './bake-file';
+import { HEADER, checksum, decodeLightmap, encodeLightmap } from './bake-file';
 
-describe('bake file', () => {
-	it('reads back what it wrote, to half-float precision', () => {
-		const front = new Float32Array([0.5, 1.25, 3, 0.01, 0.02, 0.03]);
-		const back = new Float32Array([2, 2, 2, 0, 0, 0]);
-		const got = decodeBake(encodeBake({ checksum: 0xdeadbeef, front, back }));
+// The bytes as stored but not compressed: decoding then inflates nothing.
+const raw = (b: Uint8Array) => Promise.resolve(b.slice());
+
+describe('lightmap file', () => {
+	it('reads back what it wrote, each pixel to within its own range', async () => {
+		// A dark corner beside a window's glow: two decades apart.
+		const light = new Float32Array([0.002, 0.0021, 0.0019, 0.5, 0.45, 0.4]);
+		const file = encodeLightmap(light, 2, 1, 0xdeadbeef);
+		const got = await decodeLightmap(file.buffer as ArrayBuffer, raw);
 		expect(got?.checksum).toBe(0xdeadbeef);
-		got?.front.forEach((v, i) => expect(v).toBeCloseTo(front[i], 3));
-		got?.back.forEach((v, i) => expect(v).toBeCloseTo(back[i], 3));
+		expect([got?.width, got?.height]).toEqual([2, 1]);
+		for (let i = 0; i < 2; i++)
+			for (let c = 0; c < 3; c++) {
+				const v = DataUtils.fromHalfFloat(got?.data[i * 4 + c] ?? 0);
+				expect(Math.abs(v - light[i * 3 + c]) / light[i * 3 + c]).toBeLessThan(0.02);
+			}
 	});
 
-	it('refuses what is not a bake, or is cut short', () => {
-		expect(decodeBake(new ArrayBuffer(8))).toBeUndefined();
-		const whole = encodeBake({
-			checksum: 1,
-			front: new Float32Array(6),
-			back: new Float32Array(6),
-		});
-		expect(decodeBake(whole.slice(0, whole.byteLength - 2))).toBeUndefined();
-		expect(decodeBake(new TextEncoder().encode('{"rooms":[]}').buffer)).toBeUndefined();
+	it('refuses what is not a lightmap, or is cut short', async () => {
+		expect(await decodeLightmap(new ArrayBuffer(8), raw)).toBeUndefined();
+		const file = encodeLightmap(new Float32Array(12), 2, 2, 1);
+		const short = file.slice(0, HEADER + 4);
+		expect(await decodeLightmap(short.buffer, raw)).toBeUndefined();
+		expect(
+			await decodeLightmap(new TextEncoder().encode('{"rooms":[]}').buffer, raw),
+		).toBeUndefined();
 	});
 
-	it('changes its checksum when a vertex moves a millimetre, not for less', () => {
-		const a = checksum([new Float32Array([1, 2, 3])]);
-		expect(checksum([new Float32Array([1, 2, 3.0001])])).toBe(a);
-		expect(checksum([new Float32Array([1, 2, 3.001])])).not.toBe(a);
+	it('changes its checksum when a coordinate moves a micrometre, not for less', () => {
+		const a = checksum([new Float32Array([1, 2, 0.5])]);
+		expect(checksum([new Float32Array([1, 2, 0.5000001])])).toBe(a);
+		expect(checksum([new Float32Array([1, 2, 0.50001])])).not.toBe(a);
 	});
 });
