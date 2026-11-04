@@ -40,6 +40,8 @@ async function gunzip(bytes: Uint8Array): Promise<Uint8Array> {
 /** The everyday view's exposure in baked light (the sky's zenith is 1): between
  *  what compare-view solves against keyframes 1 and 822 (180, 80). */
 const BAKED_EXPOSURE = 150;
+/** Milliseconds of path tracing a frame under `?trace`: the page stays responsive. */
+const TRACE_BUDGET_MS = 30;
 
 /**
  * `/house/:room`: one room from inside, lit and in its materials.
@@ -145,11 +147,21 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		this.tracer = tracer;
 		tracer.bounces = 8;
 		tracer.transmissiveBounces = 6;
+		// Whole samples, as many as fit in a frame's budget: the default, a ninth of
+		// one a frame, holds a fast GPU to the screen's 60 Hz.
+		tracer.tiles.set(1, 1);
 		tracer.setScene(view.scene, view.camera);
 		const host = this.host().nativeElement;
+		const pixel = new Float32Array(4);
 		const step = () => {
 			if (this.tracer !== tracer) return;
-			tracer.renderSample();
+			const start = performance.now();
+			do {
+				tracer.renderSample();
+				// A pixel of the result, so the budget is the GPU's time, not the queue's
+				// (gl.finish() does not wait in Chromium).
+				view.renderer.readRenderTargetPixels(tracer.target, 0, 0, 1, 1, pixel);
+			} while (tracer.samples < samples && performance.now() - start < TRACE_BUDGET_MS);
 			if (tracer.samples >= samples) host.dataset['traced'] = String(Math.floor(tracer.samples));
 			else requestAnimationFrame(step);
 		};
