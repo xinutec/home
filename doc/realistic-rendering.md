@@ -32,27 +32,22 @@ how it is judged done.
 
 ## Next up
 
-1. **Find out why keyframe 822 cannot be fitted.** Anchored on the ceiling,
-   keyframe 1 fits plausible paints (wall 0.5, sideboard 0.65; carpet 0.37 and
-   oak 0.6, both light) and scores 4.8; keyframe 822, the bay, cannot fit at all:
-   its ceiling is so much brighter than the rest that every other paint, the
-   charcoal sofa included, is pushed to the 0.95 limit. Two causes fit:
-   - **The phone's processing.** Keyframe 822 has panes that clip to white in
-     frame; the phone's HDR tone mapping compresses the bright parts of such a
-     scene and lifts the dark ones, region by region, which no single curve undoes.
-     Keyframe 1, with no window in frame, fits.
-   - **The window light.** The clear openers are now drawn as glass the tracer sees
-     the sky through (light down from the sky, up only from the ground); that
-     changed nothing, so it is not them. The frosted panes stay even diffusers,
-     which frosted glass is.
-   A linear photo settles it: one RAW (DNG) shot of the bay, lamp off, from where
-   keyframe 822 was taken, has no tone mapping. Until then, fit only on photos
-   with no window in frame.
-2. **Fit the paints** with `compare-view --fit` on photos without a window in
-   frame, check them on a second such photo, and write them into the scene once
-   both agree.
-3. **Bake the traced light into the everyday view (step 5).**
-4. Whatever the measuring session brings: replace each estimate and delete its note.
+1. **Measure the rest of the room**, one line at a time: the household measures what a
+   picture shows (`node e2e/shot.ts --scene` a copy of the scene with only that
+   piece, then a line drawn through the same camera), the model's current value
+   said with each. Done so far: the big sofa, both carved armchairs, the glazed
+   door. Next: the bay sofa, the sideboard and TV, the bay's three windows, the
+   curtains and pole, the fireplace's leg and arch, the coving and skirting, the
+   ceiling light.
+2. **Tilted parts**, so the chairs' and bay sofa's arms can slope (the chairs' elbow
+   rests fall toward the back, the front scrolls rise to 0.71); and a wedge for the
+   big sofa's back frame (6 cm at its top, thicker below).
+3. **Bake on horus** (RTX 4090), if headless Chromium's WebGL reaches its GPU
+   through WSL: the bake takes about 7.5 minutes on the Mac.
+4. **Reflections**: one baked capture of the room, for the glass, TV, metal and
+   the fireplace's iron.
+5. Find out why keyframe 822 cannot be fitted (the phone's tone mapping or the
+   window light): a RAW photo of the bay settles it; then fit the paints.
 
 ## Where it stands
 
