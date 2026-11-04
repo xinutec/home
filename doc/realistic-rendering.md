@@ -309,7 +309,11 @@ neighbours, then smoothed with neighbours on the same plane. The page applies th
 bake only if it is for exactly this geometry (a checksum of every vertex), and
 `tests/scene.test.ts` fails while the bake is not of the current scene file: after
 any change to the scene, bake again. On keyframe 1 it scores 7.4-9.3 by exposure,
-about as close as the trace; the Mac draws it in 20 calls. Open: in absolute
+about as close as the trace; the Mac draws it in 20 calls. On the Pixel 9
+(`?stats`, 973×1685 px): 87 fps before the bake (merged, live lights and
+shadows, 108,000 triangles drawn), 60 fps baked (186,000 triangles): a frame just
+over the 120 Hz screen's 8.3 ms, so it lands on every other refresh. The split
+triangles are the cost; flat walls far from any corner or contact need far fewer. Open: in absolute
 units the bake and the trace need exposures of about 180 and 90 for keyframe 1.
 
 The interactive view cannot path-trace on a phone. The photo mode's bounce light
