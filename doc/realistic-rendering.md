@@ -262,8 +262,12 @@ their true values; until then raster and traced scores are not comparable.
 
 **Built:** `/house/living?trace=N` lights the room only from the sky outside
 (`sky.ts`: a CIE overcast sky over a ground of albedo 0.2), through its windows,
-and path-traces N samples a pixel with `three-gpu-pathtracer` on the GPU (Metal,
-headless). A frosted pane is drawn as the diffuse light it lets in (`windowRadiance`: its
+and path-traces N samples a pixel with `three-gpu-pathtracer` on the GPU, headless:
+on horus's 4090 a 1040 × 724 still takes about 50 s at 1024 samples and 2.5
+minutes at 4096 (`shot.ts --trace N` times it), against about 6 minutes at 1024
+on the Mac. Trace on horus: on the Mac's Metal the glazed door's clear panes come
+out black, where D3D12 shows the orange sheet 2 cm behind them, as the scene has it.
+A frosted pane is drawn as the diffuse light it lets in (`windowRadiance`: its
 transmittance times the vertical daylight on it, over π), not as a hole onto the
 sky: paths seldom find a small hole, and the image came out as noise. Clear panes
 are glass, so the sky through them keeps its direction.
