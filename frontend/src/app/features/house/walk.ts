@@ -1,8 +1,6 @@
 import * as THREE from 'three';
 
-import { solidsOf } from './assembly';
-import type { HouseScene } from './house.model';
-import { roomPerimeter, segments, wallPanels } from './scene-geometry';
+import { MeshBVH } from 'three-mesh-bvh';
 
 /** The walker as a column: its radius, and the heights between which anything
  *  stops it (a rug does not; a coffee table, a curtain, a wall above a sill do). */
@@ -10,84 +8,79 @@ export const BODY = { radius: 0.2, low: 0.12, high: 1.75 };
 /** Eye height standing, metres. */
 export const EYE = 1.6;
 
-/** What a walker cannot pass, on the floor plan: wall stretches as segments
- *  [ax, az, bx, bz], and every part of the furniture as a turned box. */
-export interface Obstacles {
-	walls: [number, number, number, number][];
-	boxes: { x: number; z: number; hw: number; hd: number; yaw: number }[];
-}
+/**
+ * What a walker cannot pass: the drawn room's own triangles, every one between its
+ * feet and head, in one BVH. The walker is a column (BODY): a capsule from BODY.low
+ * to BODY.high, pushed out sideways from whatever it overlaps, so it slides along a
+ * wall or round a table's edge, and steps over a rug or a hearth.
+ */
+export class Collider {
+	private readonly bvh: MeshBVH;
 
-/** The house's obstacles: every wall where it stands between the walker's feet and
- *  head (a doorway leaves a gap, a window's sill does not), and every furniture
- *  part within that height. */
-export function obstaclesOf(scene: HouseScene): Obstacles {
-	const walls: Obstacles['walls'] = [];
-	for (const room of scene.rooms)
-		segments(roomPerimeter(room)).forEach((s, i) => {
-			const len = Math.hypot(s.bx - s.ax, s.bz - s.az);
-			if (len < 1e-6) return;
-			const [dx, dz] = [(s.bx - s.ax) / len, (s.bz - s.az) / len];
-			const ops = (room.openings ?? []).filter((o) => o.wall === i);
-			for (const p of wallPanels(len, ops, scene.height))
-				if (p.yb < BODY.high && p.yt > BODY.low)
-					walls.push([s.ax + dx * p.a0, s.az + dz * p.a0, s.ax + dx * p.a1, s.az + dz * p.a1]);
-		});
-	const boxes: Obstacles['boxes'] = [];
-	for (const f of scene.furniture)
-		for (const s of solidsOf(f))
-			if (s.y0 < BODY.high && s.y1 > BODY.low)
-				boxes.push({ x: s.x, z: s.z, hw: s.hw, hd: s.hd, yaw: s.yaw });
-	return { walls, boxes };
-}
-
-/** Where a walker at [x, z] ends up, pushed clear of every obstacle it overlaps. */
-export function collide(x: number, z: number, o: Obstacles, r = BODY.radius): [number, number] {
-	for (let round = 0; round < 4; round++) {
-		for (const [ax, az, bx, bz] of o.walls) {
-			const [ex, ez] = [bx - ax, bz - az];
-			const t = Math.max(
-				0,
-				Math.min(1, ((x - ax) * ex + (z - az) * ez) / (ex * ex + ez * ez || 1)),
-			);
-			const [cx, cz] = [ax + ex * t, az + ez * t];
-			const d = Math.hypot(x - cx, z - cz);
-			if (d >= r || d < 1e-9) continue;
-			x = cx + ((x - cx) / d) * r;
-			z = cz + ((z - cz) / d) * r;
-		}
-		for (const b of o.boxes) {
-			// Into the box's frame (as assembly.ts turns it), to its nearest point, and out.
-			const [c, n] = [Math.cos(b.yaw), Math.sin(b.yaw)];
-			const [dx, dz] = [x - b.x, z - b.z];
-			const u = dx * c - dz * n;
-			const v = dx * n + dz * c;
-			const qu = Math.max(-b.hw, Math.min(b.hw, u));
-			const qv = Math.max(-b.hd, Math.min(b.hd, v));
-			let [pu, pv] = [u - qu, v - qv];
-			const d = Math.hypot(pu, pv);
-			if (d >= r) continue;
-			if (d < 1e-9) {
-				// Inside: out by the nearer side.
-				const [gu, gv] = [b.hw - Math.abs(u), b.hd - Math.abs(v)];
-				[pu, pv] = gu < gv ? [Math.sign(u) || 1, 0] : [0, Math.sign(v) || 1];
-				const push = (gu < gv ? gu : gv) + r;
-				x += pu * push * c + pv * push * n;
-				z += -pu * push * n + pv * push * c;
-				continue;
+	constructor(meshes: THREE.Mesh[]) {
+		const pos: number[] = [];
+		const v = new THREE.Vector3();
+		for (const m of meshes) {
+			m.updateMatrixWorld(true);
+			const g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry;
+			const p = g.getAttribute('position');
+			for (let i = 0; i < p.count; i++) {
+				v.fromBufferAttribute(p, i).applyMatrix4(m.matrixWorld);
+				pos.push(v.x, v.y, v.z);
 			}
-			const k = (r - d) / d;
-			x += (pu * c + pv * n) * k;
-			z += (-pu * n + pv * c) * k;
 		}
+		const geometry = new THREE.BufferGeometry();
+		geometry.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+		this.bvh = new MeshBVH(geometry);
 	}
-	return [x, z];
+
+	/** Where a walker at [x, z] ends up, pushed clear of everything it overlaps. */
+	push(x: number, z: number, r = BODY.radius): [number, number] {
+		const segment = new THREE.Line3(
+			new THREE.Vector3(x, BODY.low + r, z),
+			new THREE.Vector3(x, BODY.high - r, z),
+		);
+		const near = new THREE.Box3();
+		const [onTri, onBody] = [new THREE.Vector3(), new THREE.Vector3()];
+		for (let round = 0; round < 4; round++) {
+			near.setFromPoints([segment.start, segment.end]).expandByScalar(r);
+			let moved = false;
+			this.bvh.shapecast({
+				intersectsBounds: (b) => b.intersectsBox(near),
+				intersectsTriangle: (tri) => {
+					const d = tri.closestPointToSegment(segment, onTri, onBody);
+					if (d >= r) return false;
+					// Out sideways only: the walker keeps its feet on the floor.
+					let [px, pz] = [onBody.x - onTri.x, onBody.z - onTri.z];
+					let len = Math.hypot(px, pz);
+					if (len < 1e-9) {
+						const n = tri.getNormal(new THREE.Vector3());
+						[px, pz] = [n.x, n.z];
+						len = Math.hypot(px, pz);
+						if (len < 1e-9) return false;
+						// Through a face, the push is its whole radius, back the way it faces.
+						if (px * (x - onTri.x) + pz * (z - onTri.z) < 0) [px, pz] = [-px, -pz];
+					}
+					const by = (r - d) / len;
+					segment.start.x += px * by;
+					segment.start.z += pz * by;
+					segment.end.x = segment.start.x;
+					segment.end.z = segment.start.z;
+					moved = true;
+					return false;
+				},
+			});
+			if (!moved) break;
+		}
+		return [segment.start.x, segment.start.z];
+	}
 }
 
 /**
  * Walking the house in the first person, on a phone or with a mouse and keys:
  * drag to look; hold the left of the screen and drag to walk (a thumb stick, drawn
  * at `stick` while held), or W A S D and the arrow keys. The walker keeps its eye
- * at standing height and is kept out of walls and furniture.
+ * at standing height and is kept out of everything drawn (`Collider`).
  */
 export class WalkControls {
 	private yaw = 0;
@@ -102,7 +95,7 @@ export class WalkControls {
 		private readonly camera: THREE.PerspectiveCamera,
 		private readonly dom: HTMLElement,
 		private readonly stick: HTMLElement,
-		private readonly obstacles: Obstacles,
+		private readonly collider: Collider,
 		private readonly changed: () => void,
 		standing: boolean,
 	) {
@@ -156,10 +149,9 @@ export class WalkControls {
 		const [fx, fz] = [-Math.sin(this.yaw), -Math.cos(this.yaw)];
 		const [rx, rz] = [Math.cos(this.yaw), -Math.sin(this.yaw)];
 		const p = this.camera.position;
-		const [x, z] = collide(
+		const [x, z] = this.collider.push(
 			p.x + (fx * uz + rx * ux) * speed * dt,
 			p.z + (fz * uz + rz * ux) * speed * dt,
-			this.obstacles,
 		);
 		p.set(x, EYE, z);
 		return true;

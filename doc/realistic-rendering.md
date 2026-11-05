@@ -434,10 +434,11 @@ Done when the interactive view's region score is close to the photo mode's.
 **Built** (`walk.ts`): the everyday view is walked in the first person, standing
 (eye at 1.6 m, 75° high): drag to look, the room grabbed as a street view is;
 hold the left of the screen and drag for a thumb stick, or W A S D and the arrow
-keys. The walker is a column 0.2 m round that every wall between its feet and head
-stops (a doorway leaves a gap, a window's sill does not) and every furniture part
-in that height (`obstaclesOf`, from the same solids the physics checks), sliding
-along what it meets. A camera placed by the URL (a photo's) keeps its exact pose.
+keys. The walker is a column 0.2 m round, 0.12 to 1.75 m up, pushed sideways out
+of the drawn room's own triangles (`Collider`: one BVH over the meshes the page
+draws, 21,702 triangles, built in 20 ms on the Mac; a step 10 µs), so it slides
+along a wall or round a table's edge, and steps over a rug or the hearth. A camera
+placed by the URL (a photo's) keeps its exact pose.
 
 ### 6. Detail, judged in that light
 

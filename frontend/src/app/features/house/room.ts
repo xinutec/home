@@ -31,7 +31,7 @@ import { buildInterior } from './room-builder';
 import type { Lit } from './room-builder';
 import { nightSkyImage, overcastSky, overcastSkyImage } from './sky';
 import { ThreeView } from './three-view';
-import { WalkControls, obstaclesOf } from './walk';
+import { Collider, WalkControls } from './walk';
 
 /** Inflates a gzipped lightmap: the browser's own stream, no library. */
 async function gunzip(bytes: Uint8Array): Promise<Uint8Array> {
@@ -147,7 +147,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 				else if (this.query.bake) this.bake(view, lit, this.query.bake);
 				else {
 					void this.light(view, lit, baked);
-					this.walk(view, scene);
+					this.walk(view, lit);
 				}
 				view.requestFrame();
 			},
@@ -189,13 +189,13 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 
 	/** Hands the camera to a walker: from the room's own view, standing, unless the
 	 *  URL placed the camera (a comparison with a photo keeps its exact pose). */
-	private walk(view: ThreeView, scene: HouseScene): void {
+	private walk(view: ThreeView, lit: Lit): void {
 		const standing = !this.query.eye;
 		const walker = new WalkControls(
 			view.camera,
 			view.renderer.domElement,
 			this.stick().nativeElement,
-			obstaclesOf(scene),
+			new Collider(lit.meshes),
 			() => {
 				if (!this.moved()) this.zone.run(() => this.moved.set(true));
 				view.requestFrame();
