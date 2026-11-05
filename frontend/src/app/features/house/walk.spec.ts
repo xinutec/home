@@ -77,6 +77,24 @@ describe('walking', () => {
 		expect(z).toBeLessThan(2.85);
 	});
 
+	it('starts every room standing on clear floor, a first step ahead clear too', () => {
+		for (const room of house.rooms) {
+			expect(room.view, `${room.name} has no start`).toBeDefined();
+			const [ex, , ez] = room.view?.eye ?? [0, 0, 0];
+			const [lx, , lz] = room.view?.look ?? [0, 0, 0];
+			const [x, z] = house3d.push(ex, ez);
+			expect(Math.hypot(x - ex, z - ez), `${room.name}: its start is in something`).toBeLessThan(
+				1e-3,
+			);
+			const d = Math.hypot(lx - ex, lz - ez);
+			const [sx, sz] = [ex + ((lx - ex) / d) * 0.3, ez + ((lz - ez) / d) * 0.3];
+			const [ax, az] = house3d.push(sx, sz);
+			expect(Math.hypot(ax - sx, az - sz), `${room.name}: its first step is blocked`).toBeLessThan(
+				1e-3,
+			);
+		}
+	});
+
 	it('walks over the yoga mat', () => {
 		const mat = house.furniture.find((f) => f.id === 'living-yoga-mat');
 		expect(mat).toBeDefined();

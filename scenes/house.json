@@ -58,10 +58,11 @@
         {"wall": 6, "offset": 1.37, "width": 1.5, "height": 1.94, "sill": 0, "leads": "dining"}
       ],
       "surfaces": {"walls": "wall-paint", "floor": "carpet", "ceiling": "ceiling-paint", "skirting": "pvc-white"}, "skirting": {"height": 0.17, "depth": 0.02, "estimate": "its top at 0.17 m as observe's lines read it along the dining wall (#2056), 2 cm thick; the furniture is not yet held 2 cm off the walls by it; measure its height and thickness"},
-      "view": {"eye": [-0.423, 0.842, 2.709], "look": [-0.469, 0.649, -0.284]}, "coving": {"drop": 0.08, "depth": 0.11, "estimate": "its edges in keyframe 1, through the solved camera, on the alcove's back wall; measure its drop down the wall and its depth across the ceiling"}
+      "view": {"eye": [-0.87, 1.6, 1.53], "look": [2.6, 1.3, 1.6]}, "coving": {"drop": 0.08, "depth": 0.11, "estimate": "its edges in keyframe 1, through the solved camera, on the alcove's back wall; measure its drop down the wall and its depth across the ceiling"}
     },
     {
       "name": "dining",
+      "view": {"eye": [-1.97, 1.6, 2.2], "look": [-3.4, 1.2, 0.7]},
       "start": [-1.45, 2.65],
       "heading": 180,
       "walls": [[0, 3.6], [90, 3.0], [90, 3.6], [90, 3.0]],
@@ -77,6 +78,7 @@
     },
     {
       "name": "kitchen",
+      "view": {"eye": [-1.75, 1.6, 3.9], "look": [-3.0, 1.2, 3.2]},
       "start": [-1.45, 2.8],
       "heading": 90,
       "walls": [[0, 1.81], [90, 1.18], [-90, 0.87], [90, 2.42], [90, 2.68], [90, 3.6]],
@@ -91,6 +93,7 @@
     },
     {
       "name": "bay",
+      "view": {"eye": [1.5, 1.6, 1.66], "look": [3.3, 1.2, 1.66]},
       "reflections": "living",
       "start": [2.77, 0.46],
       "heading": 0,

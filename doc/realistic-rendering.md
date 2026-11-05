@@ -144,8 +144,12 @@ how it is judged done.
 - **Light:** the everyday view keeps an approximate setup (generic environment, sky
   fill, hard sun). `?trace=N` is the physical reference: an overcast sky through
   the windows, path-traced on the GPU.
-- **Camera:** `?eye&look&fov&exposure` on `/house/:room`; the living room opens
-  where keyframe 1 was taken. A photo's camera is solved from its `sightings`
+- **Camera:** `?eye&look&fov&exposure` on `/house/:room`; each room opens (its
+  `view`) standing just inside the way in, facing the room: the living room at the
+  dining room's opening (the glazed door is behind the sofa), the dining room at
+  the kitchen's door, the kitchen at the hall's, past the oven housing; the bay
+  from the living room, its sofa filling it. `walk.spec.ts` holds each on clear
+  floor, its first step clear. A photo's camera is solved from its `sightings`
   (room points and wall corners, with the pixel each is seen at) by
   `node e2e/solve-camera.ts --photo-id ID`, through the lens its recording names:
   keyframe 1 was taken at 0.84 m, not the 1.45 m first guessed, pitched 3.7° down
