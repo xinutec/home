@@ -6,6 +6,10 @@ import type { Furniture, HouseScene, Joint } from './house.model';
 /** Milliseconds a joint takes over its whole travel: a door swung, a drawer pulled. */
 const TRAVEL_MS = 700;
 
+/** Places along a joint's travel its reach is taken at: a door's arc, to within
+ *  a millimetre or so of its corner's path. */
+const REACH_STEPS = 24;
+
 /** A joint on its way: from a value, to one, starting when, for how long. */
 interface Run {
 	from: number;
@@ -82,6 +86,21 @@ export class Joints {
 		const closed = this.closedAt(key);
 		const open = this.openAt(key);
 		return open === closed ? 0 : (this.value(key) - closed) / (open - closed);
+	}
+
+	/** Where a joint's parts pass through between shut and `openAt`: their bounds
+	 *  at REACH_STEPS places along the way, so a door's arc is in it. Leaves the
+	 *  joint where it was. */
+	reach(key: string): THREE.Box3 {
+		const was = this.value(key);
+		const [closed, open] = [this.closedAt(key), this.openAt(key)];
+		const out = new THREE.Box3();
+		for (let k = 0; k <= REACH_STEPS; k++) {
+			this.set(key, closed + ((open - closed) * k) / REACH_STEPS);
+			for (const m of this.moving.get(key) ?? []) out.expandByObject(m);
+		}
+		this.set(key, was);
+		return out;
 	}
 
 	/** Where a joint is: metres out, or degrees open. */

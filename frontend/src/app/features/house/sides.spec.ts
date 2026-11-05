@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
-import { flipped, oneSided } from './sides';
+import { SHEET_GAP, flipped, oneSided } from './sides';
 
 const normalOf = (g: THREE.BufferGeometry, m = new THREE.Matrix4()) => {
 	const p = g.getAttribute('position');
@@ -60,6 +60,12 @@ describe('one-sided surfaces', () => {
 		expect(scene.children).toHaveLength(2);
 		const [a, b] = scene.children as THREE.Mesh[];
 		expect(normalOf(a.geometry).dot(normalOf(b.geometry))).toBeCloseTo(-1, 9);
+		// Its back stands just behind its front, not on it: a ray meets the side it reaches
+		// first, never the two at once, which the baker would take in its tree's order.
+		const z = (m: THREE.Mesh) => m.geometry.getAttribute('position').getZ(0);
+		expect(z(a)).toBe(0);
+		expect(z(b)).toBeCloseTo(-SHEET_GAP, 9);
+		expect(SHEET_GAP).toBeLessThan(2e-3);
 	});
 
 	it('leaves glass two-sided, as light passes it either way', () => {

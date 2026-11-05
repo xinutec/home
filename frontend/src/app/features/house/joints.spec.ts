@@ -113,4 +113,18 @@ describe('joints', () => {
 		expect(joints.openAt(key)).toBe(5);
 		expect(joints.keys()).toContain(key);
 	});
+
+	it('says where a joint’s parts pass through on their way open, its arc too', () => {
+		const { meshes, joints } = drawn();
+		const key = `${SIDEBOARD}/door-left`;
+		const reach = joints.reach(key);
+		joints.set(key, -45);
+		// Half open, the door's corner stands out further sideways than at either end.
+		expect(reach.containsBox(bounds(meshes, key))).toBe(true);
+		joints.set(key, -95);
+		expect(reach.containsBox(bounds(meshes, key))).toBe(true);
+		// And it is left shut.
+		expect(new Joints(house, meshes).reach(key).isEmpty()).toBe(false);
+		expect(joints.value(key)).toBe(-95);
+	});
 });

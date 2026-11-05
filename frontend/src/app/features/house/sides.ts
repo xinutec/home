@@ -22,7 +22,7 @@ export function flipped(geom: THREE.BufferGeometry): THREE.BufferGeometry {
  * patch of light for each side anyone sees. A mesh that says which way it faces
  * (`userData.facing`, a direction in the room: a wall into its room, a floor up)
  * is turned that way; any other mesh drawn from both sides, glass aside, gains a
- * copy facing the other way (a curtain, a doorway's lining). The materials then
+ * copy facing the other way (a curtain, a doorway's lining), SHEET_GAP behind it. The materials then
  * draw front faces only. A wall between two rooms is in each room's outline, so
  * each room's copy faces its own room and the two no longer meet in one plane.
  */
@@ -41,7 +41,7 @@ export function oneSided(scene: THREE.Scene, own: (g: THREE.BufferGeometry) => v
 			if (worldNormal(mesh).dot(facing) < 0) mesh.geometry = own2(flipped(mesh.geometry), own);
 			continue;
 		}
-		const back = new THREE.Mesh(own2(flipped(mesh.geometry), own), material);
+		const back = new THREE.Mesh(own2(behind(flipped(mesh.geometry)), own), material);
 		back.position.copy(mesh.position);
 		back.quaternion.copy(mesh.quaternion);
 		back.scale.copy(mesh.scale);
@@ -54,6 +54,24 @@ export function oneSided(scene: THREE.Scene, own: (g: THREE.BufferGeometry) => v
 		m.side = THREE.FrontSide;
 		m.needsUpdate = true;
 	}
+}
+
+/** How far a sheet's back copy stands behind its front: under the 2 mm a baked ray
+ *  starts off its surface, and far over float error, so a ray meets one side first. */
+export const SHEET_GAP = 5e-4;
+
+/** A flipped copy moved SHEET_GAP along its own normals, behind the front it copies. */
+function behind(g: THREE.BufferGeometry): THREE.BufferGeometry {
+	const p = g.getAttribute('position');
+	const n = g.getAttribute('normal');
+	for (let i = 0; i < p.count; i++)
+		p.setXYZ(
+			i,
+			p.getX(i) + n.getX(i) * SHEET_GAP,
+			p.getY(i) + n.getY(i) * SHEET_GAP,
+			p.getZ(i) + n.getZ(i) * SHEET_GAP,
+		);
+	return g;
 }
 
 /** A mesh, by three's own flag: `instanceof Mesh` types its geometry and material as any. */

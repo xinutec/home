@@ -33,7 +33,12 @@ export async function bakeLightmap(
 	samples: number,
 	bounces = 4,
 	progress: (done: number) => void = () => undefined,
-): Promise<{ light: Float32Array; summed: number }> {
+	/** Trace only the texels whose point is in `region`; every other one takes the
+	 *  samples `base` summed there (another bake's `raw`), before the sums are made
+	 *  into light: a door's bake, as what it can change is near it, which comes out
+	 *  as that bake did wherever its samples are the same. */
+	local?: { region: THREE.Box3; base: Float32Array },
+): Promise<{ light: Float32Array; summed: number; raw: Float32Array }> {
 	const meshes = lit.meshes;
 	const { width, height } = lit.atlas;
 	// Everything the rays can hit, as one geometry: its triangles, and per vertex what
@@ -229,6 +234,8 @@ export async function bakeLightmap(
 			pointPos: { value: posTarget.texture },
 			pointNormal: { value: nrmTarget.texture },
 			seed: { value: 0 },
+			regionMin: { value: local?.region.min ?? new THREE.Vector3(-1e9, -1e9, -1e9) },
+			regionMax: { value: local?.region.max ?? new THREE.Vector3(1e9, 1e9, 1e9) },
 			skyTint: { value: new THREE.Vector3(...SKY) },
 			groundLight: { value: new THREE.Vector3(...GROUND).multiplyScalar((GROUND_ALBEDO * 7) / 9) },
 		},
@@ -254,6 +261,8 @@ export async function bakeLightmap(
 			uniform sampler2D pointPos;
 			uniform sampler2D pointNormal;
 			uniform float seed;
+			uniform vec3 regionMin;
+			uniform vec3 regionMax;
 			uniform vec3 skyTint;
 			uniform vec3 groundLight;
 			out vec4 outColor;
@@ -345,6 +354,10 @@ export async function bakeLightmap(
 				ivec2 px = ivec2(gl_FragCoord.xy);
 				vec4 p = texelFetch(pointPos, px, 0);
 				if (p.w == 0.0) { outColor = vec4(0.0); return; }
+				if (any(lessThan(p.xyz, regionMin)) || any(greaterThan(p.xyz, regionMax))) {
+					outColor = vec4(0.0);
+					return;
+				}
 				vec3 n = normalize(texelFetch(pointNormal, px, 0).xyz);
 				rng = uint(px.x) * 1973u + uint(px.y) * 9277u + uint(seed) * 26699u + 1u;
 				vec3 sum = vec3(0.0);
@@ -416,6 +429,17 @@ export async function bakeLightmap(
 	renderer.setRenderTarget(before);
 	renderer.setClearColor(clear, clearAlpha);
 
+	if (local) {
+		// What was not traced takes the base's sums.
+		const points = new Float32Array(width * height * 4);
+		renderer.readRenderTargetPixels(posTarget, 0, 0, width, height, points);
+		const at = new THREE.Vector3();
+		for (let i = 0; i < width * height; i++) {
+			at.fromArray(points, i * 4);
+			if (points[i * 4 + 3] !== 0 && local.region.containsPoint(at)) continue;
+			for (let c = 0; c < 4; c++) read[i * 4 + c] = local.base[i * 4 + c];
+		}
+	}
 	const light = finish(read, normalsRead, width, height);
 	let summed = 0;
 	for (let t = 3; t < read.length; t += 4) summed = Math.max(summed, read[t]);
@@ -433,7 +457,7 @@ export async function bakeLightmap(
 	])
 		r.dispose();
 	bvhUniform.dispose();
-	return { light, summed };
+	return { light, summed, raw: read };
 }
 
 function floatTarget(width: number, height: number): THREE.WebGLRenderTarget {

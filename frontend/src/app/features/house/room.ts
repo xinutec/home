@@ -55,6 +55,9 @@ const BAKED_EXPOSURE = 150;
  *  1's view meters 0.00136 (`data-meter`), so the living room keeps about its fitted
  *  exposure, and the kitchen, metering ten times brighter, gets a tenth of it. */
 const AUTO_KEY = 0.2;
+/** Metres around where a door or drawer passes that its opening can change the
+ *  light by more than lightChange's floor: the bake traces only there. */
+const JOINT_LIGHT_REACH = 1;
 /** Milliseconds of path tracing a frame under `?trace`: the page stays responsive. */
 const TRACE_BUDGET_MS = 30;
 
@@ -329,12 +332,17 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			// Progress over every bake: the shut one, then each joint's.
 			const report = (k: number) => (done: number) =>
 				(host.dataset['baking'] = `${k * samples + done} of ${(keys.length + 1) * samples}`);
-			const { light, summed } = await bakeLightmap(view.renderer, lit, samples, 4, report(0));
+			const { light, summed, raw } = await bakeLightmap(view.renderer, lit, samples, 4, report(0));
 			const changes = [];
 			for (const [k, key] of keys.entries()) {
+				// Only near what moves: further off, what it changes is under lightChange's floor.
+				const region = joints.reach(key).expandByScalar(JOINT_LIGHT_REACH);
 				const at = joints.openAt(key);
 				joints.set(key, at);
-				const open = await bakeLightmap(view.renderer, lit, samples, 4, report(k + 1));
+				const open = await bakeLightmap(view.renderer, lit, samples, 4, report(k + 1), {
+					region,
+					base: raw,
+				});
 				joints.set(key, joints.closedAt(key));
 				changes.push(lightChange(key, at, light, open.light));
 			}

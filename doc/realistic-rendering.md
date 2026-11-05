@@ -454,13 +454,26 @@ something (the IKEA cupboards' doors, 5 to 10 degrees, against the bean bag and
 the armchair), written into the scene and checked against what they find. An
 open door stops the walker where it stands now: what moves on each joint is a BVH
 of its own, in its own frame, met through the door's current place. Their light is baked: the lightmap with every
-joint shut, then once more for each joint alone open (the baker draws a mesh where
-its matrix places it), keeping the texels whose light that changes by over 2%;
-the two bakes share their random numbers, so what no path through the moved part
-reaches comes out the same. The page adds each joint's change as far as it is
-open (`JointLights`), uploading only the rows it touches: each changed texel worked
-out once a frame from its own joints' changes, 3.7 ms a frame on the Mac for the
-left door's 114k (a cost test holds it under 40). Nine joints, 23k to
+joint shut, then for each joint alone open (the baker draws a mesh where its matrix
+places it), tracing only the texels within 1 m of where it passes (`Joints.reach`);
+every other texel takes the shut bake's samples before they are made into light, so
+it comes out as that bake did. The texels whose light that changes by over 2% are
+kept. The two bakes share their random numbers, so what no path through the moved
+part reaches comes out the same. Checked against baking each joint over the whole
+house: eight of nine miss under 3.3% of their change, the left door 22%, and 77% of
+that is where the bake depends on its BVH (below), not the door's light. The page
+adds each joint's change as far as it is open (`JointLights`), uploading only the
+rows it touches: each changed texel worked out once a frame from its own joints'
+changes, 3.7 ms a frame on the Mac for the left door (a cost test holds it under
+40). The shut bake and nine joints take 220 s on horus; the file is 4.7 MB.
+
+**A sheet's two sides stand 0.5 mm apart** (`SHEET_GAP`, sides.ts). A curtain or a
+plant's leaves, seen from both sides, is drawn as two copies facing apart; in one
+place, a ray met both at the same distance and the baker took whichever its BVH
+reached first, so the light on and near every curtain depended on how the tree was
+built (two builds of the same house, SAH and centre splits, differed by over 2% on
+99k texels). Apart, the two builds differ on 3k, where hidden faces touch (a wall
+behind a cupboard), drawn as hairlines on 0.02% of a kitchen view's pixels. Nine joints, 23k to
 114k texels each, ten bakes in 10 minutes on horus; the file grows from 2.9 to
 5.3 MB. The sideboard's drawers are drawers: a front, two sides, a
 back and a bottom, riding 9 mm over the shelf (their boxes guessed).
