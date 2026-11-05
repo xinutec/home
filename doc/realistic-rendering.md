@@ -455,17 +455,21 @@ the armchair), written into the scene and checked against what they find. An
 open door stops the walker where it stands now: what moves on each joint is a BVH
 of its own, in its own frame, met through the door's current place. Their light is baked: the lightmap with every
 joint shut, then for each joint alone open (the baker draws a mesh where its matrix
-places it), tracing only the texels within 1 m of where it passes (`Joints.reach`);
-every other texel takes the shut bake's samples before they are made into light, so
-it comes out as that bake did. The texels whose light that changes by over 2% are
+places it), tracing only the texels within 0.75 m of where it passes (`Joints.reach`),
+packed together; every other texel takes the shut bake's samples before they are
+made into light, so it comes out as that bake did (packed or not, the same bytes).
+0.75 m holds 98–99.9% of each joint's change as baking it over the whole house finds
+it, in 46k–59k texels; 0.5 m holds 89–99.8%, 1 m no more than 0.75. The texels whose light that changes by over 2% are
 kept. The two bakes share their random numbers, so what no path through the moved
 part reaches comes out the same. Checked against baking each joint over the whole
-house: eight of nine miss under 3.3% of their change, the left door 22%, and 77% of
-that is where the bake depends on its BVH (below), not the door's light. The page
+house, the left door excepted: 89% at any margin, the rest where the bake depends on
+its BVH (below), not the door's light. The page
 adds each joint's change as far as it is open (`JointLights`), uploading only the
 rows it touches: each changed texel worked out once a frame from its own joints'
 changes, 3.7 ms a frame on the Mac for the left door (a cost test holds it under
-40). The shut bake and nine joints take 220 s on horus; the file is 4.7 MB.
+40). A bake is the shut house and the nine joints: on the Mac 12.6 and 7.7 minutes
+(the joints' share is the texels they trace); on horus 60 s and, by their texels (not yet timed there), about 40 s.
+The file is 4.7 MB. `data-baked` says each phase's time (`ms`).
 
 **A sheet's two sides stand 0.5 mm apart** (`SHEET_GAP`, sides.ts). A curtain or a
 plant's leaves, seen from both sides, is drawn as two copies facing apart; in one

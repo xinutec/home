@@ -38,7 +38,8 @@ export async function bakeLightmap(
 	 *  into light: a door's bake, as what it can change is near it, which comes out
 	 *  as that bake did wherever its samples are the same. */
 	local?: { region: THREE.Box3; base: Float32Array },
-): Promise<{ light: Float32Array; summed: number; raw: Float32Array }> {
+): Promise<{ light: Float32Array; summed: number; raw: Float32Array; ms: BakeTimes }> {
+	const started = performance.now();
 	const meshes = lit.meshes;
 	const { width, height } = lit.atlas;
 	// Everything the rays can hit, as one geometry: its triangles, and per vertex what
@@ -197,6 +198,7 @@ export async function bakeLightmap(
 		flatMesh.frustumCulled = false;
 		layout.add(flatMesh);
 	}
+	const built = performance.now();
 	const before = renderer.getRenderTarget();
 	const clear = renderer.getClearColor(new THREE.Color());
 	const clearAlpha = renderer.getClearAlpha();
@@ -210,7 +212,23 @@ export async function bakeLightmap(
 		renderer.render(layout, flat);
 	});
 
-	const target = floatTarget(width, height);
+	// A local bake traces only its region's texels, packed ROW to a row (`atlasAt`
+	// says where each is in the atlas): scattered over the atlas, they would leave the
+	// GPU running every group of texels that holds one, and every pass over them all.
+	const inRegion: number[] = [];
+	if (local) {
+		const points = new Float32Array(width * height * 4);
+		renderer.readRenderTargetPixels(posTarget, 0, 0, width, height, points);
+		const at = new THREE.Vector3();
+		for (let i = 0; i < width * height; i++)
+			if (points[i * 4 + 3] !== 0 && local.region.containsPoint(at.fromArray(points, i * 4)))
+				inRegion.push(i);
+	}
+	const packedRows = Math.max(1, Math.ceil(inRegion.length / ROW));
+	const where = new Float32Array(ROW * packedRows * 4).fill(-1);
+	inRegion.forEach((i, k) => where.set([i % width, Math.floor(i / width)], k * 4));
+	const atlasAt = asTexture(where, packedRows);
+	const target = local ? floatTarget(ROW, packedRows) : floatTarget(width, height);
 	// Samples a pass: one short draw at a time, so no draw outlives the GPU's watchdog.
 	const PER_PASS = 1;
 	const material = new THREE.ShaderMaterial({
@@ -232,6 +250,8 @@ export async function bakeLightmap(
 			// A pane is a slab: from the room, its two faces are one window.
 			lightArea: { value: totalArea / 2 },
 			pointPos: { value: posTarget.texture },
+			atlasAt: { value: atlasAt },
+			packed: { value: local ? 1 : 0 },
 			pointNormal: { value: nrmTarget.texture },
 			seed: { value: 0 },
 			regionMin: { value: local?.region.min ?? new THREE.Vector3(-1e9, -1e9, -1e9) },
@@ -259,6 +279,8 @@ export async function bakeLightmap(
 			uniform int lightCount;
 			uniform float lightArea;
 			uniform sampler2D pointPos;
+			uniform sampler2D atlasAt;
+			uniform int packed;
 			uniform sampler2D pointNormal;
 			uniform float seed;
 			uniform vec3 regionMin;
@@ -352,6 +374,11 @@ export async function bakeLightmap(
 
 			void main() {
 				ivec2 px = ivec2(gl_FragCoord.xy);
+				if (packed == 1) {
+					vec4 at = texelFetch(atlasAt, px, 0);
+					if (at.x < 0.0) { outColor = vec4(0.0); return; }
+					px = ivec2(at.xy);
+				}
 				vec4 p = texelFetch(pointPos, px, 0);
 				if (p.w == 0.0) { outColor = vec4(0.0); return; }
 				if (any(lessThan(p.xyz, regionMin)) || any(greaterThan(p.xyz, regionMax))) {
@@ -421,31 +448,30 @@ export async function bakeLightmap(
 			renderer.setRenderTarget(target);
 		}
 	}
-	const read = new Float32Array(width * height * 4);
-	renderer.readRenderTargetPixels(target, 0, 0, width, height, read);
+	const traced = performance.now();
+	let read = new Float32Array(width * height * 4);
+	if (local) {
+		// What was not traced takes the base's sums; what was, its own.
+		const sums = new Float32Array(ROW * packedRows * 4);
+		renderer.readRenderTargetPixels(target, 0, 0, ROW, packedRows, sums);
+		read = local.base.slice();
+		inRegion.forEach((i, k) => read.set(sums.subarray(k * 4, k * 4 + 4), i * 4));
+	} else renderer.readRenderTargetPixels(target, 0, 0, width, height, read);
 	const normalsRead = new Float32Array(width * height * 4);
 	renderer.readRenderTargetPixels(nrmTarget, 0, 0, width, height, normalsRead);
 	renderer.autoClear = autoClear;
 	renderer.setRenderTarget(before);
 	renderer.setClearColor(clear, clearAlpha);
 
-	if (local) {
-		// What was not traced takes the base's sums.
-		const points = new Float32Array(width * height * 4);
-		renderer.readRenderTargetPixels(posTarget, 0, 0, width, height, points);
-		const at = new THREE.Vector3();
-		for (let i = 0; i < width * height; i++) {
-			at.fromArray(points, i * 4);
-			if (points[i * 4 + 3] !== 0 && local.region.containsPoint(at)) continue;
-			for (let c = 0; c < 4; c++) read[i * 4 + c] = local.base[i * 4 + c];
-		}
-	}
+	const readBack = performance.now();
 	const light = finish(read, normalsRead, width, height);
+	const finished = performance.now();
 	let summed = 0;
 	for (let t = 3; t < read.length; t += 4) summed = Math.max(summed, read[t]);
 
 	for (const r of [
 		target,
+		atlasAt,
 		posTarget,
 		nrmTarget,
 		surfaceTex,
@@ -457,7 +483,23 @@ export async function bakeLightmap(
 	])
 		r.dispose();
 	bvhUniform.dispose();
-	return { light, summed, raw: read };
+	const ms = {
+		build: Math.round(built - started),
+		trace: Math.round(traced - built),
+		read: Math.round(readBack - traced),
+		finish: Math.round(finished - readBack),
+	};
+	return { light, summed, raw: read, ms };
+}
+
+/** Milliseconds a bake spent on each phase: building the scene's BVH and textures,
+ *  tracing (its passes, with the layout drawn first), reading the sums back (and
+ *  merging a local bake's base), and making them into light. */
+export interface BakeTimes {
+	build: number;
+	trace: number;
+	read: number;
+	finish: number;
 }
 
 function floatTarget(width: number, height: number): THREE.WebGLRenderTarget {

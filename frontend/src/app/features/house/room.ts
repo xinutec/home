@@ -57,7 +57,7 @@ const BAKED_EXPOSURE = 150;
 const AUTO_KEY = 0.2;
 /** Metres around where a door or drawer passes that its opening can change the
  *  light by more than lightChange's floor: the bake traces only there. */
-const JOINT_LIGHT_REACH = 1;
+const JOINT_LIGHT_REACH = 0.75;
 /** Milliseconds of path tracing a frame under `?trace`: the page stays responsive. */
 const TRACE_BUDGET_MS = 30;
 
@@ -332,8 +332,16 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			// Progress over every bake: the shut one, then each joint's.
 			const report = (k: number) => (done: number) =>
 				(host.dataset['baking'] = `${k * samples + done} of ${(keys.length + 1) * samples}`);
-			const { light, summed, raw } = await bakeLightmap(view.renderer, lit, samples, 4, report(0));
+			const { light, summed, raw, ms } = await bakeLightmap(
+				view.renderer,
+				lit,
+				samples,
+				4,
+				report(0),
+			);
 			const changes = [];
+			// Each phase's time, the shut bake's and the joints' summed.
+			const times = { shut: ms, joints: { build: 0, trace: 0, read: 0, finish: 0 } };
 			for (const [k, key] of keys.entries()) {
 				// Only near what moves: further off, what it changes is under lightChange's floor.
 				const region = joints.reach(key).expandByScalar(JOINT_LIGHT_REACH);
@@ -345,6 +353,8 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 				});
 				joints.set(key, joints.closedAt(key));
 				changes.push(lightChange(key, at, light, open.light));
+				for (const k of ['build', 'trace', 'read', 'finish'] as const)
+					times.joints[k] += open.ms[k];
 			}
 			const { width, height } = lit.atlas;
 			const file = encodeLightmap(light, width, height, roomChecksum(lit), changes);
@@ -355,6 +365,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 				covered: lit.atlas.charts,
 				samples: summed,
 				joints: Object.fromEntries(changes.map((c) => [c.key, c.texels.length])),
+				ms: times,
 				seconds: Math.round((performance.now() - started) / 100) / 10,
 			});
 		};
