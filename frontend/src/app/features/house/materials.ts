@@ -93,7 +93,7 @@ export class MaterialLibrary {
 		return mat;
 	}
 
-	private pattern(kind: 'wood' | 'carpet' | 'tiles'): THREE.Texture {
+	private pattern(kind: NonNullable<MaterialSpec['texture']>): THREE.Texture {
 		const hit = this.patterns.get(kind);
 		if (hit) return hit;
 		const canvas = document.createElement('canvas');
@@ -102,6 +102,8 @@ export class MaterialLibrary {
 		if (!ctx) throw new Error('no 2D canvas to draw a texture on');
 		if (kind === 'wood') drawWood(ctx, 512);
 		else if (kind === 'tiles') drawTiles(ctx, 512);
+		else if (kind === 'quarry') drawQuarry(ctx, 512);
+		else if (kind === 'planks') drawPlanks(ctx, 512);
 		else drawCarpet(ctx, 512);
 		const tex = this.own(new THREE.CanvasTexture(canvas));
 		tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
@@ -175,6 +177,33 @@ function drawTiles(ctx: CanvasRenderingContext2D, px: number): void {
 			ctx.fillStyle = tint(TILE_COLOURS[Math.floor(r() * TILE_COLOURS.length)]);
 			ctx.fillRect(i * pitch + grout / 2, j * pitch + grout / 2, pitch - grout, pitch - grout);
 		}
+}
+
+/** Quarry tiles, QUARRY_ACROSS to a side: fired clay, each a little lighter or
+ *  darker than the next, in dark grout. */
+const QUARRY_ACROSS = 8;
+function drawQuarry(ctx: CanvasRenderingContext2D, px: number): void {
+	const r = rng(17);
+	ctx.fillStyle = 'rgb(150,150,150)';
+	ctx.fillRect(0, 0, px, px);
+	const pitch = px / QUARRY_ACROSS;
+	const grout = 4;
+	for (let i = 0; i < QUARRY_ACROSS; i++)
+		for (let j = 0; j < QUARRY_ACROSS; j++) {
+			const v = Math.round(235 * (0.88 + 0.24 * r()));
+			ctx.fillStyle = `rgb(${Math.min(255, v)},${Math.min(255, Math.round(v * (0.97 + 0.06 * r())))},${Math.min(255, v)})`;
+			ctx.fillRect(i * pitch + grout / 2, j * pitch + grout / 2, pitch - grout, pitch - grout);
+		}
+}
+
+/** Tongue-and-groove boards along x, PLANKS_ACROSS to a repeat, a dark groove between each. */
+const PLANKS_ACROSS = 8;
+function drawPlanks(ctx: CanvasRenderingContext2D, px: number): void {
+	ctx.fillStyle = 'rgb(245,245,245)';
+	ctx.fillRect(0, 0, px, px);
+	const pitch = px / PLANKS_ACROSS;
+	ctx.fillStyle = 'rgb(175,175,175)';
+	for (let j = 0; j < PLANKS_ACROSS; j++) ctx.fillRect(0, j * pitch, px, 2);
 }
 
 /** Fine speckle around mid-grey, the look of a short cut-pile carpet from standing height. */

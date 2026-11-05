@@ -76,54 +76,82 @@ export function applyLightmap(scene: THREE.Scene, lit: Lit, map: Lightmap): bool
 	return true;
 }
 
-/** Where the reflection probe sees the room from: its middle, at a standing eye. */
+/** Where a room's reflection probe sees it from: its middle, at a standing eye. */
 const PROBE_HEIGHT = 1.4;
-/** The probe's cube faces, pixels a side: sharp enough for the TV's glass. */
+/** A probe's cube faces, pixels a side: sharp enough for the TV's glass. */
 const PROBE_SIZE = 256;
 
 /**
- * Reflections, as games make them: the lit room captured once into a cube map from
- * its middle (a reflection probe), prefiltered by roughness, and reflected by every
- * surface by its Fresnel and roughness. The light on a surface stays the lightmap's
- * alone: three would add the probe as diffuse light too, which the lightmap already
- * holds, so that one line goes from the shader. Returns the probe, for disposal.
+ * Reflections, as games make them: each room's lit surroundings captured once into
+ * a cube map from its middle (a reflection probe), prefiltered by roughness, and
+ * reflected by every surface in that room by its Fresnel and roughness. A material
+ * used in several rooms is copied, one per room, each with its room's probe. The
+ * light on a surface stays the lightmap's alone: three would add the probe as
+ * diffuse light too, which the lightmap already holds, so that one line goes from
+ * the shader. Returns the probes and copies, for disposal.
  */
 export function addReflections(
 	renderer: THREE.WebGLRenderer,
 	scene: THREE.Scene,
 	lit: Lit,
-): THREE.WebGLRenderTarget[] {
-	const box = new THREE.Box3();
-	for (const m of lit.meshes) box.expandByObject(m);
-	const centre = box.getCenter(new THREE.Vector3());
-	centre.y = PROBE_HEIGHT;
-	// A render target holds linear radiance: three tone maps only the screen.
-	const cube = new THREE.WebGLCubeRenderTarget(PROBE_SIZE, { type: THREE.HalfFloatType });
-	const camera = new THREE.CubeCamera(0.05, 50, cube);
-	camera.position.copy(centre);
-	camera.update(renderer, scene);
+): { dispose(): void }[] {
+	const owned: { dispose(): void }[] = [];
+	const byRoom = new Map<string, THREE.Mesh[]>();
+	for (const mesh of lit.meshes) {
+		const room = String(mesh.userData['room']);
+		byRoom.set(room, [...(byRoom.get(room) ?? []), mesh]);
+	}
+	// Every probe is captured before any surface reflects: none sees another's reflections.
 	const pmrem = new THREE.PMREMGenerator(renderer);
-	const probe = pmrem.fromCubemap(cube.texture);
+	const probes = new Map<string, THREE.Texture>();
+	for (const [room, meshes] of byRoom) {
+		const at = lit.centres.get(room);
+		const centre = at
+			? new THREE.Vector3(at.x, PROBE_HEIGHT, at.z)
+			: new THREE.Box3().setFromObject(meshes[0]).getCenter(new THREE.Vector3());
+		if (!at) centre.y = PROBE_HEIGHT;
+		// A render target holds linear radiance: three tone maps only the screen.
+		const cube = new THREE.WebGLCubeRenderTarget(PROBE_SIZE, { type: THREE.HalfFloatType });
+		const camera = new THREE.CubeCamera(0.05, 50, cube);
+		camera.position.copy(centre);
+		camera.update(renderer, scene);
+		const probe = pmrem.fromCubemap(cube.texture);
+		owned.push(cube, probe);
+		probes.set(room, probe.texture);
+	}
 	pmrem.dispose();
 
 	const specularOnly = specularOnlyChunk();
+	// The first room to use a material keeps it; each other room gets a copy.
+	const firstRoom = new Map<THREE.Material, string>();
+	const copies = new Map<string, THREE.MeshStandardMaterial>();
 	const done = new Set<THREE.Material>();
-	for (const mesh of lit.meshes) {
-		const material = mesh.material;
-		if (Array.isArray(material) || done.has(material)) continue;
-		done.add(material);
-		if (!(material instanceof THREE.MeshStandardMaterial) || !material.lightMap) continue;
-		material.envMap = probe.texture;
-		material.envMapIntensity = 1;
-		material.onBeforeCompile = (shader) => {
-			shader.fragmentShader = shader.fragmentShader.replace(
-				'#include <lights_fragment_maps>',
-				specularOnly,
-			);
-		};
-		material.needsUpdate = true;
-	}
-	return [cube, probe];
+	for (const [room, meshes] of byRoom)
+		for (const mesh of meshes) {
+			const material = mesh.material;
+			if (!(material instanceof THREE.MeshStandardMaterial) || !material.lightMap) continue;
+			if (!firstRoom.has(material)) firstRoom.set(material, room);
+			const key = `${room}|${material.uuid}`;
+			let own = firstRoom.get(material) === room ? material : copies.get(key);
+			if (!own) {
+				own = material.clone();
+				copies.set(key, own);
+				owned.push(own);
+			}
+			mesh.material = own;
+			if (done.has(own)) continue;
+			done.add(own);
+			own.envMap = probes.get(room) ?? null;
+			own.envMapIntensity = 1;
+			own.onBeforeCompile = (shader) => {
+				shader.fragmentShader = shader.fragmentShader.replace(
+					'#include <lights_fragment_maps>',
+					specularOnly,
+				);
+			};
+			own.needsUpdate = true;
+		}
+	return owned;
 }
 
 /** three's indirect-light chunk without the environment's diffuse light: the

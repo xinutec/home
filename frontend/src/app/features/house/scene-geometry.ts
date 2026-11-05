@@ -42,6 +42,22 @@ export function roomPerimeter(room: Room): Pt[] {
 	return perimeter(room.walls, { x: room.start[0], z: room.start[1] }, room.heading ?? 0);
 }
 
+/** The room whose outline holds the point (x, z), by its name: none in a wall's
+ *  thickness or outside. */
+export function roomAt(rooms: Room[], x: number, z: number): string | undefined {
+	for (const room of rooms) {
+		const pts = roomPerimeter(room);
+		let inside = false;
+		for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+			const [a, b] = [pts[i], pts[j]];
+			if (a.z > z !== b.z > z && x < ((b.x - a.x) * (z - a.z)) / (b.z - a.z) + a.x)
+				inside = !inside;
+		}
+		if (inside) return room.name;
+	}
+	return undefined;
+}
+
 /** Consecutive wall segments from a list of perimeter points. */
 export function segments(pts: Pt[]): WallSeg[] {
 	const segs: WallSeg[] = [];

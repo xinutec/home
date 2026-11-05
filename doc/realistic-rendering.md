@@ -126,7 +126,8 @@ how it is judged done.
 - **Physics:** `physics.ts`, run on the real scene by `scene-physics.spec.ts`; the
   kitchen's known findings are listed there by name.
 - **Materials:** physically based, with procedural wood grain (along each face's
-  longer side: up a door, along a shelf) and carpet; the
+  longer side: up a door, along a shelf), carpet, and the kitchen's mixed wall
+  tiles, quarry floor and plank ceiling; the
   paints toned to keyframe 1 under the approximate light (so off under correct
   light), the glass with its transmittance.
 - **Light:** the everyday view keeps an approximate setup (generic environment, sky
@@ -297,6 +298,7 @@ light's assumed colour and the phone's white balance).
 | The bay sofa as its construction (arched back, scroll arms, middle foot), traced 256, estimated paints | 17.1 | sofa seat 12.2 → 10.5 |
 | Paints fitted to this photo, traced | 10.8 | no fit: every paint but the ceiling at the 0.95 limit |
 | The same, clear openers as glass | 11.0 | unchanged: not the openers |
+| Reflections from a probe per room, A/B against one for the house (raster, baked, both at the solved exposure) | 16.3 → 11.8 | curtain 31.6 → 6.7 (×0.07 → ×1.42): the house's probe, by the dining wall, saw the dim far end and left the curtains black; the living room's own sees the bay. Keyframe 1 6.4 → 6.3 |
 
 On keyframe 1, paints fitted to it score 4.7 traced (sideboard door 1.2, fire
 surround 1.7, carpet 2.1; alcove side wall 10.1, TV 8.0), but they are not in the
@@ -384,13 +386,16 @@ with light baked onto split vertices 60 (186,000 triangles). Open: the bake and 
 trace need exposures of about 180 and 90.
 
 Reflections, as games make them (`addReflections`, `baked-light.ts`): once the
-lightmap is on, the lit room is captured into a cube map from its middle at 1.4 m
+lightmap is on, each room is captured into a cube map from its middle at 1.4 m
 (a reflection probe, 256 px a face), prefiltered by roughness, and every surface
-reflects it by its Fresnel and roughness. Its light stays the lightmap's alone:
+in that room reflects it by its Fresnel and roughness. The merge keeps rooms apart
+for this (`userData.room`). One probe for the house sat at its bounding box's
+middle, in the living room by the dining wall: the kitchen's steel reflected that
+room, ten times darker than its own, and showed black at the kitchen's exposure. Its light stays the lightmap's alone:
 three would add the probe as diffuse light too, which the lightmap already holds,
 so that line goes from the shader (`specularOnlyChunk`). Steel reads as metal and
-the wood takes a sheen; a dark screen reflects its 4% head-on. One probe, not box
-projected: what a flat glossy surface reflects is seen from the middle of the room.
+the wood takes a sheen; a dark screen reflects its 4% head-on. Not box projected:
+what a flat glossy surface reflects is seen from the middle of its room.
 
 Exposure follows the view, as a phone camera's does (`exposure.ts`): every quarter
 second while the view changes, a 32-pixel-wide linear copy is metered, and the

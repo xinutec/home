@@ -39,8 +39,8 @@
     "wicker": {"color": "#9c7848", "roughness": 0.9, "estimate": "a woven basket, by eye; settle by fitting to a daylight photo"},
     "black-metal": {"color": "#1b1b1c", "roughness": 0.6, "metalness": 0.4, "estimate": "the wine rack's black frame, by eye; settle by fitting to a daylight photo"},
     "kitchen-wall": {"color": "#ecebe5", "roughness": 0.9, "estimate": "the kitchen's white walls, by eye from the 4 November walk at night; settle by fitting to a daylight photo"},
-    "quarry-tile": {"color": "#a4523a", "roughness": 0.75, "estimate": "the kitchen's terracotta floor tiles, by eye from the 4 November walk at night (the grout lines are not drawn); settle by fitting to a daylight photo"},
-    "ceiling-planks": {"color": "#f0efea", "roughness": 0.45, "estimate": "the kitchen's white tongue-and-groove ceiling, by eye from the 4 November walk (its grooves are not drawn); settle by fitting to a daylight photo"},
+    "quarry-tile": {"color": "#a4523a", "roughness": 0.75, "texture": "quarry", "textureScale": 1.2, "estimate": "the kitchen's terracotta floor tiles, by eye from the 4 November walk at night, drawn 15 cm square (keyframe 829) in dark grout; measure a tile, and settle the colour by fitting to a daylight photo"},
+    "ceiling-planks": {"color": "#f0efea", "roughness": 0.45, "texture": "planks", "textureScale": 0.8, "estimate": "the kitchen's white tongue-and-groove ceiling, by eye from the 4 November walk, its boards drawn 10 cm wide running across the window wall (keyframe 811); measure a board, and settle the colour by fitting to a daylight photo"},
     "lamp-shade": {"color": "#f4f2ea", "roughness": 0.5, "estimate": "the dome's look in keyframe 720; settle with a photo of it lit"}
   },
   "rooms": [

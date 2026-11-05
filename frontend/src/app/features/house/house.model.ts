@@ -142,7 +142,7 @@ export interface MaterialSpec {
 	roughness?: number;
 	/** 0 = dielectric (wood, paint), 1 = metal. */
 	metalness?: number;
-	texture?: 'wood' | 'carpet' | 'tiles';
+	texture?: 'wood' | 'carpet' | 'tiles' | 'quarry' | 'planks';
 	/** 0 = opaque, 1 = clear glass; frosted glass is transmissive and rough. */
 	transmission?: number;
 	/** Metres one repeat of the texture covers. */

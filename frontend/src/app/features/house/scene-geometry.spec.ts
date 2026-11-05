@@ -10,6 +10,7 @@ import {
 	glazingLayout,
 	passages,
 	perimeter,
+	roomAt,
 	roomPerimeter,
 	segments,
 	wallPanels,
@@ -71,6 +72,31 @@ describe('segments', () => {
 	it('is empty for fewer than two points', () => {
 		expect(segments([])).toEqual([]);
 		expect(segments([{ x: 1, z: 1 }])).toEqual([]);
+	});
+});
+
+describe('roomAt', () => {
+	const square = (name: string, x: number): Room => ({
+		name,
+		start: [x, 0],
+		heading: 0,
+		walls: [
+			[0, 2],
+			[90, 2],
+			[90, 2],
+			[90, 2],
+		],
+	});
+	const rooms = [square('left', 0), square('right', 3)];
+
+	it('names the room whose outline holds the point', () => {
+		expect(roomAt(rooms, 1, 1)).toBe('left');
+		expect(roomAt(rooms, 4, 1.5)).toBe('right');
+	});
+
+	it('is undefined in the wall between them and outside', () => {
+		expect(roomAt(rooms, 2.5, 1)).toBeUndefined();
+		expect(roomAt(rooms, 1, -1)).toBeUndefined();
 	});
 });
 

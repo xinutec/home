@@ -8,7 +8,8 @@ function isMesh(o: THREE.Object3D): o is THREE.Mesh {
 
 /**
  * Meshes that never move, merged by what they look like: one mesh for every set
- * sharing a material, a shadow setting and a vertex layout, in room coordinates and
+ * sharing a room (`userData.room`, so each room can reflect its own surroundings),
+ * a material, a shadow setting and a vertex layout, in room coordinates and
  * unindexed (as a lightmap's unwrap needs). A phone pays for each mesh it draws far
  * more than for its triangles, and the room is hundreds of parts in a few dozen
  * materials. Returns the merged meshes, in a fixed order: the order the lightmap is
@@ -26,7 +27,8 @@ export function mergeStatic(
 		const material = mesh.material;
 		if (Array.isArray(material)) continue;
 		const layout = Object.keys(mesh.geometry.attributes).sort().join(',');
-		const key = `${material.uuid}|${mesh.castShadow}|${mesh.receiveShadow}|${layout}`;
+		const room: unknown = mesh.userData['room'];
+		const key = `${String(room)}|${material.uuid}|${mesh.castShadow}|${mesh.receiveShadow}|${layout}`;
 		groups.set(key, [...(groups.get(key) ?? []), { mesh, material }]);
 	}
 	const out: THREE.Mesh[] = [];
@@ -44,6 +46,8 @@ export function mergeStatic(
 		const mesh = new THREE.Mesh(merged, first.material);
 		mesh.castShadow = first.mesh.castShadow;
 		mesh.receiveShadow = first.mesh.receiveShadow;
+		const room: unknown = first.mesh.userData['room'];
+		mesh.userData['room'] = room;
 		for (const m of meshes) scene.remove(m.mesh);
 		scene.add(mesh);
 		out.push(mesh);

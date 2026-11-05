@@ -15,6 +15,7 @@ import {
 	inwardNormals,
 	mitre,
 	passages,
+	roomAt,
 	roomPerimeter,
 	segments,
 	skirtingRuns,
@@ -47,10 +48,23 @@ export function buildInterior(
 
 	// Night, physically: no daylight; the ceiling lights' glass glows instead.
 	const night = physical && !!camera.night;
-	for (const r of scene.rooms) addRoomShell(view, mats, scene, r, physical, night);
-	for (const p of passages(scene)) addPassage(view, mats, scene, p);
+	// Each mesh says which room it is in (`userData.room`): the room's reflections are its own.
+	const tag = (from: number, room: string | undefined) => {
+		for (const o of view.scene.children.slice(from)) o.userData['room'] = room;
+	};
+	for (const r of scene.rooms) {
+		const from = view.scene.children.length;
+		addRoomShell(view, mats, scene, r, physical, night);
+		tag(from, r.name);
+	}
+	for (const p of passages(scene)) {
+		const from = view.scene.children.length;
+		addPassage(view, mats, scene, p);
+		tag(from, p.room.name);
+	}
 	// Each piece as its parts, closed; a piece without parts is its box.
 	for (const f of scene.furniture) {
+		const from = view.scene.children.length;
 		const parts = partsOf(f);
 		solidsOf(f).forEach((sol, k) => {
 			const geom = view.own(partGeometry(parts[k], sol.hw, sol.y1 - sol.y0, sol.hd));
@@ -64,6 +78,7 @@ export function buildInterior(
 			view.scene.add(mesh);
 			if (night && (parts[k].material ?? f.material) === LAMP_MATERIAL) addLampLight(view, mesh);
 		});
+		tag(from, roomAt(scene.rooms, f.cx, f.cz));
 	}
 
 	// The everyday view draws the fixed room one-sided, as a few dozen meshes, not
@@ -74,6 +89,7 @@ export function buildInterior(
 		const meshes = mergeStatic(view.scene, (g) => view.own(g));
 		lit = {
 			meshes,
+			centres: roomCentres(scene),
 			atlas: unwrap(
 				meshes.map((m) => m.geometry),
 				LIGHTMAP_TEXEL,
@@ -82,7 +98,17 @@ export function buildInterior(
 	}
 	if (!physical) addLight(view);
 	placeCamera(view, room, camera);
-	return lit ?? { meshes: [], atlas: { width: 0, height: 0, charts: 0 } };
+	return lit ?? { meshes: [], centres: new Map(), atlas: { width: 0, height: 0, charts: 0 } };
+}
+
+/** Each room's middle, by its outline's bounds: where its reflections are seen from. */
+function roomCentres(scene: HouseScene): Map<string, Pt> {
+	const out = new Map<string, Pt>();
+	for (const r of scene.rooms) {
+		const b = bounds(roomPerimeter(r));
+		if (r.name && b) out.set(r.name, { x: b.cx, z: b.cz });
+	}
+	return out;
 }
 
 function addRoomShell(
@@ -565,6 +591,8 @@ const LIGHTMAP_TEXEL = 0.02;
  *  the lightmap (its geometries' `uv1`). */
 export interface Lit {
 	meshes: THREE.Mesh[];
+	/** Each room's middle, by name: its meshes carry `userData.room`. */
+	centres: Map<string, Pt>;
 	atlas: Atlas;
 }
 
