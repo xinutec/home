@@ -45,42 +45,8 @@ export function buildInterior(
 	const room = scene.rooms.find((r) => r.name === roomName);
 	if (!room) return undefined;
 	const mats = new MaterialLibrary(<T extends { dispose(): void }>(r: T) => view.own(r));
-
 	// Night, physically: no daylight; the ceiling lights' glass glows instead.
-	const night = physical && !!camera.night;
-	// Each mesh says which room it is in (`userData.room`): the room's reflections are its own.
-	const tag = (from: number, room: string | undefined) => {
-		const shared = scene.rooms.find((r) => r.name === room)?.reflections ?? room;
-		for (const o of view.scene.children.slice(from)) o.userData['room'] = shared;
-	};
-	for (const r of scene.rooms) {
-		const from = view.scene.children.length;
-		addRoomShell(view, mats, scene, r, physical, night);
-		tag(from, r.name);
-	}
-	for (const p of passages(scene)) {
-		const from = view.scene.children.length;
-		addPassage(view, mats, scene, p);
-		tag(from, p.room.name);
-	}
-	// Each piece as its parts, closed; a piece without parts is its box.
-	for (const f of scene.furniture) {
-		const from = view.scene.children.length;
-		const parts = partsOf(f);
-		solidsOf(f).forEach((sol, k) => {
-			const geom = view.own(partGeometry(parts[k], sol.hw, sol.y1 - sol.y0, sol.hd));
-			// A sheet has two faces to see; a solid shows only its outside.
-			const sheet = parts[k].shape === 'folds' || parts[k].shape === 'fronds';
-			const side = sheet ? THREE.DoubleSide : THREE.FrontSide;
-			const mesh = new THREE.Mesh(geom, mats.get(partMaterial(scene, f, parts[k]), side));
-			mesh.position.set(sol.x, (sol.y0 + sol.y1) / 2, sol.z);
-			mesh.rotation.y = sol.yaw;
-			mesh.castShadow = mesh.receiveShadow = true;
-			view.scene.add(mesh);
-			if (night && (parts[k].material ?? f.material) === LAMP_MATERIAL) addLampLight(view, mesh);
-		});
-		tag(from, nearestRoom(scene.rooms, f.cx, f.cz));
-	}
+	buildHouse(view, scene, mats, physical, physical && !!camera.night);
 
 	// The everyday view draws the fixed room one-sided, as a few dozen meshes, not
 	// hundreds, laid out in a lightmap; the physical reference keeps every part as it is.
@@ -102,6 +68,90 @@ export function buildInterior(
 	return lit ?? { meshes: [], centres: new Map(), atlas: { width: 0, height: 0, charts: 0 } };
 }
 
+/** Where the builder puts what it makes: a scene, and a keeper of what to dispose.
+ *  A ThreeView is one; the physics builds into a bare scene. */
+export interface Stage {
+	readonly scene: THREE.Scene;
+	own<T extends { dispose(): void }>(resource: T): T;
+}
+
+/** What a mesh of the house is, for the physics (`userData.solid`): a part of a piece,
+ *  or a room's surface of a kind. */
+export type SolidTag =
+	| { kind: 'part'; piece: string; part: string; room?: string }
+	| {
+			kind: 'wall' | 'floor' | 'ceiling' | 'coving' | 'skirting' | 'frame' | 'glass' | 'passage';
+			room?: string;
+	  };
+
+/**
+ * The house's meshes, as drawn: every room's shell and windows, the passages
+ * between rooms, and every piece as its parts, in place. Each mesh says which room
+ * it is in (`userData.room`, the room whose reflections it takes) and what it is
+ * (`userData.solid`).
+ */
+export function buildHouse(
+	stage: Stage,
+	scene: HouseScene,
+	mats: MaterialLibrary,
+	physical: boolean,
+	night: boolean,
+): void {
+	const tag = (from: number, room: string | undefined, solid: (o: THREE.Object3D) => SolidTag) => {
+		const shared = scene.rooms.find((r) => r.name === room)?.reflections ?? room;
+		for (const o of stage.scene.children.slice(from)) {
+			o.userData['room'] = shared;
+			// Lights are not solids.
+			if (o instanceof THREE.Mesh) o.userData['solid'] = solid(o);
+		}
+	};
+	for (const r of scene.rooms) {
+		const from = stage.scene.children.length;
+		addRoomShell(stage, mats, scene, r, physical, night);
+		tag(from, r.name, (o) => ({ kind: shellKind(o), room: r.name }));
+	}
+	for (const p of passages(scene)) {
+		const from = stage.scene.children.length;
+		addPassage(stage, mats, scene, p);
+		tag(from, p.room.name, () => ({ kind: 'passage', room: p.room.name }));
+	}
+	// Each piece as its parts, closed; a piece without parts is its box.
+	for (const f of scene.furniture) {
+		const parts = partsOf(f);
+		const room = nearestRoom(scene.rooms, f.cx, f.cz);
+		solidsOf(f).forEach((sol, k) => {
+			const from = stage.scene.children.length;
+			const geom = stage.own(partGeometry(parts[k], sol.hw, sol.y1 - sol.y0, sol.hd));
+			// A sheet has two faces to see; a solid shows only its outside.
+			const sheet = parts[k].shape === 'folds' || parts[k].shape === 'fronds';
+			const side = sheet ? THREE.DoubleSide : THREE.FrontSide;
+			const mesh = new THREE.Mesh(geom, mats.get(partMaterial(scene, f, parts[k]), side));
+			mesh.position.set(sol.x, (sol.y0 + sol.y1) / 2, sol.z);
+			mesh.rotation.y = sol.yaw;
+			mesh.castShadow = mesh.receiveShadow = true;
+			stage.scene.add(mesh);
+			if (night && (parts[k].material ?? f.material) === LAMP_MATERIAL) addLampLight(stage, mesh);
+			tag(from, room, () => ({ kind: 'part', piece: sol.piece, part: sol.part, room }));
+		});
+	}
+}
+
+/** A shell mesh's kind, from what made it (`userData.shell`). */
+function shellKind(o: THREE.Object3D): Exclude<SolidTag['kind'], 'part' | 'passage'> {
+	const k: unknown = o.userData['shell'];
+	if (
+		k === 'wall' ||
+		k === 'floor' ||
+		k === 'ceiling' ||
+		k === 'coving' ||
+		k === 'skirting' ||
+		k === 'frame' ||
+		k === 'glass'
+	)
+		return k;
+	throw new Error(`a room's shell made a mesh it did not name: ${o.type}`);
+}
+
 /** Each room's middle, by its outline's bounds: where its reflections are seen from. */
 function roomCentres(scene: HouseScene): Map<string, Pt> {
 	const out = new Map<string, Pt>();
@@ -113,7 +163,7 @@ function roomCentres(scene: HouseScene): Map<string, Pt> {
 }
 
 function addRoomShell(
-	view: ThreeView,
+	view: Stage,
 	mats: MaterialLibrary,
 	scene: HouseScene,
 	room: Room,
@@ -142,28 +192,42 @@ function addRoomShell(
 		const ops = (room.openings ?? []).filter((o) => o.wall === i);
 		const inward = into[i];
 		for (const p of wallPanels(len, ops, scene.height)) {
-			view.scene.add(facing(wallPanel(view, s, len, p.a0, p.a1, p.yb, p.yt, wallMat), inward));
+			view.scene.add(
+				shell(facing(wallPanel(view, s, len, p.a0, p.a1, p.yb, p.yt, wallMat), inward), 'wall'),
+			);
 		}
 		for (const o of ops)
 			if (o.glazing) addGlazing(view, mats, scene, s, len, o, o.glazing, inward, physical, night);
 		if (room.coving)
 			view.scene.add(
-				facing(coving(view, s, inward, neighbours(i), scene.height, room.coving, covingMat), [
-					inward[0],
-					-1,
-					inward[1],
-				]),
+				shell(
+					facing(coving(view, s, inward, neighbours(i), scene.height, room.coving, covingMat), [
+						inward[0],
+						-1,
+						inward[1],
+					]),
+					'coving',
+				),
 			);
 		if (room.skirting)
 			for (const [a0, a1] of skirtingRuns(len, ops, scene.height))
 				view.scene.add(
-					skirting(view, s, len, a0, a1, inward, neighbours(i), room.skirting, skirtingMat),
+					shell(
+						skirting(view, s, len, a0, a1, inward, neighbours(i), room.skirting, skirtingMat),
+						'skirting',
+					),
 				);
 	});
 	const floor = mats.get(surfaceMaterial(scene, room, 'floor'), THREE.DoubleSide);
 	const ceiling = mats.get(surfaceMaterial(scene, room, 'ceiling'), THREE.DoubleSide);
-	view.scene.add(facing(flat(view, pts, 0, floor), [0, 1, 0]));
-	view.scene.add(facing(flat(view, pts, scene.height, ceiling), [0, -1, 0]));
+	view.scene.add(shell(facing(flat(view, pts, 0, floor), [0, 1, 0]), 'floor'));
+	view.scene.add(shell(facing(flat(view, pts, scene.height, ceiling), [0, -1, 0]), 'ceiling'));
+}
+
+/** Names what a shell mesh is, for the physics (`buildHouse`'s `userData.solid`). */
+function shell(mesh: THREE.Mesh, kind: string): THREE.Mesh {
+	mesh.userData['shell'] = kind;
+	return mesh;
 }
 
 /** Marks which way a surface faces into its room, [x, z] or [x, y, z]: the lightmap
@@ -176,7 +240,7 @@ function facing(mesh: THREE.Mesh, dir: [number, number] | [number, number, numbe
 
 /** The wall's thickness at a doorway: floor, soffit and jambs between the two
  *  rooms' openings. */
-function addPassage(view: ThreeView, mats: MaterialLibrary, scene: HouseScene, p: Passage): void {
+function addPassage(view: Stage, mats: MaterialLibrary, scene: HouseScene, p: Passage): void {
 	const wall = mats.get(surfaceMaterial(scene, p.room, 'walls'), THREE.DoubleSide);
 	const floor = mats.get(surfaceMaterial(scene, p.room, 'floor'), THREE.DoubleSide);
 	for (const [quad, mat] of [
@@ -205,7 +269,7 @@ function quadGeometry(q: P3[]): THREE.BufferGeometry {
 /** A window in its opening: frame bars 7 cm deep, panes of 6 mm glass, on the
  *  wall's line. Glass lets the sun through, so it casts no shadow. */
 function addGlazing(
-	view: ThreeView,
+	view: Stage,
 	mats: MaterialLibrary,
 	scene: HouseScene,
 	s: WallSeg,
@@ -253,7 +317,7 @@ function addGlazing(
 			);
 			back.position.set(s.ax + dx * along, (p.yb + p.yt) / 2, s.az + dz * along);
 			back.rotation.y = -Math.atan2(s.bz - s.az, s.bx - s.ax);
-			view.scene.add(back);
+			view.scene.add(shell(back, 'glass'));
 			continue;
 		}
 		const geom = view.own(metricBox(p.a1 - p.a0, p.yt - p.yb, frame ? 0.07 : 0.006));
@@ -262,7 +326,7 @@ function addGlazing(
 		mesh.rotation.y = -Math.atan2(s.bz - s.az, s.bx - s.ax);
 		mesh.castShadow = frame;
 		mesh.receiveShadow = true;
-		view.scene.add(mesh);
+		view.scene.add(shell(mesh, frame ? 'frame' : 'glass'));
 	}
 }
 
@@ -276,7 +340,7 @@ const LAMP_RADIANCE = 100;
 /** A lit lamp's glass as the light it sends out: an even emitter on each face of
  *  its box but the top (it is flush with the ceiling), facing out, so a path tracer
  *  can aim at it as at a frosted pane. */
-function addLampLight(view: ThreeView, glass: THREE.Mesh): void {
+function addLampLight(view: Stage, glass: THREE.Mesh): void {
 	glass.updateMatrixWorld(true);
 	const box = new THREE.Box3().setFromObject(glass);
 	const [c, size] = [box.getCenter(new THREE.Vector3()), box.getSize(new THREE.Vector3())];
@@ -489,7 +553,7 @@ function fronds(w: number, h: number, d: number): THREE.BufferGeometry {
 /** A wall's coving: its profile swept along the wall's top, into the room. Strips
  *  meet at the corners by overlapping, which the eye does not see. */
 function coving(
-	view: ThreeView,
+	view: Stage,
 	s: WallSeg,
 	inward: [number, number],
 	[before, after]: [[number, number], [number, number]],
@@ -524,7 +588,7 @@ function coving(
  *  the next wall's, as a moulding is cut; where it stops at a doorway it ends
  *  square, closed. */
 function skirting(
-	view: ThreeView,
+	view: Stage,
 	s: WallSeg,
 	len: number,
 	a0: number,
@@ -602,7 +666,7 @@ const CLEAR_GLASS_ROUGHNESS = 0.1;
 
 /** One solid slab of a wall, with UVs in metres so a texture keeps its scale. */
 function wallPanel(
-	view: ThreeView,
+	view: Stage,
 	s: WallSeg,
 	len: number,
 	a0: number,
@@ -625,7 +689,7 @@ function wallPanel(
 
 /** The room's outline as a horizontal surface at height `y`: its floor or ceiling.
  *  ShapeGeometry's UVs are the outline's coordinates, so already in metres. */
-function flat(view: ThreeView, pts: Pt[], y: number, mat: THREE.Material): THREE.Mesh {
+function flat(view: Stage, pts: Pt[], y: number, mat: THREE.Material): THREE.Mesh {
 	const shape = new THREE.Shape();
 	shape.moveTo(pts[0].x, pts[0].z);
 	for (const p of pts.slice(1)) shape.lineTo(p.x, p.z);

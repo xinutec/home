@@ -44,7 +44,11 @@ export class MaterialLibrary {
 	private readonly built = new Map<string, THREE.MeshStandardMaterial>();
 	private readonly patterns = new Map<string, THREE.Texture>();
 
-	constructor(private readonly own: <T extends { dispose(): void }>(r: T) => T) {}
+	constructor(
+		private readonly own: <T extends { dispose(): void }>(r: T) => T,
+		/** Off where nothing is drawn (the physics, in Node): no canvas to paint them on. */
+		private readonly textures = true,
+	) {}
 
 	/** `side`: walls, floors and ceilings are planes seen from both sides. */
 	get(spec: MaterialSpec, side: THREE.Side = THREE.FrontSide): THREE.MeshStandardMaterial {
@@ -60,7 +64,7 @@ export class MaterialLibrary {
 				side,
 			}),
 		);
-		if (spec.texture) {
+		if (spec.texture && this.textures) {
 			const map = this.pattern(spec.texture).clone();
 			// Box faces and the floor carry UVs in metres; a repeat of 1/scale tiles it.
 			const repeat = 1 / (spec.textureScale ?? 1);
