@@ -16,6 +16,23 @@ function nameOf(tag: SolidTag): string {
 	return tag.kind === 'part' ? `${tag.piece}/${tag.part}` : `${tag.room ?? 'house'} ${tag.kind}`;
 }
 
+/** A body of the drawn house, with what it is. */
+export interface HouseBody {
+	body: Body;
+	tag: SolidTag;
+}
+
+/** `buildHouse`'s meshes as bodies: a curtain's folds, leaves and the passages'
+ *  reveals are sheets, with no inside; everything else has one. */
+export function houseBodies(meshes: THREE.Mesh[]): HouseBody[] {
+	return meshes.map((m) => {
+		const tag = solidTag(m);
+		if (!tag) throw new Error('a mesh not made by `buildHouse`');
+		const hasInside = tag.kind === 'part' ? !tag.sheet : tag.kind !== 'passage';
+		return { body: bodyOf(nameOf(tag), m, hasInside), tag };
+	});
+}
+
 /**
  * Every place two things of the drawn house are in each other by more than
  * `tolerance` metres: each part of a piece against every other part and every room
@@ -25,13 +42,7 @@ function nameOf(tag: SolidTag): string {
  */
 // dev-lint: allow-ts-test-only the physics runs ahead of time, in the gate, on the real scene (scene-physics.spec.ts); the page needs none of it
 export function collisions(meshes: THREE.Mesh[], tolerance: number): Collision[] {
-	const bodies: { body: Body; part: boolean }[] = [];
-	for (const m of meshes) {
-		const tag = solidTag(m);
-		if (!tag) throw new Error('a mesh not made by `buildHouse`');
-		const hasInside = tag.kind === 'part' ? !tag.sheet : tag.kind !== 'passage';
-		bodies.push({ body: bodyOf(nameOf(tag), m, hasInside), part: tag.kind === 'part' });
-	}
+	const bodies = houseBodies(meshes).map((b) => ({ body: b.body, part: b.tag.kind === 'part' }));
 	// One finding a pair of names, at its deepest: a wall is drawn as several panels.
 	const deepest = new Map<string, Collision>();
 	for (let i = 0; i < bodies.length; i++)

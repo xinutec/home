@@ -17,6 +17,9 @@ export interface Furniture {
 	/** Built into the wall it stands against (a fire surround, a hearth, a door's
 	 *  frame): the skirting stops at it, where a loose piece stands on its face. */
 	builtIn?: boolean;
+	/** Soft (a bean bag): it settles onto whatever is under it, so resting on anything
+	 *  holds it, wherever its centre of mass is. */
+	soft?: boolean;
 	color?: string | null;
 	/** A key into the scene's `materials`; wins over `color` in the room view. */
 	material?: string;

@@ -135,28 +135,4 @@ describe('check', () => {
 		const loose: Part = { id: 'shelf', size: [1.2, 0.02, 0.3], at: [0, 0.5, 0] };
 		expect(check(scene([cabinet([loose])])).map((v) => v.kind)).toContain('envelope');
 	});
-
-	it('holds a light fitting by the ceiling it is fixed to', () => {
-		const fitting: Furniture = { id: 'lamp', cx: 0, cz: 2, w: 0.35, d: 0.35, h: 0.12, y0: 2.28 };
-		expect(check(scene([fitting]))).toEqual([]);
-		const low: Furniture = { ...fitting, y0: 2.2 };
-		expect(check(scene([low])).map((v) => v.kind)).toEqual(['support']);
-	});
-
-	it('holds a curtain by the pole it hangs from, and not without one', () => {
-		const pole: Furniture = { id: 'pole', cx: 0, cz: 1, w: 6, d: 0.03, h: 0.03, y0: 2.15 };
-		const curtain: Furniture = { id: 'curtain', cx: 1, cz: 1, w: 0.35, d: 0.03, h: 1.75, y0: 0.4 };
-		expect(check(scene([pole, curtain]))).toEqual([]);
-		expect(check(scene([curtain])).map((v) => v.what)).toEqual([
-			'curtain is held up by nothing (bottom at 0.4 m)',
-		]);
-	});
-
-	it('holds a piece up by the floor, by what it stands on, or by the wall it is on, and nothing else', () => {
-		const floating: Furniture = { id: 'f', cx: 0, cz: 2, w: 0.5, d: 0.5, h: 0.2, y0: 1 };
-		expect(check(scene([floating])).map((v) => v.kind)).toEqual(['support']);
-		const onWall: Furniture = { id: 'tv', cx: 0, cz: 0.025, w: 1, d: 0.05, h: 0.6, y0: 1.2 };
-		const onTop: Furniture = { id: 'lamp', cx: 0, cz: 0.2, w: 0.2, d: 0.2, h: 0.3, y0: 0.8 };
-		expect(check(scene([cabinet([back]), onWall, onTop]))).toEqual([]);
-	});
 });

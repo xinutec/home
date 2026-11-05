@@ -6,6 +6,7 @@ import { collisions } from './collisions';
 import { MaterialLibrary } from './materials';
 import { check, TOLERANCE } from './physics';
 import { buildHouse } from './room-builder';
+import { unsupported } from './support';
 
 // JSON arrays read as number[], not the format's [x, z] pairs; the format is checked
 // by these very rules, so the cast is the claim under test.
@@ -79,5 +80,12 @@ describe('scenes/house.json, drawn', () => {
 		const meshes = stage.scene.children.filter((o): o is THREE.Mesh => o instanceof THREE.Mesh);
 		const hits = collisions(meshes, TOLERANCE).map((c) => `${c.a} × ${c.b}`);
 		expect(hits.sort()).toEqual(KNOWN_COLLISIONS);
+	}, 60_000);
+
+	it('holds every piece up: resting, hung or fixed, by contact', () => {
+		const stage = { scene: new THREE.Scene(), own: <T>(r: T) => r };
+		buildHouse(stage, scene, new MaterialLibrary(stage.own, false), false, false);
+		const meshes = stage.scene.children.filter((o): o is THREE.Mesh => o instanceof THREE.Mesh);
+		expect(unsupported(meshes).map((u) => `${u.piece}: ${u.why}`)).toEqual([]);
 	}, 60_000);
 });

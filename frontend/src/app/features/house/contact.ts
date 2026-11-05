@@ -118,6 +118,19 @@ export function depthInside(b: Body, point: THREE.Vector3): number {
 	return d;
 }
 
+/** The nearest point of `b`'s surface to `point`, how far it is, and the surface's
+ *  outward normal there (for a one-sided surface, the way it faces). */
+export function nearest(
+	b: Body,
+	point: THREE.Vector3,
+): { point: THREE.Vector3; distance: number; normal: THREE.Vector3 } | undefined {
+	const hit = b.bvh.closestPointToPoint(point);
+	if (!hit) return undefined;
+	const normal = faceNormal(b, hit.faceIndex);
+	if (b.facing && normal.dot(b.facing) < 0) normal.negate();
+	return { point: hit.point.clone(), distance: hit.distance, normal };
+}
+
 function faceNormal(b: Body, face: number): THREE.Vector3 {
 	const pos = b.geometry.getAttribute('position');
 	const index = b.geometry.index;

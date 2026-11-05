@@ -127,10 +127,13 @@ how it is judged done.
   `collisions.ts` finds where any two things are in each other by more than 2 mm,
   on their real triangles, walls (13 cm thick behind each face), skirting, frames
   and the passages included (`contact.ts`: sampled surface points inside the other
-  body, both ways, by BVH). `physics.ts` keeps the sweeps of doors and drawers,
-  parts outside their piece and what holds each piece up, on boxes, for now. Both
-  run on the real scene in `scene-physics.spec.ts`, whose known findings are named
-  there with their reasons.
+  body, both ways, by BVH). `support.ts` holds every piece up by contact on the
+  same shapes: fixed to a wall it touches, hung from a surface facing down over it,
+  or resting on surfaces facing up with its centre of mass over them, worked up
+  from the floor (a `soft` piece, the bean bag, settles onto what it rests on).
+  `physics.ts` keeps the sweeps of doors and drawers and parts outside their piece,
+  on boxes, for now. All run on the real scene in `scene-physics.spec.ts`, whose
+  known findings are named there with their reasons.
 - **Materials:** physically based, with procedural wood grain (along each face's
   longer side: up a door, along a shelf), carpet, and the kitchen's mixed wall
   tiles, quarry floor and plank ceiling; the

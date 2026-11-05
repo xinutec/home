@@ -80,7 +80,7 @@ export interface Stage {
  *  or a room's surface of a kind. */
 export type SolidTag =
 	/** `sheet`: an open surface (a curtain's folds, leaves), with no inside. */
-	| { kind: 'part'; piece: string; part: string; room?: string; sheet: boolean }
+	| { kind: 'part'; piece: string; part: string; room?: string; sheet: boolean; soft: boolean }
 	| {
 			kind: 'wall' | 'floor' | 'ceiling' | 'coving' | 'skirting' | 'frame' | 'glass' | 'passage';
 			room?: string;
@@ -141,7 +141,14 @@ export function buildHouse(
 			mesh.castShadow = mesh.receiveShadow = true;
 			stage.scene.add(mesh);
 			if (night && (parts[k].material ?? f.material) === LAMP_MATERIAL) addLampLight(stage, mesh);
-			tag(from, room, () => ({ kind: 'part', piece: sol.piece, part: sol.part, room, sheet }));
+			tag(from, room, () => ({
+				kind: 'part',
+				piece: sol.piece,
+				part: sol.part,
+				room,
+				sheet,
+				soft: !!f.soft,
+			}));
 		});
 	}
 }

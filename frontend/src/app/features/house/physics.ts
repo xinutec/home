@@ -15,7 +15,7 @@ import { roomPerimeter, segments, wallPanels } from './scene-geometry';
 export const TOLERANCE = 0.002; // metres
 
 export interface Violation {
-	kind: 'sweep' | 'envelope' | 'support' | 'joint';
+	kind: 'sweep' | 'envelope' | 'joint';
 	what: string;
 }
 
@@ -173,66 +173,7 @@ export function check(scene: HouseScene): Violation[] {
 		}
 	});
 
-	// Held up: by the floor, by a piece it stands on, by a wall it is fixed to, by
-	// what it hangs from, or by the ceiling.
-	scene.furniture.forEach((f, i) => {
-		const y0 = f.y0 ?? 0;
-		if (y0 <= TOLERANCE) return;
-		const env = envelopeSolid(f, i);
-		const below = scene.furniture.some((g, j) => {
-			if (j === i) return false;
-			const top = (g.y0 ?? 0) + g.h;
-			return Math.abs(top - y0) <= TOLERANCE && footprintsOverlap(env, envelopeSolid(g, j));
-		});
-		const onWall = ws.some((w) => touchesWall(env, w));
-		// A curtain hangs from its pole: something whose underside is this piece's top.
-		const hangs = scene.furniture.some((g, j) => {
-			if (j === i) return false;
-			return (
-				Math.abs((g.y0 ?? 0) - (y0 + f.h)) <= TOLERANCE &&
-				footprintsOverlap(env, envelopeSolid(g, j))
-			);
-		});
-		const onCeiling = Math.abs(y0 + f.h - scene.height) <= TOLERANCE;
-		if (!below && !onWall && !hangs && !onCeiling)
-			out.push({
-				kind: 'support',
-				what: `${pieceId(f)} is held up by nothing (bottom at ${y0} m)`,
-			});
-	});
 	// One wall cut by openings is several panels; say each finding once.
 	const seen = new Set<string>();
 	return out.filter((v) => !seen.has(v.what) && seen.add(v.what));
-}
-
-function envelopeSolid(
-	f: { cx: number; cz: number; w: number; d: number; h: number; y0?: number },
-	i: number,
-): Solid {
-	return {
-		piece: `#${i}`,
-		part: 'envelope',
-		x: f.cx,
-		z: f.cz,
-		yaw: 0,
-		hw: f.w / 2,
-		hd: f.d / 2,
-		y0: f.y0 ?? 0,
-		y1: (f.y0 ?? 0) + f.h,
-	};
-}
-
-function footprintsOverlap(a: Solid, b: Solid): boolean {
-	return penetration({ ...a, y0: 0, y1: 1 }, { ...b, y0: 0, y1: 1 }) > 0;
-}
-
-function touchesWall(s: Solid, w: WallPiece): boolean {
-	if (Math.min(s.y1, w.y1) - Math.max(s.y0, w.y0) <= TOLERANCE) return false;
-	const ux = (w.bx - w.ax) / w.len;
-	const uz = (w.bz - w.az) / w.len;
-	return corners(s).some(([x, z]) => {
-		const along = (x - w.ax) * ux + (z - w.az) * uz;
-		const across = -(x - w.ax) * uz + (z - w.az) * ux;
-		return along > -TOLERANCE && along < w.len + TOLERANCE && Math.abs(across) <= TOLERANCE;
-	});
 }
