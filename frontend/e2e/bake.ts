@@ -74,7 +74,7 @@ const ticker = setInterval(() => {
 	void page
 		.locator('.canvas')
 		.getAttribute('data-baking')
-		.then((d) => d && process.stdout.write(`\r${d} / ${args.samples} samples`))
+		.then((d) => d && process.stdout.write(`\r${d} samples`))
 		// dev-lint: allow-ignored-error a progress line skipped while the page is busy; the bake's own result is checked below
 		.catch(() => undefined);
 }, 5000);

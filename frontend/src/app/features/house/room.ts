@@ -20,8 +20,8 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { WebGLPathTracer } from 'three-gpu-pathtracer';
 
-import { decodeLightmap, encodeLightmap } from './bake-file';
-import { addReflections, applyLightmap, roomChecksum } from './baked-light';
+import { decodeLightmap, encodeLightmap, lightChange } from './bake-file';
+import { JointLights, addReflections, applyLightmap, roomChecksum } from './baked-light';
 import { bakeLightmap } from './baker';
 import type { HouseScene } from './house.model';
 import { cameraFromQuery } from './camera';
@@ -90,6 +90,8 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 	private stick = viewChild.required<ElementRef<HTMLDivElement>>('stick');
 	private view?: ThreeView;
 	private tracer?: WebGLPathTracer;
+	/** The light of the doors and drawers as they open, once a lightmap applies. */
+	private jointLights?: JointLights;
 	private readonly query: CameraQuery = cameraFromQuery(window.location.search);
 
 	constructor() {
@@ -145,10 +147,12 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 				if (!lit) this.empty.set(true);
 				else if (this.query.export) this.export(view);
 				else if (this.query.trace) this.trace(view, this.query.trace);
-				else if (this.query.bake) this.bake(view, lit, this.query.bake);
+				else if (this.query.bake)
+					this.bake(view, new Joints(scene, lit.meshes), lit, this.query.bake);
 				else {
+					const joints = new Joints(scene, lit.meshes);
 					void this.light(view, lit, baked);
-					this.walk(view, scene, lit);
+					this.walk(view, joints, lit);
 				}
 				view.requestFrame();
 			},
@@ -191,10 +195,13 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 	/** Hands the camera to a walker: from the room's own view, standing, unless the
 	 *  URL placed the camera (a comparison with a photo keeps its exact pose). A tap
 	 *  on a door or drawer opens it, or shuts it. */
-	private walk(view: ThreeView, scene: HouseScene, lit: Lit): void {
+	private walk(view: ThreeView, joints: Joints, lit: Lit): void {
 		const standing = !this.query.eye;
-		const joints = new Joints(scene, lit.meshes);
-		view.beforeRender = (now) => joints.update(now);
+		view.beforeRender = (now) => {
+			const moving = joints.update(now);
+			this.jointLights?.show((key) => joints.openness(key));
+			return moving;
+		};
 		const caster = new THREE.Raycaster();
 		const canvas = view.renderer.domElement;
 		const tapped = (x: number, y: number) => {
@@ -229,7 +236,9 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 	 *  else it keeps the approximate light. */
 	private async light(view: ThreeView, lit: Lit, baked: ArrayBuffer | undefined): Promise<void> {
 		const map = baked ? await decodeLightmap(baked, gunzip) : undefined;
-		const applied = !!map && applyLightmap(view.scene, lit, map);
+		const texture = map && applyLightmap(view.scene, lit, map);
+		const applied = !!texture;
+		if (map && texture) this.jointLights = new JointLights(texture, map.joints);
 		if (applied) for (const t of addReflections(view.renderer, view.scene, lit)) view.own(t);
 		view.renderer.toneMappingExposure = this.query.exposure ?? (applied ? BAKED_EXPOSURE : 1);
 		if (applied && this.query.exposure === undefined && AutoExposure.supported(view.renderer)) {
@@ -308,23 +317,36 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		});
 	}
 
-	/** Bakes the room's lightmap, `samples` a pixel, and leaves it, as scenes/house.bake
-	 *  stores it before compression, on `window.houseBake` for e2e/bake.ts; the
-	 *  canvas's host then carries `data-baked`. */
-	private bake(view: ThreeView, lit: Lit, samples: number): void {
+	/** Bakes the room's lightmap, `samples` a pixel, with every door and drawer shut,
+	 *  then once more for each with it alone open, keeping what that changes; and
+	 *  leaves it, as scenes/house.bake stores it before compression, on
+	 *  `window.houseBake` for e2e/bake.ts; the canvas's host then carries `data-baked`. */
+	private bake(view: ThreeView, joints: Joints, lit: Lit, samples: number): void {
 		const host = this.host().nativeElement;
 		const started = performance.now();
-		const report = (done: number) => (host.dataset['baking'] = String(done));
+		const keys = joints.keys();
 		const run = async () => {
-			const { light, summed } = await bakeLightmap(view.renderer, lit, samples, 4, report);
+			// Progress over every bake: the shut one, then each joint's.
+			const report = (k: number) => (done: number) =>
+				(host.dataset['baking'] = `${k * samples + done} of ${(keys.length + 1) * samples}`);
+			const { light, summed } = await bakeLightmap(view.renderer, lit, samples, 4, report(0));
+			const changes = [];
+			for (const [k, key] of keys.entries()) {
+				const at = joints.openAt(key);
+				joints.set(key, at);
+				const open = await bakeLightmap(view.renderer, lit, samples, 4, report(k + 1));
+				joints.set(key, joints.closedAt(key));
+				changes.push(lightChange(key, at, light, open.light));
+			}
 			const { width, height } = lit.atlas;
-			const file = encodeLightmap(light, width, height, roomChecksum(lit));
+			const file = encodeLightmap(light, width, height, roomChecksum(lit), changes);
 			// The room it is for, beside it, for e2e scripts that inspect the light.
 			Object.assign(window, { houseBake: file, houseRoom: lit, houseLight: light });
 			host.dataset['baked'] = JSON.stringify({
 				atlas: [width, height],
 				covered: lit.atlas.charts,
 				samples: summed,
+				joints: Object.fromEntries(changes.map((c) => [c.key, c.texels.length])),
 				seconds: Math.round((performance.now() - started) / 100) / 10,
 			});
 		};

@@ -59,7 +59,9 @@ export async function bakeLightmap(
 		const glass = transmission > 0;
 		const frosted = glass && (std?.roughness ?? 1) > CLEAR_GLASS_ROUGHNESS;
 		const albedo = std ? std.color : new THREE.Color(0.5, 0.5, 0.5);
-		const p = mesh.geometry.getAttribute('position');
+		// Where it stands: a door baked open is drawn at rest and placed by its matrix.
+		mesh.updateMatrixWorld();
+		const p = mesh.geometry.getAttribute('position').clone().applyMatrix4(mesh.matrixWorld);
 		const base = positions.length / 3;
 		const tri = mesh.geometry.index
 			? Array.from(
@@ -165,8 +167,8 @@ export async function bakeLightmap(
 			out vec3 vPos;
 			out vec3 vNormal;
 			void main() {
-				vPos = position;
-				vNormal = normal;
+				vPos = (modelMatrix * vec4(position, 1.0)).xyz;
+				vNormal = mat3(modelMatrix) * normal;
 				gl_Position = vec4(uv1 * 2.0 - 1.0, 0.0, 1.0);
 			}
 		`,
@@ -183,6 +185,8 @@ export async function bakeLightmap(
 		const material = m.material;
 		if (Array.isArray(material) || isGlass(material)) continue;
 		const flatMesh = new THREE.Mesh(m.geometry, raster);
+		flatMesh.matrixAutoUpdate = false;
+		flatMesh.matrix.copy(m.matrixWorld);
 		// Drawn at its lightmap coordinates, not where it stands: three's culling by the
 		// camera's view would drop every mesh beyond a metre of the room's origin.
 		flatMesh.frustumCulled = false;

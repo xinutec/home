@@ -109,5 +109,8 @@ describe('joints', () => {
 		joints.toggle(key, 0);
 		joints.update(10_000);
 		expect(joints.value(key)).toBe(5);
+		expect(joints.openness(key)).toBe(1);
+		expect(joints.openAt(key)).toBe(5);
+		expect(joints.keys()).toContain(key);
 	});
 });

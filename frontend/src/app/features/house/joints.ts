@@ -61,6 +61,29 @@ export class Joints {
 		return typeof key === 'string' ? key : undefined;
 	}
 
+	/** Every joint that has something drawn on it, by `piece/part`. */
+	keys(): string[] {
+		return [...this.moving.keys()];
+	}
+
+	/** Where a joint is shut. */
+	closedAt(key: string): number {
+		return this.joint(key).joint.range[0];
+	}
+
+	/** Where a joint opens to: its stop, else its travel's end. */
+	openAt(key: string): number {
+		const { range, stop } = this.joint(key).joint;
+		return stop ?? range[1];
+	}
+
+	/** How far open a joint is, from 0 shut to 1 at `openAt`. */
+	openness(key: string): number {
+		const closed = this.closedAt(key);
+		const open = this.openAt(key);
+		return open === closed ? 0 : (this.value(key) - closed) / (open - closed);
+	}
+
 	/** Where a joint is: metres out, or degrees open. */
 	value(key: string): number {
 		return this.state[key] ?? this.joint(key).joint.range[0];
@@ -87,8 +110,8 @@ export class Joints {
 
 	/** Opens a joint that is shut or shutting, shuts one that is open or opening. */
 	toggle(key: string, now: number): void {
-		const { range, stop } = this.joint(key).joint;
-		const [closed, open] = [range[0], stop ?? range[1]];
+		const { range } = this.joint(key).joint;
+		const [closed, open] = [range[0], this.openAt(key)];
 		const run = this.runs.get(key);
 		const from = this.value(key);
 		const opening = run ? run.to !== open : from === closed;

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import type { Lightmap } from './bake-file';
+import type { JointLight, Lightmap } from './bake-file';
 import { checksum } from './bake-file';
 import type { Lit } from './room-builder';
 import { SKY, windowRadiance } from './sky';
@@ -22,11 +22,16 @@ export function roomChecksum(lit: Lit): number {
  * draws a light map (its irradiance), which stands in for every light in the
  * scene. Frosted panes glow with the daylight they let in, clear ones show the
  * sky; no light is computed while drawing, so a phone draws the path-traced look
- * at the cost of a flat one. Returns whether it applied; if not, nothing changed.
+ * at the cost of a flat one. Returns the lightmap's texture, if it applied; if not,
+ * nothing changed.
  */
-export function applyLightmap(scene: THREE.Scene, lit: Lit, map: Lightmap): boolean {
-	if (map.width !== lit.atlas.width || map.height !== lit.atlas.height) return false;
-	if (map.checksum !== roomChecksum(lit)) return false;
+export function applyLightmap(
+	scene: THREE.Scene,
+	lit: Lit,
+	map: Lightmap,
+): THREE.DataTexture | undefined {
+	if (map.width !== lit.atlas.width || map.height !== lit.atlas.height) return undefined;
+	if (map.checksum !== roomChecksum(lit)) return undefined;
 	const texture = new THREE.DataTexture(
 		map.data,
 		map.width,
@@ -73,7 +78,82 @@ export function applyLightmap(scene: THREE.Scene, lit: Lit, map: Lightmap): bool
 	for (const l of lights) l.removeFromParent();
 	scene.environment = null;
 	scene.background = new THREE.Color(SKY[0], SKY[1], SKY[2]);
-	return true;
+	return texture;
+}
+
+/**
+ * The light of the doors and drawers as they open: on the lightmap, baked with
+ * every joint shut, each joint's change of light (as baked with it open, `JointLight`)
+ * added as far as it is open. A texel two joints change takes both. Only the rows
+ * of the texels that change go to the GPU.
+ */
+export class JointLights {
+	/** Each joint's texels' light shut, RGB; and each joint's texels by index. */
+	private readonly shut: Float32Array[];
+	private readonly where: Map<number, number>[];
+	/** Each joint's texels as row spans: [row, first, last] columns. */
+	private readonly spans: [number, number, number][][];
+	private readonly shown: number[];
+
+	constructor(
+		private readonly texture: THREE.DataTexture,
+		private readonly joints: JointLight[],
+	) {
+		const data = this.data();
+		const width = texture.image.width;
+		this.shut = joints.map((j) => {
+			const out = new Float32Array(j.texels.length * 3);
+			j.texels.forEach((t, i) => {
+				for (let c = 0; c < 3; c++) out[i * 3 + c] = THREE.DataUtils.fromHalfFloat(data[t * 4 + c]);
+			});
+			return out;
+		});
+		this.where = joints.map((j) => new Map([...j.texels].map((t, i) => [t, i])));
+		this.spans = joints.map((j) => {
+			const rows = new Map<number, [number, number]>();
+			for (const t of j.texels) {
+				const [row, col] = [Math.floor(t / width), t % width];
+				const span = rows.get(row);
+				rows.set(row, span ? [Math.min(span[0], col), Math.max(span[1], col)] : [col, col]);
+			}
+			return [...rows].map(([row, [a, b]]) => [row, a, b]);
+		});
+		this.shown = joints.map(() => 0);
+	}
+
+	/** Shows each joint `openness(key)` of the way open (0 shut, 1 as baked); true if
+	 *  the light changed. */
+	show(openness: (key: string) => number): boolean {
+		const now = this.joints.map((j) => openness(j.key));
+		const changed = this.joints.map((_, k) => now[k] - this.shown[k] !== 0);
+		if (!changed.includes(true)) return false;
+		const data = this.data();
+		const width = this.texture.image.width;
+		this.joints.forEach((j, k) => {
+			if (!changed[k]) return;
+			j.texels.forEach((t, i) => {
+				for (let c = 0; c < 3; c++) {
+					let v = this.shut[k][i * 3 + c];
+					this.joints.forEach((_, m) => {
+						const at = this.where[m].get(t);
+						if (at !== undefined) v += now[m] * this.joints[m].delta[at * 3 + c];
+					});
+					data[t * 4 + c] = THREE.DataUtils.toHalfFloat(Math.max(0, v));
+				}
+			});
+			for (const [row, a, b] of this.spans[k])
+				this.texture.addUpdateRange((row * width + a) * 4, (b - a + 1) * 4);
+		});
+		now.forEach((v, k) => (this.shown[k] = v));
+		this.texture.needsUpdate = true;
+		return true;
+	}
+
+	private data(): Uint16Array {
+		const data: unknown = this.texture.image.data;
+		if (!(data instanceof Uint16Array)) throw new Error('the lightmap is not half floats');
+		return data;
+	}
 }
 
 /** Where a room's reflection probe sees it from: its middle, at a standing eye. */

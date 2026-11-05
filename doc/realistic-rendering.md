@@ -453,8 +453,14 @@ the gate's sweeps, halved down to under a millimetre or a degree, find it meets
 something (the IKEA cupboards' doors, 5 to 10 degrees, against the bean bag and
 the armchair), written into the scene and checked against what they find. An
 open door stops the walker where it stands now: what moves on each joint is a BVH
-of its own, in its own frame, met through the door's current place. Not yet: the light inside, which is baked shut, so a cabinet's inside and the back of
-its doors show black. The sideboard's drawers are drawers: a front, two sides, a
+of its own, in its own frame, met through the door's current place. Their light is baked: the lightmap with every
+joint shut, then once more for each joint alone open (the baker draws a mesh where
+its matrix places it), keeping the texels whose light that changes by over 2%;
+the two bakes share their random numbers, so what no path through the moved part
+reaches comes out the same. The page adds each joint's change as far as it is
+open (`JointLights`), uploading only the rows it touches. Nine joints, 23k to
+114k texels each, ten bakes in 10 minutes on horus; the file grows from 2.9 to
+5.3 MB. The sideboard's drawers are drawers: a front, two sides, a
 back and a bottom, riding 9 mm over the shelf (their boxes guessed).
 
 ### 6. Detail, judged in that light
