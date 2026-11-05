@@ -15,7 +15,7 @@ import { roomPerimeter, segments, wallPanels } from './scene-geometry';
 export const TOLERANCE = 0.002; // metres
 
 export interface Violation {
-	kind: 'overlap' | 'wall' | 'sweep' | 'envelope' | 'support' | 'joint';
+	kind: 'sweep' | 'envelope' | 'support' | 'joint';
 	what: string;
 }
 
@@ -128,22 +128,9 @@ const SWEEP_STEPS = 12;
 export function check(scene: HouseScene): Violation[] {
 	const out: Violation[] = [];
 	const ws = walls(scene);
+	// At rest, two things in one place are the drawn house's to find, on its real
+	// shapes (`collisions.ts`); here, what moves and what holds things up.
 	const all = scene.furniture.flatMap((f) => solidsOf(f));
-
-	// At rest: no two solids in one place, nothing through a wall.
-	for (let i = 0; i < all.length; i++) {
-		for (let j = i + 1; j < all.length; j++) {
-			const d = penetration(all[i], all[j]);
-			if (d > 0)
-				out.push({
-					kind: 'overlap',
-					what: `${label(all[i])} and ${label(all[j])} overlap by ${(d * 1000).toFixed(0)} mm`,
-				});
-		}
-		for (const w of ws)
-			if (throughWall(all[i], w))
-				out.push({ kind: 'wall', what: `${label(all[i])} through ${w.name}` });
-	}
 
 	scene.furniture.forEach((f) => {
 		const piece = pieceId(f);

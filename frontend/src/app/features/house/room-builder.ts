@@ -75,20 +75,29 @@ export interface Stage {
 	own<T extends { dispose(): void }>(resource: T): T;
 }
 
-/** What a mesh of the house is, for the physics (`userData.solid`): a part of a piece,
+/** What a mesh of the house is, for the physics (`solidTag`): a part of a piece,
  *  or a room's surface of a kind. */
 export type SolidTag =
-	| { kind: 'part'; piece: string; part: string; room?: string }
+	/** `sheet`: an open surface (a curtain's folds, leaves), with no inside. */
+	| { kind: 'part'; piece: string; part: string; room?: string; sheet: boolean }
 	| {
 			kind: 'wall' | 'floor' | 'ceiling' | 'coving' | 'skirting' | 'frame' | 'glass' | 'passage';
 			room?: string;
 	  };
 
+/** What each mesh `buildHouse` made is. */
+const solids = new WeakMap<THREE.Object3D, SolidTag>();
+
+/** What a mesh of the house is, as `buildHouse` made it; undefined for anything else. */
+export function solidTag(o: THREE.Object3D): SolidTag | undefined {
+	return solids.get(o);
+}
+
 /**
  * The house's meshes, as drawn: every room's shell and windows, the passages
  * between rooms, and every piece as its parts, in place. Each mesh says which room
  * it is in (`userData.room`, the room whose reflections it takes) and what it is
- * (`userData.solid`).
+ * (`solidTag`).
  */
 export function buildHouse(
 	stage: Stage,
@@ -102,7 +111,7 @@ export function buildHouse(
 		for (const o of stage.scene.children.slice(from)) {
 			o.userData['room'] = shared;
 			// Lights are not solids.
-			if (o instanceof THREE.Mesh) o.userData['solid'] = solid(o);
+			if (o instanceof THREE.Mesh) solids.set(o, solid(o));
 		}
 	};
 	for (const r of scene.rooms) {
@@ -131,7 +140,7 @@ export function buildHouse(
 			mesh.castShadow = mesh.receiveShadow = true;
 			stage.scene.add(mesh);
 			if (night && (parts[k].material ?? f.material) === LAMP_MATERIAL) addLampLight(stage, mesh);
-			tag(from, room, () => ({ kind: 'part', piece: sol.piece, part: sol.part, room }));
+			tag(from, room, () => ({ kind: 'part', piece: sol.piece, part: sol.part, room, sheet }));
 		});
 	}
 }
@@ -224,7 +233,7 @@ function addRoomShell(
 	view.scene.add(shell(facing(flat(view, pts, scene.height, ceiling), [0, -1, 0]), 'ceiling'));
 }
 
-/** Names what a shell mesh is, for the physics (`buildHouse`'s `userData.solid`). */
+/** Names what a shell mesh is, for the physics (`solidTag`). */
 function shell(mesh: THREE.Mesh, kind: string): THREE.Mesh {
 	mesh.userData['shell'] = kind;
 	return mesh;

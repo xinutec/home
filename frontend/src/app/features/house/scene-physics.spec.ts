@@ -1,28 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import json from '../../../../../scenes/house.json';
 import type { HouseScene } from './house.model';
-import { check } from './physics';
+import * as THREE from 'three';
+import { collisions } from './collisions';
+import { MaterialLibrary } from './materials';
+import { check, TOLERANCE } from './physics';
+import { buildHouse } from './room-builder';
 
 // JSON arrays read as number[], not the format's [x, z] pairs; the format is checked
 // by these very rules, so the cast is the claim under test.
 const scene = json as unknown as HouseScene;
 const found = check(scene).map((v) => `${v.kind}: ${v.what}`);
-
-/**
- * What the physics finds in the kitchen. Each is real, and each is
- * the kitchen's to settle, not a rule to loosen: fixing one means deleting its
- * line here; a new finding anywhere fails.
- */
-const KNOWN_KITCHEN = [
-	// The board at the serving hatch, 1.34 m wide, passes through the solid wall
-	// either side of the hatch's 0.84 m opening.
-	'wall: kitchen-serving-worktop/body through dining wall 0',
-	'wall: kitchen-serving-worktop/body through kitchen wall 5',
-	// A wall shelf's three dividers run 2-3 cm into its back board.
-	'overlap: kitchen-cubbies-left/body and kitchen-cubbies-back/body overlap by 20 mm',
-	'overlap: kitchen-cubbies-divider/body and kitchen-cubbies-back/body overlap by 30 mm',
-	'overlap: kitchen-cubbies-right/body and kitchen-cubbies-back/body overlap by 20 mm',
-];
 
 /**
  * Doors in the living room that loose furniture stands in front of. They really do
@@ -51,7 +39,62 @@ describe('scenes/house.json physics', () => {
 		expect([...new Set(living.map(blocked))].sort()).toEqual(BLOCKED_LIVING);
 	});
 
-	it('finds exactly the known kitchen findings, no new ones', () => {
-		expect(found.filter((v) => !v.includes('living'))).toEqual(KNOWN_KITCHEN);
+	it('finds nothing wrong outside the living room', () => {
+		expect(found.filter((v) => !v.includes('living'))).toEqual([]);
 	});
+});
+
+/**
+ * Where two things of the drawn house are in each other, on their real shapes
+ * (`collisions.ts`). Each is real, and each is the scene's to settle, not a rule to
+ * loosen: fixing one means deleting its line here; a new one anywhere fails.
+ */
+const KNOWN_COLLISIONS = [
+	// The board at the serving hatch, 1.34 m wide, passes through the solid wall
+	// either side of the hatch's 0.84 m opening.
+	'dining passage × kitchen-serving-worktop/body',
+	'dining wall × kitchen-serving-worktop/body',
+	'kitchen wall × kitchen-serving-worktop/body',
+	// A wall shelf's three dividers run into its back board.
+	'kitchen-cubbies-divider/body × kitchen-cubbies-back/body',
+	'kitchen-cubbies-left/body × kitchen-cubbies-back/body',
+	'kitchen-cubbies-right/body × kitchen-cubbies-back/body',
+	// Freestanding pieces placed flush on the wall, through the 2 cm skirting in front
+	// of it: each stands on the skirting's face.
+	'dining skirting × dining-wine-rack/body',
+	'bay skirting × living-bay-sofa/leg-back-a',
+	'bay skirting × living-bay-sofa/leg-back-b',
+	'living skirting × living-ikea-cupboard-fireplace-wall/back',
+	'living skirting × living-ikea-cupboard-fireplace-wall/bottom',
+	'living skirting × living-ikea-cupboard-fireplace-wall/door-a',
+	'living skirting × living-ikea-cupboard-fireplace-wall/side-a',
+	'living skirting × living-ikea-cupboard-fireplace-wall/side-b',
+	'living skirting × living-ikea-cupboard-opposite-wall/back',
+	'living skirting × living-ikea-cupboard-opposite-wall/bottom',
+	'living skirting × living-ikea-cupboard-opposite-wall/door-b',
+	'living skirting × living-ikea-cupboard-opposite-wall/side-b',
+	'living skirting × living-sideboard/back',
+	'living skirting × living-sideboard/bottom',
+	'living skirting × living-sideboard/post-back-left',
+	'living skirting × living-sideboard/post-back-right',
+	// The skirting drawn on through what it stops at in the house: the fireplace and
+	// the glazed door's architraves.
+	'living skirting × living-fire-surround/back-panel',
+	'living skirting × living-fire-surround/leg-a',
+	'living skirting × living-fire-surround/leg-b',
+	'living skirting × living-glazed-door/architrave-a',
+	'living skirting × living-glazed-door/architrave-b',
+	'living skirting × living-hearth/body',
+	// A curtain hangs into the bay's window frame.
+	'bay frame × living-curtain-door-side/fabric',
+].sort();
+
+describe('scenes/house.json, drawn', () => {
+	it('has nothing in anything else but the known collisions', () => {
+		const stage = { scene: new THREE.Scene(), own: <T>(r: T) => r };
+		buildHouse(stage, scene, new MaterialLibrary(stage.own, false), false, false);
+		const meshes = stage.scene.children.filter((o): o is THREE.Mesh => o instanceof THREE.Mesh);
+		const hits = collisions(meshes, TOLERANCE).map((c) => `${c.a} × ${c.b}`);
+		expect(hits.sort()).toEqual(KNOWN_COLLISIONS);
+	}, 60_000);
 });

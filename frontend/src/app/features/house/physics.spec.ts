@@ -131,18 +131,9 @@ describe('check', () => {
 		expect(v.some((x) => x.kind === 'sweep' && x.what.includes('stool'))).toBe(true);
 	});
 
-	it('catches two pieces in one place, and a part outside its piece', () => {
-		const a: Furniture = { id: 'a', cx: 0, cz: 1, w: 1, d: 1, h: 1 };
-		const b: Furniture = { id: 'b', cx: 0.5, cz: 1, w: 1, d: 1, h: 1 };
-		expect(check(scene([a, b])).map((v) => v.kind)).toContain('overlap');
+	it('catches a part outside its piece', () => {
 		const loose: Part = { id: 'shelf', size: [1.2, 0.02, 0.3], at: [0, 0.5, 0] };
 		expect(check(scene([cabinet([loose])])).map((v) => v.kind)).toContain('envelope');
-	});
-
-	it('catches a part through a wall', () => {
-		const deep: Part = { id: 'deep', size: [0.5, 0.5, 0.6], at: [0, 0.25, -0.1] };
-		const v = check(scene([cabinet([deep], { cz: 0.2, d: 0.8 })]));
-		expect(v.some((x) => x.kind === 'wall')).toBe(true);
 	});
 
 	it('holds a light fitting by the ceiling it is fixed to', () => {

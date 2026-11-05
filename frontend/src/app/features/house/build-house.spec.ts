@@ -4,8 +4,7 @@ import json from '../../../../../scenes/house.json';
 import { partsOf } from './assembly';
 import type { HouseScene } from './house.model';
 import { MaterialLibrary } from './materials';
-import { buildHouse } from './room-builder';
-import type { SolidTag } from './room-builder';
+import { buildHouse, solidTag } from './room-builder';
 
 const scene = json as unknown as HouseScene;
 
@@ -18,7 +17,7 @@ function built(): THREE.Mesh[] {
 
 describe('buildHouse', () => {
 	const meshes = built();
-	const tags = meshes.map((m) => m.userData['solid'] as SolidTag | undefined);
+	const tags = meshes.map((m) => solidTag(m));
 
 	it('names what every mesh it draws is', () => {
 		expect(tags.filter((t) => !t)).toEqual([]);
