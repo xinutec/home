@@ -263,8 +263,14 @@ export function covingProfile(drop: number, depth: number, steps = 8): [number, 
 }
 
 /** Where a wall's skirting runs, as spans along it: wherever the wall reaches the
- *  floor, so under a window but not across a doorway. */
-export function skirtingRuns(len: number, ops: WallOpening[], h: number): [number, number][] {
+ *  floor, so under a window but not across a doorway, nor across `stops` (what is
+ *  built against the wall, `skirtingStops`). */
+export function skirtingRuns(
+	len: number,
+	ops: WallOpening[],
+	h: number,
+	stops: [number, number][] = [],
+): [number, number][] {
 	const runs: [number, number][] = [];
 	const low = wallPanels(len, ops, h)
 		.filter((p) => p.yb <= 1e-6)
@@ -274,7 +280,40 @@ export function skirtingRuns(len: number, ops: WallOpening[], h: number): [numbe
 		if (last && p.a0 <= last[1] + 1e-6) last[1] = Math.max(last[1], p.a1);
 		else runs.push([p.a0, p.a1]);
 	}
-	return runs;
+	let out = runs;
+	for (const [s0, s1] of stops) {
+		const cut: [number, number][] = [];
+		for (const [a0, a1] of out) {
+			if (Math.min(a1, s0) - a0 > 1e-6) cut.push([a0, Math.min(a1, s0)]);
+			if (a1 - Math.max(a0, s1) > 1e-6) cut.push([Math.max(a0, s1), a1]);
+		}
+		out = cut;
+	}
+	return out;
+}
+
+/** Where a room's wall `i` has something built against it (`builtIn`), as spans
+ *  along it: each such piece whose footprint comes within the skirting's depth of
+ *  the wall, on the room's side. */
+export function skirtingStops(scene: HouseScene, room: Room, i: number): [number, number][] {
+	const s = segments(roomPerimeter(room))[i];
+	const len = Math.hypot(s.bx - s.ax, s.bz - s.az);
+	if (!s || len < 1e-6) return [];
+	const [ux, uz] = [(s.bx - s.ax) / len, (s.bz - s.az) / len];
+	const [nx, nz] = inwardNormals(roomPerimeter(room))[i];
+	const reach = (room.skirting?.depth ?? 0) + 0.005;
+	const out: [number, number][] = [];
+	for (const f of scene.furniture) {
+		if (!f.builtIn) continue;
+		const corners = [-1, 1].flatMap((a) =>
+			[-1, 1].map((b) => [f.cx + (a * f.w) / 2 - s.ax, f.cz + (b * f.d) / 2 - s.az]),
+		);
+		const along = corners.map(([x, z]) => x * ux + z * uz);
+		const into = corners.map(([x, z]) => x * nx + z * nz);
+		const [a0, a1] = [Math.max(0, Math.min(...along)), Math.min(len, Math.max(...along))];
+		if (a1 - a0 > 1e-6 && Math.min(...into) <= reach && Math.max(...into) > 0) out.push([a0, a1]);
+	}
+	return out;
 }
 
 /** Into the room from each of its walls, as unit [x, z]: the inside of an outline

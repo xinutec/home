@@ -19,6 +19,7 @@ import {
 	roomPerimeter,
 	segments,
 	skirtingRuns,
+	skirtingStops,
 	wallPanels,
 } from './scene-geometry';
 import type { P3, Passage } from './scene-geometry';
@@ -219,7 +220,7 @@ function addRoomShell(
 				),
 			);
 		if (room.skirting)
-			for (const [a0, a1] of skirtingRuns(len, ops, scene.height))
+			for (const [a0, a1] of skirtingRuns(len, ops, scene.height, skirtingStops(scene, room, i)))
 				view.scene.add(
 					shell(
 						skirting(view, s, len, a0, a1, inward, neighbours(i), room.skirting, skirtingMat),

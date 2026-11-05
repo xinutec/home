@@ -14,6 +14,9 @@ export interface Furniture {
 	d: number;
 	h: number;
 	y0?: number;
+	/** Built into the wall it stands against (a fire surround, a hearth, a door's
+	 *  frame): the skirting stops at it, where a loose piece stands on its face. */
+	builtIn?: boolean;
 	color?: string | null;
 	/** A key into the scene's `materials`; wins over `color` in the room view. */
 	material?: string;

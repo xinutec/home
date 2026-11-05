@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import type { Room } from './house.model';
+import type { Furniture, HouseScene, Room } from './house.model';
 import {
 	bounds,
 	covingProfile,
 	mitre,
 	inwardNormals,
 	skirtingRuns,
+	skirtingStops,
 	glazingLayout,
 	passages,
 	perimeter,
@@ -274,6 +275,48 @@ describe('skirtingRuns', () => {
 			[0, 1],
 			[1.8, 3],
 		]);
+	});
+
+	it('stops at what is built against the wall', () => {
+		expect(skirtingRuns(3, [], 2.4, [[1, 1.5]])).toEqual([
+			[0, 1],
+			[1.5, 3],
+		]);
+		expect(skirtingRuns(3, [], 2.4, [[-0.2, 0.5]])).toEqual([[0.5, 3]]);
+	});
+});
+
+describe('skirtingStops', () => {
+	// A 4 × 3 m room; its first wall runs along z = 0, the room at +z.
+	const room: Room = {
+		name: 'r',
+		start: [0, 0],
+		walls: [
+			[0, 4],
+			[90, 3],
+			[90, 4],
+			[90, 3],
+		],
+		skirting: { height: 0.17, depth: 0.02 },
+	};
+	const piece = (over: Partial<Furniture>): Furniture => ({
+		id: 'p',
+		cx: 1,
+		cz: 0.1,
+		w: 1,
+		d: 0.2,
+		h: 1,
+		...over,
+	});
+	const scene = (furniture: Furniture[]): HouseScene => ({ height: 2.4, rooms: [room], furniture });
+
+	it('is where a built-in piece stands against the wall, along it', () => {
+		expect(skirtingStops(scene([piece({ builtIn: true })]), room, 0)).toEqual([[0.5, 1.5]]);
+	});
+
+	it('is nowhere for a loose piece, or a built-in one out in the room', () => {
+		expect(skirtingStops(scene([piece({})]), room, 0)).toEqual([]);
+		expect(skirtingStops(scene([piece({ builtIn: true, cz: 1 })]), room, 0)).toEqual([]);
 	});
 });
 

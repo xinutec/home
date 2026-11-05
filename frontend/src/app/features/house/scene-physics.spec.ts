@@ -59,11 +59,8 @@ const KNOWN_COLLISIONS = [
 	'kitchen-cubbies-divider/body × kitchen-cubbies-back/body',
 	'kitchen-cubbies-left/body × kitchen-cubbies-back/body',
 	'kitchen-cubbies-right/body × kitchen-cubbies-back/body',
-	// Freestanding pieces placed flush on the wall, through the 2 cm skirting in front
-	// of it: each stands on the skirting's face.
-	'dining skirting × dining-wine-rack/body',
-	'bay skirting × living-bay-sofa/leg-back-a',
-	'bay skirting × living-bay-sofa/leg-back-b',
+	// The alcove cupboards, as measured, flush on the back and side walls: through
+	// the 2 cm skirting there, on both. Which gives way waits on how they stand.
 	'living skirting × living-ikea-cupboard-fireplace-wall/back',
 	'living skirting × living-ikea-cupboard-fireplace-wall/bottom',
 	'living skirting × living-ikea-cupboard-fireplace-wall/door-a',
@@ -73,20 +70,6 @@ const KNOWN_COLLISIONS = [
 	'living skirting × living-ikea-cupboard-opposite-wall/bottom',
 	'living skirting × living-ikea-cupboard-opposite-wall/door-b',
 	'living skirting × living-ikea-cupboard-opposite-wall/side-b',
-	'living skirting × living-sideboard/back',
-	'living skirting × living-sideboard/bottom',
-	'living skirting × living-sideboard/post-back-left',
-	'living skirting × living-sideboard/post-back-right',
-	// The skirting drawn on through what it stops at in the house: the fireplace and
-	// the glazed door's architraves.
-	'living skirting × living-fire-surround/back-panel',
-	'living skirting × living-fire-surround/leg-a',
-	'living skirting × living-fire-surround/leg-b',
-	'living skirting × living-glazed-door/architrave-a',
-	'living skirting × living-glazed-door/architrave-b',
-	'living skirting × living-hearth/body',
-	// A curtain hangs into the bay's window frame.
-	'bay frame × living-curtain-door-side/fabric',
 ].sort();
 
 describe('scenes/house.json, drawn', () => {
