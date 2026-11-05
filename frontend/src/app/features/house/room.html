@@ -5,6 +5,10 @@
 		<p class="hint">Drag to look · hold the left side to walk</p>
 	}
 
+	@if (fps()) {
+		<p class="fps" aria-hidden="true">{{ fps() }}</p>
+	}
+
 	@if (stats()) {
 		<p class="stats">{{ stats() }}</p>
 	}

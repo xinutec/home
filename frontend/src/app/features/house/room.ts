@@ -58,6 +58,8 @@ const AUTO_KEY = 0.2;
 /** Metres around where a door or drawer passes that its opening can change the
  *  light by more than lightChange's floor: the bake traces only there. */
 const JOINT_LIGHT_REACH = 0.75;
+/** Milliseconds between frame-rate readouts. */
+const FPS_READ_MS = 500;
 /** Milliseconds of path tracing a frame under `?trace`: the page stays responsive. */
 const TRACE_BUDGET_MS = 30;
 
@@ -83,6 +85,8 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 	readonly walking = signal(false);
 	/** Whether the walker has looked or moved yet: the hint shows until then. */
 	readonly moved = signal(false);
+	/** Frames a second while the view moves, and the slowest frame; `idle` while still. */
+	readonly fps = signal('');
 	/** With `?stats`: what one frame costs, once measured. */
 	readonly stats = signal('');
 	readonly room = inject(ActivatedRoute).snapshot.paramMap.get('room') ?? '';
@@ -96,6 +100,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 	/** The light of the doors and drawers as they open, once a lightmap applies. */
 	private jointLights?: JointLights;
 	private readonly query: CameraQuery = cameraFromQuery(window.location.search);
+	private fpsTimer = 0;
 
 	constructor() {
 		scaffoldTitle(() => (this.room ? this.room[0].toUpperCase() + this.room.slice(1) : 'Room'));
@@ -111,6 +116,14 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			r.toneMappingExposure = this.query.exposure ?? 1;
 		});
 		this.view = view;
+		// Read twice a second, outside Angular; the page changes only when the text does.
+		this.zone.runOutsideAngular(() => {
+			this.fpsTimer = window.setInterval(() => {
+				const r = view.frames.reading(performance.now());
+				const text = r ? `${r.fps} fps · slowest ${r.slowest} ms` : 'idle';
+				if (text !== this.fps()) this.zone.run(() => this.fps.set(text));
+			}, FPS_READ_MS);
+		});
 		if ((this.query.trace || this.query.export) && this.query.night) {
 			// Night: nothing outside; the room is lit by its ceiling lights (buildInterior).
 			view.scene.environment = null;
@@ -415,6 +428,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 	}
 
 	ngOnDestroy(): void {
+		window.clearInterval(this.fpsTimer);
 		this.tracer?.dispose();
 		this.tracer = undefined;
 		this.view?.dispose();

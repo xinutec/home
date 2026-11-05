@@ -442,7 +442,9 @@ keys. The walker is a column 0.2 m round, 0.12 to 1.75 m up, pushed sideways out
 of the drawn room's own triangles (`Collider`: one BVH over the meshes the page
 draws, 21,702 triangles, built in 20 ms on the Mac; a step 10 µs), so it slides
 along a wall or round a table's edge, and steps over a rug or the hearth. A camera
-placed by the URL (a photo's) keeps its exact pose.
+placed by the URL (a photo's) keeps its exact pose. The top corner says the frame
+rate while anything moves, and how long the slowest frame's work took
+(`FrameRate`; `idle` while still, as nothing is drawn then).
 
 **Doors and drawers open** (`joints.ts`): a tap (or click) on one opens it, a second
 shuts it, eased over 0.7 s for its whole travel. What moves on each joint is kept

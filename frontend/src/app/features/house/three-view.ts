@@ -1,6 +1,7 @@
 import type { NgZone } from '@angular/core';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { FrameRate } from './frame-rate';
 
 /**
  * The plumbing every 3D screen shares: a renderer in a host element, a camera,
@@ -15,6 +16,9 @@ export class ThreeView {
 	readonly renderer: THREE.WebGLRenderer;
 	readonly camera: THREE.PerspectiveCamera;
 	readonly controls: OrbitControls;
+
+	/** The frames drawn, for a frame-rate readout. */
+	readonly frames = new FrameRate();
 
 	/** While true, nothing is drawn here: something else owns the canvas (the path tracer). */
 	paused = false;
@@ -65,6 +69,7 @@ export class ThreeView {
 		this.framePending = true;
 		this.zone.runOutsideAngular(() => {
 			this.frame = requestAnimationFrame(() => {
+				const start = performance.now();
 				this.framePending = false;
 				let moving = false;
 				if (this.mover) moving = this.mover.update();
@@ -72,6 +77,8 @@ export class ThreeView {
 				if (this.beforeRender?.(performance.now())) moving = true;
 				this.renderer.render(this.scene, this.camera);
 				const more = this.afterRender?.(performance.now()) ?? false;
+				const end = performance.now();
+				this.frames.frame(end, end - start);
 				if (moving || more) this.requestFrame();
 			});
 		});

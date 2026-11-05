@@ -49,6 +49,20 @@
 	flex: 1;
 }
 
+// The frame rate, small in the top corner, over the scene; touches pass through it.
+.fps {
+	position: absolute;
+	top: 0;
+	right: 0;
+	z-index: 1;
+	margin: 0.5rem 0.75rem;
+	font: var(--mat-sys-label-small);
+	font-variant-numeric: tabular-nums;
+	color: var(--on-media);
+	opacity: 0.8;
+	pointer-events: none;
+}
+
 // `?stats`: one frame's cost, over the scene in the over-media colour.
 .stats {
 	position: absolute;
