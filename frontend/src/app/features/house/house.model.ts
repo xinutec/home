@@ -130,6 +130,9 @@ export interface Room {
 	/** The board along the foot of every wall, wherever the wall reaches the floor:
 	 *  `height` up the wall, `depth` out from it, metres. */
 	skirting?: { height: number; depth: number; estimate?: string };
+	/** The room whose reflection probe this one shares: a bay is part of its room,
+	 *  and a probe of its own would stand among its windows. */
+	reflections?: string;
 }
 
 /** Hand-authored house geometry (scenes/house.json): a set of rooms (each its own

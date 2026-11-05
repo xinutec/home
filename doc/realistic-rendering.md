@@ -298,7 +298,7 @@ light's assumed colour and the phone's white balance).
 | The bay sofa as its construction (arched back, scroll arms, middle foot), traced 256, estimated paints | 17.1 | sofa seat 12.2 → 10.5 |
 | Paints fitted to this photo, traced | 10.8 | no fit: every paint but the ceiling at the 0.95 limit |
 | The same, clear openers as glass | 11.0 | unchanged: not the openers |
-| Reflections from a probe per room, A/B against one for the house (raster, baked, both at the solved exposure) | 16.3 → 11.8 | curtain 31.6 → 6.7 (×0.07 → ×1.42): the house's probe, by the dining wall, saw the dim far end and left the curtains black; the living room's own sees the bay. Keyframe 1 6.4 → 6.3 |
+| Reflections from a probe per room, A/B against one for the house (raster, baked, both at the solved exposure) | 16.3 → 15.8 | a probe of the bay's own first gave 11.8, for the wrong reason: standing among the windows it lit the bay curtains (curtain 31.6 → 6.7) and turned the bay sofa's wood white. The bay shares the living room's now (`reflections` in the scene), and reflections are normalized by the lightmap; the curtains are back at 30.3 (×0.09), dark in their own light. Keyframe 1 6.4 → 5.8 |
 
 On keyframe 1, paints fitted to it score 4.7 traced (sideboard door 1.2, fire
 surround 1.7, carpet 2.1; alcove side wall 10.1, TV 8.0), but they are not in the
@@ -389,7 +389,12 @@ Reflections, as games make them (`addReflections`, `baked-light.ts`): once the
 lightmap is on, each room is captured into a cube map from its middle at 1.4 m
 (a reflection probe, 256 px a face), prefiltered by roughness, and every surface
 in that room reflects it by its Fresnel and roughness. The merge keeps rooms apart
-for this (`userData.room`). One probe for the house sat at its bounding box's
+for this (`userData.room`; a piece standing between rooms takes the nearest, and
+a room with `reflections` set shares that room's probe: the bay, whose own probe
+would stand among its windows). A reflection is scaled by the surface's baked
+light over the probe's light from the same side, at most 1 (normalization, as
+games do it), so a surface in shadow does not reflect what the probe sees in full.
+One probe for the house sat at its bounding box's
 middle, in the living room by the dining wall: the kitchen's steel reflected that
 room, ten times darker than its own, and showed black at the kitchen's exposure. Its light stays the lightmap's alone:
 three would add the probe as diffuse light too, which the lightmap already holds,

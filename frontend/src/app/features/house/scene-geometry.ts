@@ -58,6 +58,26 @@ export function roomAt(rooms: Room[], x: number, z: number): string | undefined 
 	return undefined;
 }
 
+/** The room holding the point (x, z), else the one whose outline comes closest: for
+ *  a piece standing in a wall's thickness or across a room's edge. */
+export function nearestRoom(rooms: Room[], x: number, z: number): string | undefined {
+	const holding = roomAt(rooms, x, z);
+	if (holding) return holding;
+	let best: string | undefined;
+	let bestD = Infinity;
+	for (const room of rooms)
+		for (const s of segments(roomPerimeter(room))) {
+			const [dx, dz] = [s.bx - s.ax, s.bz - s.az];
+			const t = Math.max(
+				0,
+				Math.min(1, ((x - s.ax) * dx + (z - s.az) * dz) / (dx * dx + dz * dz || 1)),
+			);
+			const d = Math.hypot(x - s.ax - t * dx, z - s.az - t * dz);
+			if (d < bestD) [best, bestD] = [room.name, d];
+		}
+	return best;
+}
+
 /** Consecutive wall segments from a list of perimeter points. */
 export function segments(pts: Pt[]): WallSeg[] {
 	const segs: WallSeg[] = [];

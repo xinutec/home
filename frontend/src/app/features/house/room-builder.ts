@@ -15,7 +15,7 @@ import {
 	inwardNormals,
 	mitre,
 	passages,
-	roomAt,
+	nearestRoom,
 	roomPerimeter,
 	segments,
 	skirtingRuns,
@@ -50,7 +50,8 @@ export function buildInterior(
 	const night = physical && !!camera.night;
 	// Each mesh says which room it is in (`userData.room`): the room's reflections are its own.
 	const tag = (from: number, room: string | undefined) => {
-		for (const o of view.scene.children.slice(from)) o.userData['room'] = room;
+		const shared = scene.rooms.find((r) => r.name === room)?.reflections ?? room;
+		for (const o of view.scene.children.slice(from)) o.userData['room'] = shared;
 	};
 	for (const r of scene.rooms) {
 		const from = view.scene.children.length;
@@ -78,7 +79,7 @@ export function buildInterior(
 			view.scene.add(mesh);
 			if (night && (parts[k].material ?? f.material) === LAMP_MATERIAL) addLampLight(view, mesh);
 		});
-		tag(from, roomAt(scene.rooms, f.cx, f.cz));
+		tag(from, nearestRoom(scene.rooms, f.cx, f.cz));
 	}
 
 	// The everyday view draws the fixed room one-sided, as a few dozen meshes, not

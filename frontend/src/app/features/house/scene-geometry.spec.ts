@@ -10,6 +10,7 @@ import {
 	glazingLayout,
 	passages,
 	perimeter,
+	nearestRoom,
 	roomAt,
 	roomPerimeter,
 	segments,
@@ -97,6 +98,27 @@ describe('roomAt', () => {
 	it('is undefined in the wall between them and outside', () => {
 		expect(roomAt(rooms, 2.5, 1)).toBeUndefined();
 		expect(roomAt(rooms, 1, -1)).toBeUndefined();
+	});
+});
+
+describe('nearestRoom', () => {
+	const square = (name: string, x: number): Room => ({
+		name,
+		start: [x, 0],
+		heading: 0,
+		walls: [
+			[0, 2],
+			[90, 2],
+			[90, 2],
+			[90, 2],
+		],
+	});
+	const rooms = [square('left', 0), square('right', 3)];
+
+	it('is the room holding the point, else the one whose wall is closest', () => {
+		expect(nearestRoom(rooms, 1, 1)).toBe('left');
+		expect(nearestRoom(rooms, 2.2, 1)).toBe('left');
+		expect(nearestRoom(rooms, 2.8, 1)).toBe('right');
 	});
 });
 

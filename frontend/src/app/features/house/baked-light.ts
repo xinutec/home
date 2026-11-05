@@ -155,11 +155,31 @@ export function addReflections(
 }
 
 /** three's indirect-light chunk without the environment's diffuse light: the
- *  surface reflects the probe, and its light is the lightmap's. */
+ *  surface reflects the probe, and its light is the lightmap's. The reflection is
+ *  normalized as games do it: scaled by the surface's baked light over the probe's
+ *  light from the same side, at most 1, so a surface in shadow (a sofa's arm with
+ *  the bay behind it) does not reflect the windows the probe sees in full. */
 export function specularOnlyChunk(): string {
 	const chunk = THREE.ShaderChunk.lights_fragment_maps;
-	const out = chunk.replace('iblIrradiance += getIBLIrradiance( geometryNormal );', '');
-	if (out === chunk)
-		throw new Error("three's lights_fragment_maps changed: the probe would light surfaces twice");
+	const normalized = `#ifdef USE_LIGHTMAP
+		const vec3 luma = vec3( 0.2126, 0.7152, 0.0722 );
+		float probeLight = dot( getIBLIrradiance( geometryNormal ), luma );
+		float hereLight = dot( lightMapIrradiance, luma );
+		reflectionScale = clamp( hereLight / max( probeLight, 1e-8 ), 0.0, 1.0 );
+	#endif`;
+	const swaps: [string, string][] = [
+		['iblIrradiance += getIBLIrradiance( geometryNormal );', normalized],
+		[
+			'radiance += getIBLRadiance( geometryViewDir, geometryNormal, material.roughness );',
+			'radiance += reflectionScale * getIBLRadiance( geometryViewDir, geometryNormal, material.roughness );',
+		],
+	];
+	let out = `float reflectionScale = 1.0;\n${chunk}`;
+	for (const [from, to] of swaps) {
+		const next = out.replace(from, to);
+		if (next === out)
+			throw new Error("three's lights_fragment_maps changed: the probe would light surfaces twice");
+		out = next;
+	}
 	return out;
 }
