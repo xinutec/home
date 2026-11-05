@@ -41,7 +41,8 @@ how it is judged done.
    as estimates: the window over the sink, the back door with its side panel, the
    oven housing, the cooker hood, the tiled pillar and the splashback. The dining
    room, an empty shell until then, got its window, radiator, curtains and pole,
-   the round table with four chairs, the plant and the wine rack, the same way.
+   the round table with four chairs, the plant in its basket on the table, and the
+   wine rack, the same way.
    Their notes say what to measure (`./scripts/estimates.mjs` lists them). Next: the bay sofa, the sideboard and TV, the bay's three windows, the
    curtains and pole, the fireplace's leg and arch, the coving and skirting, the
    ceiling light.
@@ -121,7 +122,8 @@ how it is judged done.
   its far end. `./scripts/estimates.mjs` lists every estimate.
 - **Physics:** `physics.ts`, run on the real scene by `scene-physics.spec.ts`; the
   kitchen's known findings are listed there by name.
-- **Materials:** physically based, with procedural wood grain and carpet; the
+- **Materials:** physically based, with procedural wood grain (along each face's
+  longer side: up a door, along a shelf) and carpet; the
   paints toned to keyframe 1 under the approximate light (so off under correct
   light), the glass with its transmittance.
 - **Light:** the everyday view keeps an approximate setup (generic environment, sky

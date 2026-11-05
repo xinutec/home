@@ -93,7 +93,7 @@ export class MaterialLibrary {
 		return mat;
 	}
 
-	private pattern(kind: 'wood' | 'carpet'): THREE.Texture {
+	private pattern(kind: 'wood' | 'carpet' | 'tiles'): THREE.Texture {
 		const hit = this.patterns.get(kind);
 		if (hit) return hit;
 		const canvas = document.createElement('canvas');
@@ -101,6 +101,7 @@ export class MaterialLibrary {
 		const ctx = canvas.getContext('2d');
 		if (!ctx) throw new Error('no 2D canvas to draw a texture on');
 		if (kind === 'wood') drawWood(ctx, 512);
+		else if (kind === 'tiles') drawTiles(ctx, 512);
 		else drawCarpet(ctx, 512);
 		const tex = this.own(new THREE.CanvasTexture(canvas));
 		tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
@@ -141,6 +142,39 @@ function drawWood(ctx: CanvasRenderingContext2D, px: number): void {
 		}
 		ctx.stroke();
 	}
+}
+
+/** The kitchen's tiles, as the 4 November walk shows them: their colours, drawn over
+ *  the set's mean (the material's colour is the mean) and halfway toward it, as the
+ *  photos show them under the kitchen's soft light. */
+const TILE_COLOURS: [number, number, number][] = [
+	[205, 180, 150],
+	[190, 120, 85],
+	[200, 160, 110],
+	[120, 120, 120],
+	[110, 115, 125],
+	[215, 200, 175],
+	[175, 140, 105],
+];
+const TILES_ACROSS = 8;
+
+/** Square tiles in mixed colours, TILES_ACROSS to a side, between pale grout lines. */
+function drawTiles(ctx: CanvasRenderingContext2D, px: number): void {
+	const r = rng(13);
+	const mean = [0, 1, 2].map(
+		(c) => TILE_COLOURS.reduce((sum, t) => sum + t[c], 0) / TILE_COLOURS.length,
+	);
+	const tint = (c: [number, number, number]) =>
+		`rgb(${c.map((v, i) => Math.min(255, Math.round(((mean[i] + 0.5 * (v - mean[i])) / mean[i]) * 230))).join(',')})`;
+	ctx.fillStyle = tint([225, 220, 210]);
+	ctx.fillRect(0, 0, px, px);
+	const pitch = px / TILES_ACROSS;
+	const grout = 3;
+	for (let i = 0; i < TILES_ACROSS; i++)
+		for (let j = 0; j < TILES_ACROSS; j++) {
+			ctx.fillStyle = tint(TILE_COLOURS[Math.floor(r() * TILE_COLOURS.length)]);
+			ctx.fillRect(i * pitch + grout / 2, j * pitch + grout / 2, pitch - grout, pitch - grout);
+		}
 }
 
 /** Fine speckle around mid-grey, the look of a short cut-pile carpet from standing height. */

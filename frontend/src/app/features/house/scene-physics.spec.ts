@@ -22,8 +22,6 @@ const KNOWN_KITCHEN = [
 	'overlap: kitchen-cubbies-left/body and kitchen-cubbies-back/body overlap by 20 mm',
 	'overlap: kitchen-cubbies-divider/body and kitchen-cubbies-back/body overlap by 30 mm',
 	'overlap: kitchen-cubbies-right/body and kitchen-cubbies-back/body overlap by 20 mm',
-	// A thin plate at 0.77 m touches nothing below or behind.
-	'support: kitchen-sink-bowl is held up by nothing (bottom at 0.77 m)',
 ];
 
 /**

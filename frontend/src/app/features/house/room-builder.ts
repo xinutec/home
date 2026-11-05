@@ -55,7 +55,8 @@ export function buildInterior(
 		solidsOf(f).forEach((sol, k) => {
 			const geom = view.own(partGeometry(parts[k], sol.hw, sol.y1 - sol.y0, sol.hd));
 			// A sheet has two faces to see; a solid shows only its outside.
-			const side = parts[k].shape === 'folds' ? THREE.DoubleSide : THREE.FrontSide;
+			const sheet = parts[k].shape === 'folds' || parts[k].shape === 'fronds';
+			const side = sheet ? THREE.DoubleSide : THREE.FrontSide;
 			const mesh = new THREE.Mesh(geom, mats.get(partMaterial(scene, f, parts[k]), side));
 			mesh.position.set(sol.x, (sol.y0 + sol.y1) / 2, sol.z);
 			mesh.rotation.y = sol.yaw;
@@ -301,6 +302,8 @@ function partGeometry(part: Part, hw: number, h: number, hd: number): THREE.Buff
 				.translate(0, -h / 2, 0);
 		case 'folds':
 			return folds(hw * 2, h, hd * 2);
+		case 'fronds':
+			return fronds(hw * 2, h, hd * 2);
 		case 'arch':
 			return arch(hw * 2, h, hd * 2, part.rise);
 		case 'roll':
@@ -386,6 +389,68 @@ function folds(w: number, h: number, d: number): THREE.BufferGeometry {
 	for (let i = 0; i < steps; i++) {
 		const [a, b, c, e] = [2 * i, 2 * i + 1, 2 * i + 2, 2 * i + 3];
 		index.push(a, c, b, b, c, e);
+	}
+	const geom = new THREE.BufferGeometry();
+	geom.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+	geom.setIndex(index);
+	geom.computeVertexNormals();
+	return geom;
+}
+
+const FROND_LEAVES = 34;
+/** Metres across a crown's stem. */
+const FROND_STEM = 0.025;
+const FROND_STEPS = 6;
+
+/** A crown of long leaves, as a dracaena's: from one point they spread round by the
+ *  golden angle, the inner ones upright, the outer ones lower and drooping at their
+ *  tips, each a strip widest at its middle; scaled to fill the box, on a stem from
+ *  the box's foot to that point. */
+function fronds(w: number, h: number, d: number): THREE.BufferGeometry {
+	const pos: number[] = [];
+	for (let k = 0; k < FROND_LEAVES; k++) {
+		const phi = k * 2.39996;
+		const f = k / (FROND_LEAVES - 1);
+		const rise = ((80 - 70 * f) * Math.PI) / 180;
+		const length = 0.6 + 0.4 * f;
+		const droop = 0.25 + 0.6 * f;
+		const [dx, dz] = [Math.cos(phi), Math.sin(phi)];
+		for (let i = 0; i <= FROND_STEPS; i++) {
+			const t = i / FROND_STEPS;
+			const out = length * t * Math.cos(rise);
+			const y = length * t * Math.sin(rise) - droop * length * t * t;
+			const half = 0.07 * length * Math.pow(Math.sin(Math.PI * t), 0.8);
+			pos.push(out * dx + half * dz, y, out * dz - half * dx);
+			pos.push(out * dx - half * dz, y, out * dz + half * dx);
+		}
+	}
+	const xs = pos.filter((_, i) => i % 3 === 0);
+	const ys = pos.filter((_, i) => i % 3 === 1);
+	const zs = pos.filter((_, i) => i % 3 === 2);
+	const [sx, sz] = [Math.max(...xs.map(Math.abs)), Math.max(...zs.map(Math.abs))];
+	const [y0, y1] = [Math.min(...ys), Math.max(...ys)];
+	for (let i = 0; i < pos.length; i += 3) {
+		pos[i] = (pos[i] / sx) * (w / 2);
+		pos[i + 1] = ((pos[i + 1] - y0) / (y1 - y0) - 0.5) * h;
+		pos[i + 2] = (pos[i + 2] / sz) * (d / 2);
+	}
+	const index: number[] = [];
+	const row = 2 * (FROND_STEPS + 1);
+	for (let k = 0; k < FROND_LEAVES; k++)
+		for (let i = 0; i < FROND_STEPS; i++) {
+			const a = k * row + 2 * i;
+			index.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
+		}
+	// The stem: two crossed strips up to where the leaves spread.
+	const top = (-y0 / (y1 - y0) - 0.5) * h;
+	const r = FROND_STEM / 2;
+	for (const [ax, az] of [
+		[r, 0],
+		[0, r],
+	]) {
+		const a = pos.length / 3;
+		pos.push(-ax, -h / 2, -az, ax, -h / 2, az, -ax, top, -az, ax, top, az);
+		index.push(a, a + 1, a + 2, a + 2, a + 1, a + 3);
 	}
 	const geom = new THREE.BufferGeometry();
 	geom.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -545,7 +610,8 @@ function flat(view: ThreeView, pts: Pt[], y: number, mat: THREE.Material): THREE
 }
 
 /** A box whose UVs run in metres on every face, not 0..1, so wood grain or
- *  carpet is the same size on a shelf as on a door. */
+ *  carpet is the same size on a shelf as on a door. The grain (u) runs along
+ *  each face's longer side: up a door, along a shelf. */
 export function metricBox(w: number, h: number, d: number): THREE.BoxGeometry {
 	const geom = new THREE.BoxGeometry(w, h, d);
 	const uv = uvOf(geom);
@@ -561,7 +627,9 @@ export function metricBox(w: number, h: number, d: number): THREE.BoxGeometry {
 	spans.forEach(([su, sv], face) => {
 		for (let k = 0; k < 4; k++) {
 			const i = face * 4 + k;
-			uv.setXY(i, uv.getX(i) * su, uv.getY(i) * sv);
+			const [u, v] = [uv.getX(i) * su, uv.getY(i) * sv];
+			if (sv > su) uv.setXY(i, v, u);
+			else uv.setXY(i, u, v);
 		}
 	});
 	uv.needsUpdate = true;

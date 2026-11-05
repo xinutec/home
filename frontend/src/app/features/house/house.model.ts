@@ -57,11 +57,13 @@ export interface Part {
 	 *  spun about the vertical (a bean bag); `ring`, a torus facing front, its outer
 	 *  diameter the box's width, its thickness the box's depth (a wreath); `cushion`,
 	 *  the box with its edges and corners rounded (upholstery); `roll`, round about
-	 *  its left-to-right axis (a chair arm's scroll). */
+	 *  its left-to-right axis (a chair arm's scroll); `fronds`, a crown of long
+	 *  leaves spreading from one point, the outer ones drooping (a dracaena). */
 	shape?:
 		| 'cylinder'
 		| 'dome'
 		| 'folds'
+		| 'fronds'
 		| 'arch'
 		| 'bowl'
 		| 'disc'
@@ -140,7 +142,7 @@ export interface MaterialSpec {
 	roughness?: number;
 	/** 0 = dielectric (wood, paint), 1 = metal. */
 	metalness?: number;
-	texture?: 'wood' | 'carpet';
+	texture?: 'wood' | 'carpet' | 'tiles';
 	/** 0 = opaque, 1 = clear glass; frosted glass is transmissive and rough. */
 	transmission?: number;
 	/** Metres one repeat of the texture covers. */
