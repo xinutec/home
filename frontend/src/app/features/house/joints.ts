@@ -28,7 +28,8 @@ function ease(t: number): number {
  * The doors and drawers of the drawn house, opened and shut. Each moves as the
  * meshes `mergeStatic` keeps for its joint (`userData.moves`), drawn at rest where
  * they stand shut: a joint's value places them by the move its part makes from
- * there, as the physics places the part (`solidsOf`).
+ * there, as the physics places the part (`solidsOf`). One opens to its stop, where
+ * it meets something (as the gate found it), else its travel's end.
  */
 export class Joints {
 	private readonly state: JointState = {};
@@ -86,12 +87,13 @@ export class Joints {
 
 	/** Opens a joint that is shut or shutting, shuts one that is open or opening. */
 	toggle(key: string, now: number): void {
-		const [closed, open] = this.joint(key).joint.range;
+		const { range, stop } = this.joint(key).joint;
+		const [closed, open] = [range[0], stop ?? range[1]];
 		const run = this.runs.get(key);
 		const from = this.value(key);
 		const opening = run ? run.to !== open : from === closed;
 		const to = opening ? open : closed;
-		const ms = (TRAVEL_MS * Math.abs(to - from)) / Math.abs(open - closed);
+		const ms = (TRAVEL_MS * Math.abs(to - from)) / Math.abs(range[1] - range[0]);
 		this.runs.set(key, { from, to, start: now, ms });
 	}
 

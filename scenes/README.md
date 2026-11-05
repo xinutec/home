@@ -62,7 +62,9 @@ hand. The 3D house view (`frontend/.../features/house`) renders from these.
   room. `parent` fixes a part to another, and it moves with it. `joint` makes it
   move: `{"type": "slide", "axis", "range": [0, metres]}` or `{"type": "hinge",
   "pivot", "range": [0, degrees]}` about the vertical, its sign the way it opens.
-  All `at` are written closed. `"shape": "cylinder"` draws a part round, its axis
+  `"stop"`: where it meets something on its way open, short of its range's end, in
+  whole degrees or millimetres toward shut; the gate finds it, and fails until it
+  is written as found. All `at` are written closed. `"shape": "cylinder"` draws a part round, its axis
   front to back (diameter its x, length its z); `"dome"`, as the top half of an
   ellipsoid on its flat base, filling the box; `"folds"`, as a sheet rippled
   across its width, its folds the box's depth deep; `"arch"`, as the box with its

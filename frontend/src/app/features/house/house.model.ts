@@ -36,10 +36,13 @@ export type Vec3 = [number, number, number];
 
 /** How a part moves against its parent (or the piece): a `slide` along `axis`
  *  by `range` metres, or a `hinge` about a vertical line through `pivot` by
- *  `range` degrees, its sign the direction of opening. `range[0]` is closed. */
+ *  `range` degrees, its sign the direction of opening. `range[0]` is closed.
+ *  `stop`: where it meets something on its way open, short of `range[1]` (a door
+ *  against an armchair), as the gate finds it (scene-physics.spec.ts); it opens so
+ *  far. */
 export type Joint =
-	| { type: 'slide'; axis: Vec3; range: [number, number] }
-	| { type: 'hinge'; pivot: Vec3; range: [number, number] };
+	| { type: 'slide'; axis: Vec3; range: [number, number]; stop?: number }
+	| { type: 'hinge'; pivot: Vec3; range: [number, number]; stop?: number };
 
 /** One solid of a piece: a box `size` (w, h, d) centred at `at`, in the piece's
  *  frame (origin at the envelope's floor centre, front +z), or in its parent's. */

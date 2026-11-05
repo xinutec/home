@@ -102,4 +102,12 @@ describe('joints', () => {
 		joints.update(30_000);
 		expect(joints.value(key)).toBe(0);
 	});
+
+	it('opens a door only as far as it stops, against what stands in front of it', () => {
+		const { joints } = drawn();
+		const key = 'living-ikea-cupboard-opposite-wall/door-b';
+		joints.toggle(key, 0);
+		joints.update(10_000);
+		expect(joints.value(key)).toBe(5);
+	});
 });

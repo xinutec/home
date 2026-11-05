@@ -80,4 +80,17 @@ describe('check', () => {
 			'cab/door range starts at 10, not closed (0)',
 		);
 	});
+
+	it('catches a stop outside its joint’s travel', () => {
+		const door = (stop: number): Part => ({
+			id: 'door',
+			size: [0.5, 0.6, 0.02],
+			at: [-0.25, 0.4, 0.19],
+			joint: { type: 'hinge', pivot: [-0.5, 0.4, 0.2], range: [0, -90], stop },
+		});
+		expect(check(scene([cabinet([door(-40)])]))).toEqual([]);
+		expect(check(scene([cabinet([door(20)])])).map((v) => v.what)).toEqual([
+			'cab/door stops at 20, outside its travel 0 to -90',
+		]);
+	});
 });

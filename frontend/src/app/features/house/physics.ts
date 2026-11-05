@@ -38,12 +38,19 @@ export function check(scene: HouseScene): Violation[] {
 			if (outside)
 				out.push({ kind: 'envelope', what: `${s.piece}/${s.part} sticks out of ${piece}'s box` });
 		}
-		// A joint's range starts where its part is drawn: closed.
+		// A joint's range starts where its part is drawn: closed; it stops within it.
 		for (const p of partsOf(f)) {
 			if (p.joint && p.joint.range[0] !== 0)
 				out.push({
 					kind: 'joint',
 					what: `${piece}/${p.id} range starts at ${p.joint.range[0]}, not closed (0)`,
+				});
+			const [r0, r1] = p.joint?.range ?? [0, 0];
+			const stop = p.joint?.stop;
+			if (stop !== undefined && (stop - r0) * (stop - r1) > 0)
+				out.push({
+					kind: 'joint',
+					what: `${piece}/${p.id} stops at ${stop}, outside its travel ${r0} to ${r1}`,
 				});
 		}
 	}

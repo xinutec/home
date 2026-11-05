@@ -7,7 +7,8 @@ import { MaterialLibrary } from './materials';
 import { check, TOLERANCE } from './physics';
 import { buildHouse } from './room-builder';
 import { unsupported } from './support';
-import { sweeps } from './sweeps';
+import { partsOf, pieceId } from './assembly';
+import { stops, sweeps } from './sweeps';
 
 // JSON arrays read as number[], not the format's [x, z] pairs; the format is checked
 // by these very rules, so the cast is the claim under test.
@@ -75,4 +76,24 @@ describe('scenes/house.json, drawn', () => {
 		const doors = new Set(sweeps(scene, meshes, mats, TOLERANCE).map(blocked));
 		expect([...doors].sort()).toEqual(BLOCKED_DOORS);
 	}, 60_000);
+
+	it('says where each blocked door stops, as the sweeps find it', () => {
+		const written: Record<string, number> = {};
+		const unit: Record<string, number> = {};
+		for (const f of scene.furniture)
+			for (const p of partsOf(f)) {
+				const key = `${pieceId(f)}/${p.id}`;
+				if (p.joint) unit[key] = p.joint.type === 'hinge' ? 1 : 0.001;
+				if (p.joint?.stop !== undefined) written[key] = p.joint.stop;
+			}
+		// In whole degrees or millimetres, rounded toward shut (closed is 0), so a door
+		// written so far is clear: as the scene writes it.
+		const found = Object.fromEntries(
+			Object.entries(stops(scene, meshes, mats, TOLERANCE)).map(([k, v]) => [
+				k,
+				Math.round(Math.trunc(v / unit[k]) * unit[k] * 1000) / 1000,
+			]),
+		);
+		expect(written).toEqual(found);
+	}, 120_000);
 });

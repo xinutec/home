@@ -448,9 +448,11 @@ placed by the URL (a photo's) keeps its exact pose.
 shuts it, eased over 0.7 s for its whole travel. What moves on each joint is kept
 out of the fixed room's merge, as its own few meshes at rest where they stand
 shut, so it keeps its texels in the lightmap and is moved as one, by the move its
-part makes in `solidsOf`. Not yet: the travel stopping where the sweeps find it
-meets something (it opens to the end of its range); the walker kept out of an open
-door; the light inside, which is baked shut, so a cabinet's inside and the back of
+part makes in `solidsOf`. It opens to its joint's `stop` where it has one: where
+the gate's sweeps, halved down to under a millimetre or a degree, find it meets
+something (the IKEA cupboards' doors, 5 to 10 degrees, against the bean bag and
+the armchair), written into the scene and checked against what they find. Not
+yet: the walker kept out of an open door; the light inside, which is baked shut, so a cabinet's inside and the back of
 its doors show black; real drawers (a drawer is a solid box).
 
 ### 6. Detail, judged in that light
