@@ -1,141 +1,26 @@
 import { corners, partsOf, pieceId, solidsOf } from './assembly';
-import type { JointState, Solid } from './assembly';
-import type { HouseScene, Part } from './house.model';
-import { roomPerimeter, segments, wallPanels } from './scene-geometry';
+import type { HouseScene } from './house.model';
 
 /**
- * What the house must never do, checked on the scene itself: two solids in the
- * same place, a part through a wall, a moving part hitting anything anywhere
- * along its travel, a part outside its piece's envelope, a piece held up by
- * nothing, a joint whose range does not start closed.
+ * What the scene must say of itself, checked on its numbers: every part inside its
+ * piece's envelope, every joint's range starting closed. What the house does in
+ * space (two things in one place, what holds each piece up, what a door meets as it
+ * opens) is checked on the drawn shapes: `collisions.ts`, `support.ts`, `sweeps.ts`.
  *
- * Touching is allowed: a sideboard stands against its wall, a knob on its
- * drawer. Only a penetration deeper than TOLERANCE counts.
+ * Touching is allowed: a sideboard stands against its wall, a knob on its drawer.
+ * Only a penetration deeper than TOLERANCE counts, there and here.
  */
 export const TOLERANCE = 0.002; // metres
 
 export interface Violation {
-	kind: 'sweep' | 'envelope' | 'joint';
+	kind: 'envelope' | 'joint';
 	what: string;
 }
 
-/** How deep two solids interpenetrate; 0 when they only touch or are apart. */
-export function penetration(a: Solid, b: Solid): number {
-	const dy = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0);
-	if (dy <= TOLERANCE) return 0;
-	const ca = corners(a);
-	const cb = corners(b);
-	let depth = dy;
-	// Separating axes: the two edge directions of each rectangle.
-	for (const s of [a, b]) {
-		for (const [ux, uz] of [
-			[Math.cos(s.yaw), -Math.sin(s.yaw)],
-			[Math.sin(s.yaw), Math.cos(s.yaw)],
-		]) {
-			const pa = ca.map(([x, z]) => x * ux + z * uz);
-			const pb = cb.map(([x, z]) => x * ux + z * uz);
-			const o =
-				Math.min(Math.max(...pa), Math.max(...pb)) - Math.max(Math.min(...pa), Math.min(...pb));
-			if (o <= TOLERANCE) return 0;
-			depth = Math.min(depth, o);
-		}
-	}
-	return depth;
-}
-
-interface WallPiece {
-	ax: number;
-	az: number;
-	bx: number;
-	bz: number;
-	len: number;
-	y0: number;
-	y1: number;
-	name: string;
-}
-
-/** Every solid piece of wall: the wall segments cut by their openings. */
-function walls(scene: HouseScene): WallPiece[] {
-	const out: WallPiece[] = [];
-	for (const room of scene.rooms) {
-		segments(roomPerimeter(room)).forEach((s, i) => {
-			const len = Math.hypot(s.bx - s.ax, s.bz - s.az);
-			if (len < 1e-6) return;
-			const ops = (room.openings ?? []).filter((o) => o.wall === i);
-			for (const p of wallPanels(len, ops, scene.height)) {
-				const ux = (s.bx - s.ax) / len;
-				const uz = (s.bz - s.az) / len;
-				out.push({
-					ax: s.ax + ux * p.a0,
-					az: s.az + uz * p.a0,
-					bx: s.ax + ux * p.a1,
-					bz: s.az + uz * p.a1,
-					len: p.a1 - p.a0,
-					y0: p.yb,
-					y1: p.yt,
-					name: `${room.name ?? 'room'} wall ${i}`,
-				});
-			}
-		});
-	}
-	return out;
-}
-
-/** Whether a solid passes through a piece of wall (not merely touching it). */
-function throughWall(s: Solid, w: WallPiece): boolean {
-	if (Math.min(s.y1, w.y1) - Math.max(s.y0, w.y0) <= TOLERANCE) return false;
-	const ux = (w.bx - w.ax) / w.len;
-	const uz = (w.bz - w.az) / w.len;
-	const along = corners(s).map(([x, z]) => (x - w.ax) * ux + (z - w.az) * uz);
-	const across = corners(s).map(([x, z]) => -(x - w.ax) * uz + (z - w.az) * ux);
-	const inSpan = Math.min(Math.max(...along), w.len) - Math.max(Math.min(...along), 0) > TOLERANCE;
-	return inSpan && Math.min(...across) < -TOLERANCE && Math.max(...across) > TOLERANCE;
-}
-
-const label = (s: Solid) => `${s.piece}/${s.part}`;
-
-function collisions(moving: Solid[], fixed: Solid[], ws: WallPiece[]): string[] {
-	const out: string[] = [];
-	for (const m of moving) {
-		for (const f of fixed) {
-			const d = penetration(m, f);
-			if (d > 0) out.push(`${label(m)} into ${label(f)} by ${(d * 1000).toFixed(0)} mm`);
-		}
-		for (const w of ws) if (throughWall(m, w)) out.push(`${label(m)} through ${w.name}`);
-	}
-	return out;
-}
-
-/** The part and everything fixed to it, by id. */
-function withChildren(parts: Part[], id: string): Set<string> {
-	const out = new Set([id]);
-	let grew = true;
-	while (grew) {
-		grew = false;
-		for (const p of parts) {
-			if (p.parent && out.has(p.parent) && !out.has(p.id)) {
-				out.add(p.id);
-				grew = true;
-			}
-		}
-	}
-	return out;
-}
-
-/** Samples along each joint's travel, ends included. */
-const SWEEP_STEPS = 12;
-
 export function check(scene: HouseScene): Violation[] {
 	const out: Violation[] = [];
-	const ws = walls(scene);
-	// At rest, two things in one place are the drawn house's to find, on its real
-	// shapes (`collisions.ts`); here, what moves and what holds things up.
-	const all = scene.furniture.flatMap((f) => solidsOf(f));
-
-	scene.furniture.forEach((f) => {
+	for (const f of scene.furniture) {
 		const piece = pieceId(f);
-		const parts = partsOf(f);
-
 		// Closed, every part sits inside the piece's envelope.
 		const x0 = f.cx - f.w / 2;
 		const x1 = f.cx + f.w / 2;
@@ -143,37 +28,24 @@ export function check(scene: HouseScene): Violation[] {
 		const z1 = f.cz + f.d / 2;
 		const ey0 = f.y0 ?? 0;
 		for (const s of solidsOf(f)) {
-			const cs = corners(s);
 			const outside =
-				cs.some(
+				corners(s).some(
 					([x, z]) =>
 						x < x0 - TOLERANCE || x > x1 + TOLERANCE || z < z0 - TOLERANCE || z > z1 + TOLERANCE,
 				) ||
 				s.y0 < ey0 - TOLERANCE ||
 				s.y1 > ey0 + f.h + TOLERANCE;
-			if (outside) out.push({ kind: 'envelope', what: `${label(s)} sticks out of ${piece}'s box` });
+			if (outside)
+				out.push({ kind: 'envelope', what: `${s.piece}/${s.part} sticks out of ${piece}'s box` });
 		}
-
-		// Along its travel, a moving part (and what is fixed to it) hits nothing.
-		for (const p of parts) {
-			if (!p.joint) continue;
-			const [r0, r1] = p.joint.range;
-			if (r0 !== 0)
-				out.push({ kind: 'joint', what: `${piece}/${p.id} range starts at ${r0}, not closed (0)` });
-			const moved = withChildren(parts, p.id);
-			const others = all.filter((s) => !(s.piece === piece && moved.has(s.part)));
-			const hits = new Set<string>();
-			for (let k = 1; k <= SWEEP_STEPS; k++) {
-				const v = r0 + ((r1 - r0) * k) / SWEEP_STEPS;
-				const state: JointState = { [`${piece}/${p.id}`]: v };
-				const moving = solidsOf(f, state).filter((s) => moved.has(s.part));
-				for (const h of collisions(moving, others, ws)) hits.add(h);
-			}
-			for (const h of hits) out.push({ kind: 'sweep', what: `opening ${piece}/${p.id}: ${h}` });
+		// A joint's range starts where its part is drawn: closed.
+		for (const p of partsOf(f)) {
+			if (p.joint && p.joint.range[0] !== 0)
+				out.push({
+					kind: 'joint',
+					what: `${piece}/${p.id} range starts at ${p.joint.range[0]}, not closed (0)`,
+				});
 		}
-	});
-
-	// One wall cut by openings is several panels; say each finding once.
-	const seen = new Set<string>();
-	return out.filter((v) => !seen.has(v.what) && seen.add(v.what));
+	}
+	return out;
 }

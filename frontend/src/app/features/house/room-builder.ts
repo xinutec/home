@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import type { CameraQuery } from './camera';
-import type { Glazing, HouseScene, Part, Room, WallOpening } from './house.model';
+import type { Furniture, Glazing, HouseScene, Part, Room, WallOpening } from './house.model';
 import { partsOf, solidsOf } from './assembly';
+import type { JointState } from './assembly';
 import { MaterialLibrary, partMaterial, surfaceMaterial } from './materials';
 import { mergeStatic } from './merge';
 import { oneSided } from './sides';
@@ -127,30 +128,51 @@ export function buildHouse(
 	}
 	// Each piece as its parts, closed; a piece without parts is its box.
 	for (const f of scene.furniture) {
-		const parts = partsOf(f);
 		const room = nearestRoom(scene.rooms, f.cx, f.cz);
-		solidsOf(f).forEach((sol, k) => {
+		for (const mesh of pieceMeshes(stage, scene, f, mats)) {
 			const from = stage.scene.children.length;
-			const geom = stage.own(partGeometry(parts[k], sol.hw, sol.y1 - sol.y0, sol.hd));
-			// A sheet has two faces to see; a solid shows only its outside.
-			const sheet = parts[k].shape === 'folds' || parts[k].shape === 'fronds';
-			const side = sheet ? THREE.DoubleSide : THREE.FrontSide;
-			const mesh = new THREE.Mesh(geom, mats.get(partMaterial(scene, f, parts[k]), side));
-			mesh.position.set(sol.x, (sol.y0 + sol.y1) / 2, sol.z);
-			mesh.rotation.y = sol.yaw;
-			mesh.castShadow = mesh.receiveShadow = true;
 			stage.scene.add(mesh);
-			if (night && (parts[k].material ?? f.material) === LAMP_MATERIAL) addLampLight(stage, mesh);
-			tag(from, room, () => ({
-				kind: 'part',
-				piece: sol.piece,
-				part: sol.part,
-				room,
-				sheet,
-				soft: !!f.soft,
-			}));
-		});
+			if (night && materialOf(f, mesh) === LAMP_MATERIAL) addLampLight(stage, mesh);
+			const part = solids.get(mesh);
+			if (part?.kind !== 'part') throw new Error('`pieceMeshes` made a mesh without its part');
+			tag(from, room, () => ({ ...part, room }));
+		}
 	}
+}
+
+/** What a piece's part mesh is made of, by its scene key (`pieceMeshes` keeps it). */
+function materialOf(f: Furniture, mesh: THREE.Mesh): string | undefined {
+	const key: unknown = mesh.userData['material'];
+	return typeof key === 'string' ? key : f.material;
+}
+
+/**
+ * A piece's parts as drawn, in place, with its joints at `state` (closed where it
+ * says nothing): each mesh a part, named for the physics (`solidTag`). `buildHouse`
+ * draws them closed; the physics sweeps a door or drawer through its travel by
+ * drawing its parts along it.
+ */
+export function pieceMeshes(
+	stage: Stage,
+	scene: HouseScene,
+	f: Furniture,
+	mats: MaterialLibrary,
+	state: JointState = {},
+): THREE.Mesh[] {
+	const parts = partsOf(f);
+	return solidsOf(f, state).map((sol, k) => {
+		const geom = stage.own(partGeometry(parts[k], sol.hw, sol.y1 - sol.y0, sol.hd));
+		// A sheet has two faces to see; a solid shows only its outside.
+		const sheet = parts[k].shape === 'folds' || parts[k].shape === 'fronds';
+		const side = sheet ? THREE.DoubleSide : THREE.FrontSide;
+		const mesh = new THREE.Mesh(geom, mats.get(partMaterial(scene, f, parts[k]), side));
+		mesh.position.set(sol.x, (sol.y0 + sol.y1) / 2, sol.z);
+		mesh.rotation.y = sol.yaw;
+		mesh.castShadow = mesh.receiveShadow = true;
+		mesh.userData['material'] = parts[k].material ?? f.material;
+		solids.set(mesh, { kind: 'part', piece: sol.piece, part: sol.part, sheet, soft: !!f.soft });
+		return mesh;
+	});
 }
 
 /** A shell mesh's kind, from what made it (`userData.shell`). */

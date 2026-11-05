@@ -142,8 +142,9 @@ function faceNormal(b: Body, face: number): THREE.Vector3 {
 }
 
 /** How deep two bodies go into each other, beyond `tolerance`: the deepest point of
- *  either's surface inside the other; 0 if none is deeper than `tolerance`. */
-export function penetration(a: Body, b: Body, tolerance = 0): number {
+ *  either's surface inside the other; 0 if none is deeper than `tolerance`. With
+ *  `any`, the first point past `tolerance` ends the search: whether, not how deep. */
+export function penetration(a: Body, b: Body, tolerance = 0, any = false): number {
 	const spacing = Math.min(
 		SPACING_MAX,
 		Math.max(SPACING_MIN, Math.min(thinnest(a), thinnest(b)) / 3),
@@ -155,8 +156,10 @@ export function penetration(a: Body, b: Body, tolerance = 0): number {
 	] as const) {
 		const within = from.box.clone().intersect(deepRegion(into, tolerance));
 		if (within.isEmpty()) continue;
-		for (const pt of surfacePoints(from, within, spacing))
+		for (const pt of surfacePoints(from, within, spacing)) {
 			deepest = Math.max(deepest, depthInside(into, pt));
+			if (any && deepest > tolerance) return deepest;
+		}
 	}
 	return deepest > tolerance ? deepest : 0;
 }

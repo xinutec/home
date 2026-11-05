@@ -1,38 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { corners, solidsOf } from './assembly';
-import type { Solid } from './assembly';
 import type { Furniture, HouseScene, Part } from './house.model';
-import { check, penetration } from './physics';
-
-const box = (over: Partial<Solid>): Solid => ({
-	piece: 'p',
-	part: 'b',
-	x: 0,
-	z: 0,
-	yaw: 0,
-	hw: 0.5,
-	hd: 0.5,
-	y0: 0,
-	y1: 1,
-	...over,
-});
-
-describe('penetration', () => {
-	it('is zero for boxes that only touch, and the overlap depth when they meet', () => {
-		expect(penetration(box({}), box({ x: 1 }))).toBe(0);
-		expect(penetration(box({}), box({ x: 0.99 }))).toBeCloseTo(0.01);
-	});
-
-	it('sees an overlap between turned boxes, and none where turning clears them', () => {
-		// A 1 m square turned 45° reaches 0.707 m along x.
-		expect(penetration(box({}), box({ x: 1.15, yaw: Math.PI / 4 }))).toBeGreaterThan(0);
-		expect(penetration(box({}), box({ x: 1.25, yaw: Math.PI / 4 }))).toBe(0);
-	});
-
-	it('is zero when the heights do not overlap', () => {
-		expect(penetration(box({}), box({ y0: 1, y1: 2 }))).toBe(0);
-	});
-});
+import { check } from './physics';
 
 // A 1 m wide cabinet against the wall at z = 0, facing +z into the room.
 const room = {
@@ -56,7 +25,6 @@ const cabinet = (parts: Part[], over: Partial<Furniture> = {}): Furniture => ({
 	parts,
 	...over,
 });
-const back: Part = { id: 'back', size: [1, 0.8, 0.02], at: [0, 0.4, -0.19] };
 
 describe('placement', () => {
 	it('swings a door hinged on its left, with a negative range, out to the front', () => {
@@ -98,41 +66,18 @@ describe('placement', () => {
 });
 
 describe('check', () => {
-	it('passes a cabinet whose door swings out to the front', () => {
-		const door: Part = {
-			id: 'door',
-			size: [0.5, 0.6, 0.02],
-			at: [-0.25, 0.4, 0.19],
-			joint: { type: 'hinge', pivot: [-0.5, 0.4, 0.2], range: [0, -100] },
-		};
-		expect(check(scene([cabinet([back, door])]))).toEqual([]);
-	});
-
-	it('catches a door hinged the wrong way, swinging into its own cabinet', () => {
-		const door: Part = {
-			id: 'door',
-			size: [0.5, 0.6, 0.02],
-			at: [-0.25, 0.4, 0.19],
-			joint: { type: 'hinge', pivot: [-0.5, 0.4, 0.2], range: [0, 100] },
-		};
-		const kinds = check(scene([cabinet([back, door])])).map((v) => v.kind);
-		expect(kinds).toContain('sweep');
-	});
-
-	it('catches a drawer that would hit a piece standing in front of it', () => {
-		const drawer: Part = {
-			id: 'drawer',
-			size: [0.4, 0.2, 0.3],
-			at: [0, 0.5, 0.05],
-			joint: { type: 'slide', axis: [0, 0, 1], range: [0, 0.3] },
-		};
-		const stool: Furniture = { id: 'stool', cx: 0, cz: 0.6, w: 0.4, d: 0.3, h: 0.7 };
-		const v = check(scene([cabinet([drawer]), stool]));
-		expect(v.some((x) => x.kind === 'sweep' && x.what.includes('stool'))).toBe(true);
-	});
-
-	it('catches a part outside its piece', () => {
+	it('catches a part outside its piece, and a joint not drawn closed', () => {
 		const loose: Part = { id: 'shelf', size: [1.2, 0.02, 0.3], at: [0, 0.5, 0] };
-		expect(check(scene([cabinet([loose])])).map((v) => v.kind)).toContain('envelope');
+		expect(check(scene([cabinet([loose])])).map((v) => v.kind)).toEqual(['envelope']);
+		const ajar: Part = {
+			id: 'door',
+			size: [0.5, 0.6, 0.02],
+			at: [-0.25, 0.4, 0.19],
+			joint: { type: 'hinge', pivot: [-0.5, 0.4, 0.2], range: [10, -100] },
+		};
+		// Drawn ajar, it also sticks out of its box.
+		expect(check(scene([cabinet([ajar])])).map((v) => v.what)).toContain(
+			'cab/door range starts at 10, not closed (0)',
+		);
 	});
 });
