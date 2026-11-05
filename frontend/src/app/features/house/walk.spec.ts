@@ -63,6 +63,23 @@ describe('walking', () => {
 		expect(walk(new Collider([table]), [-1, 0], [1, 0])[0]).toBeLessThan(-0.69);
 	});
 
+	it('stops a walker at a door where it stands now, not where it stood shut', () => {
+		// Shut, the door stands aside at x = 5; opened, it swings across the way.
+		const door = box(0.05, 2, 1, 5, 1, 0);
+		door.userData['moves'] = 'cupboard/door';
+		const c = new Collider([door]);
+		expect(walk(c, [-1, 0], [1, 0])[0]).toBeCloseTo(1, 6);
+		door.position.x = 0;
+		door.updateMatrixWorld();
+		expect(walk(c, [-1, 0], [1, 0])[0]).toBeLessThan(-0.025 - 0.2 + 1e-3);
+		// Turned a quarter, it lies along the way: the walker passes beside it, and
+		// one walking across is stopped.
+		door.rotation.y = Math.PI / 2;
+		door.updateMatrixWorld();
+		expect(walk(c, [-1, 0.6], [1, 0.6])[0]).toBeCloseTo(1, 6);
+		expect(walk(c, [0, -1], [0, 1])[1]).toBeLessThan(-0.025 - 0.2 + 1e-3);
+	});
+
 	const house3d = drawn();
 
 	it('lets a walker through the living room’s doorway to the dining room, not through its wall', () => {

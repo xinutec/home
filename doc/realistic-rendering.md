@@ -451,8 +451,9 @@ shut, so it keeps its texels in the lightmap and is moved as one, by the move it
 part makes in `solidsOf`. It opens to its joint's `stop` where it has one: where
 the gate's sweeps, halved down to under a millimetre or a degree, find it meets
 something (the IKEA cupboards' doors, 5 to 10 degrees, against the bean bag and
-the armchair), written into the scene and checked against what they find. Not
-yet: the walker kept out of an open door; the light inside, which is baked shut, so a cabinet's inside and the back of
+the armchair), written into the scene and checked against what they find. An
+open door stops the walker where it stands now: what moves on each joint is a BVH
+of its own, in its own frame, met through the door's current place. Not yet: the light inside, which is baked shut, so a cabinet's inside and the back of
 its doors show black; real drawers (a drawer is a solid box).
 
 ### 6. Detail, judged in that light
