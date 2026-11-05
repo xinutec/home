@@ -88,12 +88,23 @@ export function applyLightmap(
  * of the texels that change go to the GPU.
  */
 export class JointLights {
-	/** Each joint's texels' light shut, RGB; and each joint's texels by index. */
-	private readonly shut: Float32Array[];
-	private readonly where: Map<number, number>[];
-	/** Each joint's texels as row spans: [row, first, last] columns. */
+	/** Every texel a joint changes, once: where it is in the atlas, its light shut
+	 *  (RGB), and which joints change it, by how much (`from[u]` to `from[u + 1]` in
+	 *  `by`, each a joint and where its change is in that joint's `delta`). */
+	private readonly texel: Uint32Array;
+	private readonly shut: Float32Array;
+	private readonly from: Uint32Array;
+	private readonly by: Uint32Array;
+	private readonly at: Uint32Array;
+	/** Each joint's texels, as their places in `texel`, and as row spans: [row, first,
+	 *  last] columns. */
+	private readonly own: Uint32Array[];
 	private readonly spans: [number, number, number][][];
 	private readonly shown: number[];
+	/** The frame each texel was last worked out in, so two joints moving at once
+	 *  work it out once. */
+	private readonly done: Uint32Array;
+	private frame = 0;
 
 	constructor(
 		private readonly texture: THREE.DataTexture,
@@ -101,14 +112,30 @@ export class JointLights {
 	) {
 		const data = this.data();
 		const width = texture.image.width;
-		this.shut = joints.map((j) => {
-			const out = new Float32Array(j.texels.length * 3);
-			j.texels.forEach((t, i) => {
-				for (let c = 0; c < 3; c++) out[i * 3 + c] = THREE.DataUtils.fromHalfFloat(data[t * 4 + c]);
-			});
-			return out;
-		});
-		this.where = joints.map((j) => new Map([...j.texels].map((t, i) => [t, i])));
+		const place = new Map<number, number>();
+		for (const j of joints) for (const t of j.texels) if (!place.has(t)) place.set(t, place.size);
+		const n = place.size;
+		this.texel = new Uint32Array(n);
+		this.shut = new Float32Array(n * 3);
+		for (const [t, u] of place) {
+			this.texel[u] = t;
+			for (let c = 0; c < 3; c++)
+				this.shut[u * 3 + c] = THREE.DataUtils.fromHalfFloat(data[t * 4 + c]);
+		}
+		this.own = joints.map((j) => Uint32Array.from(j.texels, (t) => place.get(t) ?? 0));
+		// Each texel's changes, laid end to end: counted, then filled.
+		this.from = new Uint32Array(n + 1);
+		for (const own of this.own) for (const u of own) this.from[u + 1]++;
+		for (let u = 0; u < n; u++) this.from[u + 1] += this.from[u];
+		const fill = this.from.slice(0, n);
+		this.by = new Uint32Array(this.from[n]);
+		this.at = new Uint32Array(this.from[n]);
+		this.own.forEach((own, k) =>
+			own.forEach((u, i) => {
+				this.by[fill[u]] = k;
+				this.at[fill[u]++] = i;
+			}),
+		);
 		this.spans = joints.map((j) => {
 			const rows = new Map<number, [number, number]>();
 			for (const t of j.texels) {
@@ -119,6 +146,7 @@ export class JointLights {
 			return [...rows].map(([row, [a, b]]) => [row, a, b]);
 		});
 		this.shown = joints.map(() => 0);
+		this.done = new Uint32Array(n);
 	}
 
 	/** Shows each joint `openness(key)` of the way open (0 shut, 1 as baked); true if
@@ -129,18 +157,28 @@ export class JointLights {
 		if (!changed.includes(true)) return false;
 		const data = this.data();
 		const width = this.texture.image.width;
-		this.joints.forEach((j, k) => {
+		const frame = ++this.frame;
+		const { texel, shut, from, by, at, done } = this;
+		this.own.forEach((own, k) => {
 			if (!changed[k]) return;
-			j.texels.forEach((t, i) => {
-				for (let c = 0; c < 3; c++) {
-					let v = this.shut[k][i * 3 + c];
-					this.joints.forEach((_, m) => {
-						const at = this.where[m].get(t);
-						if (at !== undefined) v += now[m] * this.joints[m].delta[at * 3 + c];
-					});
-					data[t * 4 + c] = THREE.DataUtils.toHalfFloat(Math.max(0, v));
+			for (const u of own) {
+				if (done[u] === frame) continue;
+				done[u] = frame;
+				let [r, g, b] = [shut[u * 3], shut[u * 3 + 1], shut[u * 3 + 2]];
+				for (let e = from[u]; e < from[u + 1]; e++) {
+					const a = now[by[e]];
+					if (a === 0) continue;
+					const d = this.joints[by[e]].delta;
+					const i = at[e] * 3;
+					r += a * d[i];
+					g += a * d[i + 1];
+					b += a * d[i + 2];
 				}
-			});
+				const t = texel[u] * 4;
+				data[t] = THREE.DataUtils.toHalfFloat(Math.max(0, r));
+				data[t + 1] = THREE.DataUtils.toHalfFloat(Math.max(0, g));
+				data[t + 2] = THREE.DataUtils.toHalfFloat(Math.max(0, b));
+			}
 			for (const [row, a, b] of this.spans[k])
 				this.texture.addUpdateRange((row * width + a) * 4, (b - a + 1) * 4);
 		});

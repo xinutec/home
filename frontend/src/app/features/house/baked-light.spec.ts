@@ -59,4 +59,33 @@ describe('JointLights', () => {
 		expect(red(texture, 4)).toBe(THREE.DataUtils.fromHalfFloat(THREE.DataUtils.toHalfFloat(0.1)));
 		expect(red(texture, 5)).toBe(THREE.DataUtils.fromHalfFloat(THREE.DataUtils.toHalfFloat(0.1)));
 	});
+
+	it('draws a frame of a door opening in a few milliseconds, at the house’s size', () => {
+		// The real bake's: a 2048 × 980 atlas, nine joints of up to 114k texels, overlapping.
+		const [w, h] = [2048, 980];
+		const texture = new THREE.DataTexture(
+			new Uint16Array(w * h * 4).fill(THREE.DataUtils.toHalfFloat(0.1)),
+			w,
+			h,
+			THREE.RGBAFormat,
+			THREE.HalfFloatType,
+		);
+		const joints = Array.from({ length: 9 }, (_, k) => {
+			const texels = Uint32Array.from(
+				{ length: 100_000 },
+				(_, i) => (i * 7 + k * 50_000) % (w * h),
+			);
+			return { key: `j${k}`, at: 1, texels, delta: new Float32Array(texels.length * 3).fill(0.01) };
+		});
+		const light = new JointLights(texture, joints);
+		const times: number[] = [];
+		for (let f = 1; f <= 10; f++) {
+			const start = performance.now();
+			light.show((key) => (key === 'j0' ? f / 10 : 0));
+			times.push(performance.now() - start);
+			texture.updateRanges.length = 0;
+		}
+		times.sort((a, b) => a - b);
+		expect(times[5]).toBeLessThan(40);
+	});
 });

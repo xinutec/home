@@ -458,7 +458,9 @@ joint shut, then once more for each joint alone open (the baker draws a mesh whe
 its matrix places it), keeping the texels whose light that changes by over 2%;
 the two bakes share their random numbers, so what no path through the moved part
 reaches comes out the same. The page adds each joint's change as far as it is
-open (`JointLights`), uploading only the rows it touches. Nine joints, 23k to
+open (`JointLights`), uploading only the rows it touches: each changed texel worked
+out once a frame from its own joints' changes, 3.7 ms a frame on the Mac for the
+left door's 114k (a cost test holds it under 40). Nine joints, 23k to
 114k texels each, ten bakes in 10 minutes on horus; the file grows from 2.9 to
 5.3 MB. The sideboard's drawers are drawers: a front, two sides, a
 back and a bottom, riding 9 mm over the shelf (their boxes guessed).
