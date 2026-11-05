@@ -454,7 +454,8 @@ something (the IKEA cupboards' doors, 5 to 10 degrees, against the bean bag and
 the armchair), written into the scene and checked against what they find. An
 open door stops the walker where it stands now: what moves on each joint is a BVH
 of its own, in its own frame, met through the door's current place. Not yet: the light inside, which is baked shut, so a cabinet's inside and the back of
-its doors show black; real drawers (a drawer is a solid box).
+its doors show black. The sideboard's drawers are drawers: a front, two sides, a
+back and a bottom, riding 9 mm over the shelf (their boxes guessed).
 
 ### 6. Detail, judged in that light
 
