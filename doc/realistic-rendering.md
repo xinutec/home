@@ -39,10 +39,10 @@ how it is judged done.
    door. The kitchen's utility wall and the window run were measured before
    (34 pieces, named and dressed on 4 November); added then from that day's walk,
    as estimates: the window over the sink, the back door with its side panel, the
-   oven housing, the cooker hood, the tiled pillar and the splashback; and the
-   window run's and serving cabinet's door and drawer fronts (shaker oak, steel pan
-   drawers, bar handles) from keyframes 545 and 845. Open: in the model the pillar
-   stands in front of the dishwasher, where keyframes 563 and 575 show it beside. The dining
+   oven housing, the cooker hood and the splashback; and the window run's and
+   serving cabinet's door and drawer fronts (shaker oak, steel pan drawers, bar
+   handles) from keyframes 545 and 845. A tiled pillar by the dishwasher, read off
+   keyframes 563 and 575, was not there: the tiles are on the wall. The dining
    room, an empty shell until then, got its window, radiator, curtains and pole,
    the round table with four chairs, the plant in its basket on the table, and the
    wine rack, the same way.

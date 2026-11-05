@@ -36,17 +36,6 @@ const KNOWN_COLLISIONS = [
 	'kitchen-cubbies-divider/body × kitchen-cubbies-back/body',
 	'kitchen-cubbies-left/body × kitchen-cubbies-back/body',
 	'kitchen-cubbies-right/body × kitchen-cubbies-back/body',
-	// The alcove cupboards, as measured, flush on the back and side walls: through
-	// the 2 cm skirting there, on both. Which gives way waits on how they stand.
-	'living skirting × living-ikea-cupboard-fireplace-wall/back',
-	'living skirting × living-ikea-cupboard-fireplace-wall/bottom',
-	'living skirting × living-ikea-cupboard-fireplace-wall/door-a',
-	'living skirting × living-ikea-cupboard-fireplace-wall/side-a',
-	'living skirting × living-ikea-cupboard-fireplace-wall/side-b',
-	'living skirting × living-ikea-cupboard-opposite-wall/back',
-	'living skirting × living-ikea-cupboard-opposite-wall/bottom',
-	'living skirting × living-ikea-cupboard-opposite-wall/door-b',
-	'living skirting × living-ikea-cupboard-opposite-wall/side-b',
 ].sort();
 
 /**
@@ -59,9 +48,6 @@ const BLOCKED_DOORS = [
 	'living-ikea-cupboard-fireplace-wall/door-b by living-bean-bag',
 	'living-ikea-cupboard-opposite-wall/door-a by living-armchair',
 	'living-ikea-cupboard-opposite-wall/door-b by living-armchair',
-	// The alcove cupboards' outer doors scrape the skirting they stand in (above).
-	'living-ikea-cupboard-fireplace-wall/door-a by living skirting',
-	'living-ikea-cupboard-opposite-wall/door-b by living skirting',
 ].sort();
 
 /** A door's sweep as "door by what it meets": a piece, or a room's surface. */
