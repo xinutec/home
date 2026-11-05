@@ -39,8 +39,10 @@ how it is judged done.
    door. The kitchen's utility wall and the window run were measured before
    (34 pieces, named and dressed on 4 November); added then from that day's walk,
    as estimates: the window over the sink, the back door with its side panel, the
-   oven housing, the cooker hood, the tiled pillar and the splashback. Their notes
-   say what to measure (`./scripts/estimates.mjs` lists them). Next: the bay sofa, the sideboard and TV, the bay's three windows, the
+   oven housing, the cooker hood, the tiled pillar and the splashback. The dining
+   room, an empty shell until then, got its window, radiator, curtains and pole,
+   the round table with four chairs, the plant and the wine rack, the same way.
+   Their notes say what to measure (`./scripts/estimates.mjs` lists them). Next: the bay sofa, the sideboard and TV, the bay's three windows, the
    curtains and pole, the fireplace's leg and arch, the coving and skirting, the
    ceiling light.
 2. **The walls' and carpet's paints**: keyframe 1 and the night photo agree on the
