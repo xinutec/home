@@ -31,6 +31,7 @@ import { buildInterior } from './room-builder';
 import type { Lit } from './room-builder';
 import { nightSkyImage, overcastSky, overcastSkyImage } from './sky';
 import { ThreeView } from './three-view';
+import { Joints } from './joints';
 import { Collider, WalkControls } from './walk';
 
 /** Inflates a gzipped lightmap: the browser's own stream, no library. */
@@ -147,7 +148,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 				else if (this.query.bake) this.bake(view, lit, this.query.bake);
 				else {
 					void this.light(view, lit, baked);
-					this.walk(view, lit);
+					this.walk(view, scene, lit);
 				}
 				view.requestFrame();
 			},
@@ -188,9 +189,26 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 	}
 
 	/** Hands the camera to a walker: from the room's own view, standing, unless the
-	 *  URL placed the camera (a comparison with a photo keeps its exact pose). */
-	private walk(view: ThreeView, lit: Lit): void {
+	 *  URL placed the camera (a comparison with a photo keeps its exact pose). A tap
+	 *  on a door or drawer opens it, or shuts it. */
+	private walk(view: ThreeView, scene: HouseScene, lit: Lit): void {
 		const standing = !this.query.eye;
+		const joints = new Joints(scene, lit.meshes);
+		view.beforeRender = (now) => joints.update(now);
+		const caster = new THREE.Raycaster();
+		const canvas = view.renderer.domElement;
+		const tapped = (x: number, y: number) => {
+			const box = canvas.getBoundingClientRect();
+			const ndc = new THREE.Vector2(
+				((x - box.left) / box.width) * 2 - 1,
+				-((y - box.top) / box.height) * 2 + 1,
+			);
+			caster.setFromCamera(ndc, view.camera);
+			const joint = joints.pick(caster.ray);
+			if (!joint) return;
+			joints.toggle(joint, performance.now());
+			view.requestFrame();
+		};
 		const walker = new WalkControls(
 			view.camera,
 			view.renderer.domElement,
@@ -201,6 +219,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 				view.requestFrame();
 			},
 			standing,
+			tapped,
 		);
 		view.useMover(walker);
 		this.walking.set(true);

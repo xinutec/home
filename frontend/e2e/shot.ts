@@ -4,12 +4,13 @@
 // --trace N path-traces it to N samples a pixel instead (room.ts's ?trace), and
 // says how long that took; --tone linear drops the tone curve (?tone=linear);
 // --night traces it lit by its ceiling lights alone (?night); --exposure auto
-// meters it as the page does when walked (no ?exposure).
+// meters it as the page does when walked (no ?exposure); --tap x,y;x,y clicks the
+// canvas at those pixels first (a door or drawer opens), and waits for it to move.
 import { chromium } from '@playwright/test';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { extname, join } from 'node:path';
 import { parseArgs } from 'node:util';
-const { values: a } = parseArgs({ options: { eye: { type: 'string' }, look: { type: 'string' }, fov: { type: 'string', default: '50' }, out: { type: 'string', default: 'shot.png' }, room: { type: 'string', default: 'living' }, scene: { type: 'string' }, exposure: { type: 'string', default: '150' }, trace: { type: 'string' }, tone: { type: 'string' }, night: { type: 'boolean', default: false } } });
+const { values: a } = parseArgs({ options: { eye: { type: 'string' }, look: { type: 'string' }, fov: { type: 'string', default: '50' }, out: { type: 'string', default: 'shot.png' }, room: { type: 'string', default: 'living' }, scene: { type: 'string' }, exposure: { type: 'string', default: '150' }, trace: { type: 'string' }, tone: { type: 'string' }, night: { type: 'boolean', default: false }, tap: { type: 'string' } } });
 const ORIGIN = 'https://home.xinutec.org';
 const ROOT = new URL('../..', import.meta.url).pathname;
 const DIST = new URL('../dist/frontend/browser', import.meta.url).pathname;
@@ -36,6 +37,11 @@ if (a.trace) await page.locator('.canvas[data-traced]').waitFor({ timeout: 3_600
 else await page.waitForTimeout(2500);
 const seconds = (Date.now() - start) / 1000;
 const canvas = page.locator('.canvas canvas');
+for (const tap of a.tap ? a.tap.split(';') : []) {
+	const [x, y] = tap.split(',').map(Number);
+	await canvas.click({ position: { x, y } });
+	await page.waitForTimeout(1500);
+}
 writeFileSync(a.out, await canvas.screenshot());
 const box = await canvas.boundingBox();
 const meter = await canvas.getAttribute('data-meter');

@@ -19,6 +19,9 @@ export class ThreeView {
 	/** While true, nothing is drawn here: something else owns the canvas (the path tracer). */
 	paused = false;
 
+	/** Runs before each frame (a door swinging); true asks for another. */
+	beforeRender?: (now: number) => boolean;
+
 	/** Runs after each frame (auto exposure); true asks for another. */
 	afterRender?: (now: number) => boolean;
 
@@ -66,6 +69,7 @@ export class ThreeView {
 				let moving = false;
 				if (this.mover) moving = this.mover.update();
 				else this.controls.update();
+				if (this.beforeRender?.(performance.now())) moving = true;
 				this.renderer.render(this.scene, this.camera);
 				const more = this.afterRender?.(performance.now()) ?? false;
 				if (moving || more) this.requestFrame();

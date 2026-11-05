@@ -4,7 +4,7 @@ import json from '../../../../../scenes/house.json';
 import type { HouseScene } from './house.model';
 import { MaterialLibrary } from './materials';
 import { buildHouse } from './room-builder';
-import { Collider } from './walk';
+import { Collider, WalkControls } from './walk';
 
 const house = json as unknown as HouseScene;
 
@@ -102,5 +102,57 @@ describe('walking', () => {
 		const [cx, cz] = [mat?.cx ?? 0, (mat?.cz ?? 0) + 0.15];
 		const [x] = walk(house3d, [cx - 0.6, cz], [cx - 0.1, cz]);
 		expect(x).toBeCloseTo(cx - 0.1, 6);
+	});
+
+	describe('a tap', () => {
+		/** A pointer event of `type` at (x, y), as a finger makes it. */
+		const at = (type: string, x: number, y: number) =>
+			Object.assign(new Event(type), {
+				pointerId: 1,
+				pointerType: 'touch',
+				clientX: x,
+				clientY: y,
+			});
+
+		/** Walk controls on a 400 × 800 screen, and the taps they report. */
+		function controls(): { dom: HTMLElement; camera: THREE.PerspectiveCamera; taps: number[][] } {
+			const dom = document.createElement('div');
+			dom.getBoundingClientRect = () => new DOMRect(0, 0, 400, 800);
+			dom.setPointerCapture = () => undefined;
+			const camera = new THREE.PerspectiveCamera();
+			const taps: number[][] = [];
+			new WalkControls(
+				camera,
+				dom,
+				document.createElement('div'),
+				new Collider([new THREE.Mesh(new THREE.PlaneGeometry(1, 1))]),
+				() => undefined,
+				true,
+				(x, y) => taps.push([x, y]),
+			);
+			return { dom, camera, taps };
+		}
+
+		it('is a finger put down and lifted where it went down, wherever on the screen', () => {
+			const { dom, taps } = controls();
+			for (const x of [300, 50]) {
+				dom.dispatchEvent(at('pointerdown', x, 400));
+				dom.dispatchEvent(at('pointerup', x + 2, 401));
+			}
+			expect(taps).toEqual([
+				[300, 400],
+				[50, 400],
+			]);
+		});
+
+		it('is not a drag, which turns the view instead', () => {
+			const { dom, camera, taps } = controls();
+			const yaw = camera.rotation.y;
+			dom.dispatchEvent(at('pointerdown', 300, 400));
+			dom.dispatchEvent(at('pointermove', 340, 400));
+			dom.dispatchEvent(at('pointerup', 340, 400));
+			expect(taps).toEqual([]);
+			expect(camera.rotation.y).not.toBe(yaw);
+		});
 	});
 });

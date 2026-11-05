@@ -79,7 +79,8 @@ export class Collider {
 /**
  * Walking the house in the first person, on a phone or with a mouse and keys:
  * drag to look; hold the left of the screen and drag to walk (a thumb stick, drawn
- * at `stick` while held), or W A S D and the arrow keys. The walker keeps its eye
+ * at `stick` while held), or W A S D and the arrow keys; tap (or click) anything
+ * to touch it (`tapped`). The walker keeps its eye
  * at standing height and is kept out of everything drawn (`Collider`).
  */
 export class WalkControls {
@@ -88,6 +89,8 @@ export class WalkControls {
 	private readonly keys = new Set<string>();
 	private look?: { id: number; x: number; y: number };
 	private thumb?: { id: number; x: number; y: number; dx: number; dz: number };
+	/** Each finger down, where and when it went down, and whether it has strayed. */
+	private readonly touches = new Map<number, { x: number; y: number; t: number; far: boolean }>();
 	private last?: number;
 	private readonly off: (() => void)[] = [];
 
@@ -98,6 +101,8 @@ export class WalkControls {
 		private readonly collider: Collider,
 		private readonly changed: () => void,
 		standing: boolean,
+		/** A tap, at a point on the screen (client pixels). */
+		private readonly tapped: (x: number, y: number) => void = () => undefined,
 	) {
 		const e = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
 		this.yaw = e.y;
@@ -163,6 +168,7 @@ export class WalkControls {
 	}
 
 	private down(e: PointerEvent): void {
+		this.touches.set(e.pointerId, { x: e.clientX, y: e.clientY, t: performance.now(), far: false });
 		const box = this.dom.getBoundingClientRect();
 		const left = e.clientX - box.left < box.width * THUMB_SHARE;
 		if (e.pointerType !== 'mouse' && left && !this.thumb) {
@@ -178,6 +184,8 @@ export class WalkControls {
 	}
 
 	private move(e: PointerEvent): void {
+		const touch = this.touches.get(e.pointerId);
+		if (touch && Math.hypot(e.clientX - touch.x, e.clientY - touch.y) > TAP_SLOP) touch.far = true;
 		if (this.look?.id === e.pointerId) {
 			// The room is grabbed, as a street view is: drag left, and the view turns right.
 			this.yaw += (e.clientX - this.look.x) * LOOK_RATE;
@@ -202,6 +210,17 @@ export class WalkControls {
 	}
 
 	private up(e: PointerEvent): void {
+		const touch = this.touches.get(e.pointerId);
+		this.touches.delete(e.pointerId);
+		const near = touch && Math.hypot(e.clientX - touch.x, e.clientY - touch.y) <= TAP_SLOP;
+		if (
+			e.type === 'pointerup' &&
+			touch &&
+			near &&
+			!touch.far &&
+			performance.now() - touch.t < TAP_MS
+		)
+			this.tapped(touch.x, touch.y);
 		if (this.look?.id === e.pointerId) this.look = undefined;
 		if (this.thumb?.id === e.pointerId) {
 			this.thumb = undefined;
@@ -229,5 +248,8 @@ const WALK_SPEED = 1.1;
 const LOOK_RATE = 0.005;
 /** The share of the screen's width, from the left, a touch there starts the stick. */
 const THUMB_SHARE = 0.4;
+/** Pixels a finger may stray, and milliseconds it may stay down, in a tap. */
+const TAP_SLOP = 10;
+const TAP_MS = 400;
 /** Pixels the stick moves from where the thumb went down, at full speed. */
 const THUMB_REACH = 60;

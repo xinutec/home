@@ -149,7 +149,8 @@ function materialOf(f: Furniture, mesh: THREE.Mesh): string | undefined {
 
 /**
  * A piece's parts as drawn, in place, with its joints at `state` (closed where it
- * says nothing): each mesh a part, named for the physics (`solidTag`). `buildHouse`
+ * says nothing): each mesh a part, named for the physics (`solidTag`), and what
+ * moves says on which joint (`userData.moves`, `piece/part`). `buildHouse`
  * draws them closed; the physics sweeps a door or drawer through its travel by
  * drawing its parts along it.
  */
@@ -171,9 +172,18 @@ export function pieceMeshes(
 		mesh.rotation.y = sol.yaw;
 		mesh.castShadow = mesh.receiveShadow = true;
 		mesh.userData['material'] = parts[k].material ?? f.material;
+		const joint = movedBy(parts, parts[k]);
+		if (joint) mesh.userData['moves'] = `${sol.piece}/${joint}`;
 		solids.set(mesh, { kind: 'part', piece: sol.piece, part: sol.part, sheet, soft: !!f.soft });
 		return mesh;
 	});
+}
+
+/** The nearest part, this one or one it is fixed to, that moves on a joint. */
+function movedBy(parts: Part[], part: Part): string | undefined {
+	for (let p: Part | undefined = part; p; p = parts.find((q) => q.id === p?.parent))
+		if (p.joint) return p.id;
+	return undefined;
 }
 
 /** A shell mesh's kind, from what made it (`userData.shell`). */

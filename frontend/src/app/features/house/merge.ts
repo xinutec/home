@@ -12,7 +12,9 @@ function isMesh(o: THREE.Object3D): o is THREE.Mesh {
  * a material, a shadow setting and a vertex layout, in room coordinates and
  * unindexed (as a lightmap's unwrap needs). A phone pays for each mesh it draws far
  * more than for its triangles, and the room is hundreds of parts in a few dozen
- * materials. Returns the merged meshes, in a fixed order: the order the lightmap is
+ * materials. What moves on a joint (`userData.moves`, `piece/part`) is merged only
+ * with what moves on the same joint, at rest where it is drawn, so it can be moved
+ * as one. Returns the merged meshes, in a fixed order: the order the lightmap is
  * laid out in.
  */
 export function mergeStatic(
@@ -28,7 +30,8 @@ export function mergeStatic(
 		if (Array.isArray(material)) continue;
 		const layout = Object.keys(mesh.geometry.attributes).sort().join(',');
 		const room: unknown = mesh.userData['room'];
-		const key = `${String(room)}|${material.uuid}|${mesh.castShadow}|${mesh.receiveShadow}|${layout}`;
+		const moves: unknown = mesh.userData['moves'];
+		const key = `${String(room)}|${String(moves)}|${material.uuid}|${mesh.castShadow}|${mesh.receiveShadow}|${layout}`;
 		groups.set(key, [...(groups.get(key) ?? []), { mesh, material }]);
 	}
 	const out: THREE.Mesh[] = [];
@@ -48,6 +51,8 @@ export function mergeStatic(
 		mesh.receiveShadow = first.mesh.receiveShadow;
 		const room: unknown = first.mesh.userData['room'];
 		mesh.userData['room'] = room;
+		const moves: unknown = first.mesh.userData['moves'];
+		if (moves !== undefined) mesh.userData['moves'] = moves;
 		for (const m of meshes) scene.remove(m.mesh);
 		scene.add(mesh);
 		out.push(mesh);

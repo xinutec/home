@@ -31,4 +31,26 @@ describe('mergeStatic', () => {
 		scene.add(lit, box(a, 2));
 		expect(mergeStatic(scene, () => undefined)).toHaveLength(2);
 	});
+
+	it('keeps what moves on each joint apart, at rest in room coordinates, and says which joint', () => {
+		const scene = new THREE.Scene();
+		const a = new THREE.MeshStandardMaterial();
+		const door = box(a, 0);
+		door.userData['moves'] = 'cupboard/door';
+		const knob = box(a, 1);
+		knob.userData['moves'] = 'cupboard/door';
+		const drawer = box(a, 2);
+		drawer.userData['moves'] = 'cupboard/drawer';
+		scene.add(box(a, 3), door, knob, drawer);
+		const merged = mergeStatic(scene, () => undefined);
+		expect(merged.map((m): unknown => m.userData['moves']).sort()).toEqual([
+			'cupboard/door',
+			'cupboard/drawer',
+			undefined,
+		]);
+		const moving = merged.find((m) => m.userData['moves'] === 'cupboard/door');
+		expect(moving?.position.x).toBe(0);
+		const bounds = new THREE.Box3().setFromObject(moving ?? new THREE.Object3D());
+		expect(bounds.max.x).toBeCloseTo(1.5, 6);
+	});
 });
