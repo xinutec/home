@@ -254,7 +254,8 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		const map = baked ? await decodeLightmap(baked, gunzip) : undefined;
 		const texture = map && applyLightmap(view.scene, lit, map);
 		const applied = !!texture;
-		if (map && texture) this.jointLights = new JointLights(texture, map.joints);
+		if (map && texture && map.joints.length > 0)
+			this.jointLights = view.own(new JointLights(view.renderer, view.scene, texture, map.joints));
 		if (applied) for (const t of addReflections(view.renderer, view.scene, lit)) view.own(t);
 		view.renderer.toneMappingExposure = this.query.exposure ?? (applied ? BAKED_EXPOSURE : 1);
 		if (applied && this.query.exposure === undefined && AutoExposure.supported(view.renderer)) {

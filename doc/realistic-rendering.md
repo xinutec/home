@@ -466,10 +466,14 @@ kept. The two bakes share their random numbers, so what no path through the move
 part reaches comes out the same. Checked against baking each joint over the whole
 house, the left door excepted: 89% at any margin, the rest where the bake depends on
 its BVH (below), not the door's light. The page
-adds each joint's change as far as it is open (`JointLights`), uploading only the
-rows it touches: each changed texel worked out once a frame from its own joints'
-changes, 3.7 ms a frame on the Mac for the left door (a cost test holds it under
-40). A bake is the shut house and the nine joints: on the Mac 12.6 and 7.7 minutes
+adds each joint's change as far as it is open (`JointLights`), on the GPU: the
+lightmap is drawn into a texture of its own, and on a change every texel a joint
+changes (112k, up to six joints on one) is drawn again as a point, its light shut
+plus each joint's change times how far it is open, never below none. The GPU holds
+all of that from the start; a frame changes nine numbers and uploads nothing. A
+door swinging costs what turning the view does, 2.4 ms a frame on the Mac (it was
+7.3 with the changed rows uploaded each frame: each upload call cost about 9 µs,
+358 of them, where the bytes hardly counted). A bake is the shut house and the nine joints: on the Mac 12.6 and 7.7 minutes
 (the joints' share is the texels they trace); on horus 60 s and, by their texels (not yet timed there), about 40 s.
 The file is 4.7 MB. `data-baked` says each phase's time (`ms`).
 
