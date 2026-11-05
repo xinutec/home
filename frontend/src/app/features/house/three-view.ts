@@ -19,6 +19,9 @@ export class ThreeView {
 	/** While true, nothing is drawn here: something else owns the canvas (the path tracer). */
 	paused = false;
 
+	/** Runs after each frame (auto exposure); true asks for another. */
+	afterRender?: (now: number) => boolean;
+
 	/** What moves the camera in place of the orbit controls, once set (walking):
 	 *  its update moves it for a frame and says whether it is still moving. */
 	private mover?: { update(): boolean; dispose(): void };
@@ -64,7 +67,8 @@ export class ThreeView {
 				if (this.mover) moving = this.mover.update();
 				else this.controls.update();
 				this.renderer.render(this.scene, this.camera);
-				if (moving) this.requestFrame();
+				const more = this.afterRender?.(performance.now()) ?? false;
+				if (moving || more) this.requestFrame();
 			});
 		});
 	}

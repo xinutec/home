@@ -25,6 +25,7 @@ import { addReflections, applyLightmap, roomChecksum } from './baked-light';
 import { bakeLightmap } from './baker';
 import type { HouseScene } from './house.model';
 import { cameraFromQuery } from './camera';
+import { AutoExposure } from './exposure';
 import type { CameraQuery } from './camera';
 import { buildInterior } from './room-builder';
 import type { Lit } from './room-builder';
@@ -49,6 +50,10 @@ function base64(bytes: Uint8Array): string {
 /** The everyday view's exposure in baked light (the sky's zenith is 1): between
  *  what compare-view solves against keyframes 1 and 822 (180, 80). */
 const BAKED_EXPOSURE = 150;
+/** The log-average linear light auto exposure brings to the screen's middle: keyframe
+ *  1's view meters 0.00136 (`data-meter`), so the living room keeps about its fitted
+ *  exposure, and the kitchen, metering ten times brighter, gets a tenth of it. */
+const AUTO_KEY = 0.2;
 /** Milliseconds of path tracing a frame under `?trace`: the page stays responsive. */
 const TRACE_BUDGET_MS = 30;
 
@@ -208,6 +213,17 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		const applied = !!map && applyLightmap(view.scene, lit, map);
 		if (applied) for (const t of addReflections(view.renderer, view.scene, lit)) view.own(t);
 		view.renderer.toneMappingExposure = this.query.exposure ?? (applied ? BAKED_EXPOSURE : 1);
+		if (applied && this.query.exposure === undefined && AutoExposure.supported(view.renderer)) {
+			const auto = view.own(
+				new AutoExposure(view.renderer, view.scene, view.camera, AUTO_KEY, BAKED_EXPOSURE),
+			);
+			const canvas = view.renderer.domElement;
+			view.afterRender = (now) => {
+				const easing = auto.update(now);
+				canvas.dataset['meter'] = auto.meter.toPrecision(3);
+				return easing;
+			};
+		}
 		view.requestFrame();
 		if (this.query.stats) this.measure(view);
 	}

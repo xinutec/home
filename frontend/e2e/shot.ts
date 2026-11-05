@@ -3,7 +3,8 @@
 //   node e2e/shot.ts --eye=x,y,z --look=x,y,z --fov 50 --out file.png [--trace 1024] [--tone linear]
 // --trace N path-traces it to N samples a pixel instead (room.ts's ?trace), and
 // says how long that took; --tone linear drops the tone curve (?tone=linear);
-// --night traces it lit by its ceiling lights alone (?night).
+// --night traces it lit by its ceiling lights alone (?night); --exposure auto
+// meters it as the page does when walked (no ?exposure).
 import { chromium } from '@playwright/test';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { extname, join } from 'node:path';
@@ -28,12 +29,15 @@ await ctx.route('**/api/house', (r) => r.fulfill({ body: readFileSync(a.scene ??
 const page = await ctx.newPage();
 const trace = (a.trace ? `&trace=${a.trace}` : '') + (a.tone ? `&tone=${a.tone}` : '') + (a.night ? '&night' : '');
 const start = Date.now();
-await page.goto(`${ORIGIN}/house/${a.room}?eye=${a.eye}&look=${a.look}&fov=${a.fov}&exposure=${a.exposure}${trace}`, { waitUntil: 'networkidle' });
+// --exposure auto leaves it to the page's meter, and prints what it read.
+const exposure = a.exposure === 'auto' ? '' : `&exposure=${a.exposure}`;
+await page.goto(`${ORIGIN}/house/${a.room}?eye=${a.eye}&look=${a.look}&fov=${a.fov}${exposure}${trace}`, { waitUntil: 'networkidle' });
 if (a.trace) await page.locator('.canvas[data-traced]').waitFor({ timeout: 3_600_000 });
 else await page.waitForTimeout(2500);
 const seconds = (Date.now() - start) / 1000;
 const canvas = page.locator('.canvas canvas');
 writeFileSync(a.out, await canvas.screenshot());
 const box = await canvas.boundingBox();
-console.log(JSON.stringify({ w: box?.width, h: box?.height, ...(a.trace ? { samples: Number(a.trace), seconds } : {}) }));
+const meter = await canvas.getAttribute('data-meter');
+console.log(JSON.stringify({ w: box?.width, h: box?.height, ...(meter ? { meter: Number(meter) } : {}), ...(a.trace ? { samples: Number(a.trace), seconds } : {}) }));
 await browser.close();

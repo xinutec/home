@@ -39,7 +39,10 @@ how it is judged done.
    door. The kitchen's utility wall and the window run were measured before
    (34 pieces, named and dressed on 4 November); added then from that day's walk,
    as estimates: the window over the sink, the back door with its side panel, the
-   oven housing, the cooker hood, the tiled pillar and the splashback. The dining
+   oven housing, the cooker hood, the tiled pillar and the splashback; and the
+   window run's and serving cabinet's door and drawer fronts (shaker oak, steel pan
+   drawers, bar handles) from keyframes 545 and 845. Open: in the model the pillar
+   stands in front of the dishwasher, where keyframes 563 and 575 show it beside. The dining
    room, an empty shell until then, got its window, radiator, curtains and pole,
    the round table with four chairs, the plant in its basket on the table, and the
    wine rack, the same way.
@@ -388,6 +391,15 @@ three would add the probe as diffuse light too, which the lightmap already holds
 so that line goes from the shader (`specularOnlyChunk`). Steel reads as metal and
 the wood takes a sheen; a dark screen reflects its 4% head-on. One probe, not box
 projected: what a flat glossy surface reflects is seen from the middle of the room.
+
+Exposure follows the view, as a phone camera's does (`exposure.ts`): every quarter
+second while the view changes, a 32-pixel-wide linear copy is metered, and the
+exposure eases (0.6 s) to bring its log-average to a key, 0.2, within ten times
+either way of 150. Keyframe 1's view meters 0.00136 (keeping about 150), keyframe
+822's 0.0019 (the phone solved them at 180 and 80, so its meter differs), the
+dining room's 0.0033 and the kitchen's 0.0124: the kitchen, at a tenth of the
+living room's exposure, no longer washes out. A URL's `?exposure` holds it fixed
+(`shot.ts --exposure auto` meters, printing `data-meter`).
 
 The interactive view cannot path-trace on a phone. The photo mode's bounce light
 is baked into lightmaps on the static shell and fixed furniture; moving parts
