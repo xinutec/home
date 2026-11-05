@@ -17,6 +17,7 @@ import {
 	mitre,
 	passages,
 	nearestRoom,
+	revealQuads,
 	roomPerimeter,
 	segments,
 	skirtingRuns,
@@ -326,6 +327,10 @@ function addGlazing(
 	};
 	const dx = (s.bx - s.ax) / len;
 	const dz = (s.bz - s.az) / len;
+	// A recessed window sits behind the wall's face, its reveal in between.
+	const deep = g.recess ?? 0;
+	const [bx, bz] = [-inward[0] * deep, -inward[1] * deep];
+	if (deep > 0) addReveal(view, mats, scene, s, len, o, g, inward, deep);
 	for (const p of glazingLayout(o, g)) {
 		const frame = p.kind === 'frame';
 		const along = (p.a0 + p.a1) / 2;
@@ -342,8 +347,8 @@ function addGlazing(
 				p.a1 - p.a0,
 				p.yt - p.yb,
 			);
-			const x = s.ax + dx * along + inward[0] * 0.004;
-			const z = s.az + dz * along + inward[1] * 0.004;
+			const x = s.ax + dx * along + inward[0] * 0.004 + bx;
+			const z = s.az + dz * along + inward[1] * 0.004 + bz;
 			light.position.set(x, (p.yb + p.yt) / 2, z);
 			light.lookAt(x + inward[0], (p.yb + p.yt) / 2, z + inward[1]);
 			// At night the pane is dark: only its black back stays.
@@ -354,18 +359,51 @@ function addGlazing(
 				view.own(metricBox(p.a1 - p.a0, p.yt - p.yb, 0.006)),
 				mats.get({ color: '#000000', roughness: 1 }, THREE.DoubleSide),
 			);
-			back.position.set(s.ax + dx * along, (p.yb + p.yt) / 2, s.az + dz * along);
+			back.position.set(s.ax + dx * along + bx, (p.yb + p.yt) / 2, s.az + dz * along + bz);
 			back.rotation.y = -Math.atan2(s.bz - s.az, s.bx - s.ax);
 			view.scene.add(shell(back, 'glass'));
 			continue;
 		}
 		const geom = view.own(metricBox(p.a1 - p.a0, p.yt - p.yb, frame ? 0.07 : 0.006));
 		const mesh = new THREE.Mesh(geom, mats.get(spec(key), THREE.DoubleSide));
-		mesh.position.set(s.ax + dx * along, (p.yb + p.yt) / 2, s.az + dz * along);
+		mesh.position.set(s.ax + dx * along + bx, (p.yb + p.yt) / 2, s.az + dz * along + bz);
 		mesh.rotation.y = -Math.atan2(s.bz - s.az, s.bx - s.ax);
 		mesh.castShadow = frame;
 		mesh.receiveShadow = true;
 		view.scene.add(shell(mesh, frame ? 'frame' : 'glass'));
+	}
+}
+
+/** A recessed window's reveal, from the wall's face back to its frame: the sill
+ *  (in `sillMaterial`, if it has one), the head and the jambs, in the wall's. */
+function addReveal(
+	view: Stage,
+	mats: MaterialLibrary,
+	scene: HouseScene,
+	s: WallSeg,
+	len: number,
+	o: WallOpening,
+	g: Glazing,
+	inward: [number, number],
+	deep: number,
+): void {
+	const room = scene.rooms.find((r) => r.openings?.includes(o));
+	if (!room) throw new Error('a recessed window in no room');
+	const wall = mats.get(surfaceMaterial(scene, room, 'walls'), THREE.DoubleSide);
+	const sillSpec = g.sillMaterial ? scene.materials?.[g.sillMaterial] : undefined;
+	const sill = sillSpec ? mats.get(sillSpec, THREE.DoubleSide) : wall;
+	const q = revealQuads(s, len, inward, o, deep);
+	const [ux, uz] = [(s.bx - s.ax) / len, (s.bz - s.az) / len];
+	const faces: [P3[], THREE.Material, [number, number, number]][] = [
+		[q.sill, sill, [0, 1, 0]],
+		[q.head, wall, [0, -1, 0]],
+		[q.jambs[0], wall, [ux, 0, uz]],
+		[q.jambs[1], wall, [-ux, 0, -uz]],
+	];
+	for (const [quad, mat, dir] of faces) {
+		const mesh = new THREE.Mesh(view.own(quadGeometry(quad)), mat);
+		mesh.receiveShadow = mesh.castShadow = true;
+		view.scene.add(shell(facing(mesh, dir), 'wall'));
 	}
 }
 

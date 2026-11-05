@@ -10,6 +10,7 @@ import {
 	skirtingStops,
 	glazingLayout,
 	passages,
+	revealQuads,
 	perimeter,
 	nearestRoom,
 	roomAt,
@@ -283,6 +284,26 @@ describe('skirtingRuns', () => {
 			[1.5, 3],
 		]);
 		expect(skirtingRuns(3, [], 2.4, [[-0.2, 0.5]])).toEqual([[0.5, 3]]);
+	});
+});
+
+describe('revealQuads', () => {
+	// A wall along x from (0, 0) to (4, 0), its room at +z; a window 1 m across from
+	// 1 m along, its sill 1 m up, 1 m tall, set 0.2 m back.
+	const s = { ax: 0, az: 0, bx: 4, bz: 0 };
+	const o = { wall: 0, offset: 1, width: 1, height: 1, sill: 1 };
+	const r = revealQuads(s, 4, [0, 1], o, 0.2);
+
+	it('lays the sill from the wall’s face back to the window, at the sill', () => {
+		const pts = r.sill;
+		expect(pts.every(([, y]) => y === 1)).toBe(true);
+		expect([...new Set(pts.map(([x]) => x))].sort()).toEqual([1, 2]);
+		expect([...new Set(pts.map(([, , z]) => z))].sort()).toEqual([-0.2, 0]);
+	});
+
+	it('closes it with a head at the top and a jamb either side', () => {
+		expect(r.head.every(([, y]) => y === 2)).toBe(true);
+		expect(r.jambs.map((j) => [...new Set(j.map(([x]) => x))])).toEqual([[1], [2]]);
 	});
 });
 

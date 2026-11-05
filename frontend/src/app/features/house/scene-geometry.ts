@@ -149,6 +149,39 @@ export interface GlazingPart extends WallPanel {
 	kind: 'frame' | 'lower' | 'upper';
 }
 
+/** A window set `recess` back into its wall, the reveal between the wall's face and
+ *  its frame, as quads [x, y, z]: the sill under it, the head over it, the jamb at
+ *  each side. `inward` is into the room; the window sits behind the face. */
+export function revealQuads(
+	s: WallSeg,
+	len: number,
+	inward: [number, number],
+	o: WallOpening,
+	recess: number,
+): { sill: P3[]; head: P3[]; jambs: [P3[], P3[]] } {
+	const [ux, uz] = [(s.bx - s.ax) / len, (s.bz - s.az) / len];
+	const at = (a: number, y: number, back: number): P3 => [
+		s.ax + ux * a - inward[0] * back,
+		y,
+		s.az + uz * a - inward[1] * back,
+	];
+	const [a0, a1] = [o.offset, o.offset + o.width];
+	const [y0, y1] = [o.sill ?? 0, (o.sill ?? 0) + o.height];
+	const flat = (y: number): P3[] => [
+		at(a0, y, 0),
+		at(a1, y, 0),
+		at(a1, y, recess),
+		at(a0, y, recess),
+	];
+	const side = (a: number): P3[] => [
+		at(a, y0, 0),
+		at(a, y1, 0),
+		at(a, y1, recess),
+		at(a, y0, recess),
+	];
+	return { sill: flat(y0), head: flat(y1), jambs: [side(a0), side(a1)] };
+}
+
 /** A window's frame and panes in its opening: the frame round the edge, a transom
  *  bar `transom` above the sill, the lower pane under it and `upperPanes` panes
  *  over it, split by mullions. Together they tile the opening exactly. */

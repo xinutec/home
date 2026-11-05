@@ -115,6 +115,11 @@ export interface Glazing {
 	lower: string;
 	upper?: string;
 	frameMaterial: string;
+	/** Metres the window is set back from the wall's face, the reveal between drawn as
+	 *  a sill, a head and two jambs (a deep kitchen sill things stand on). */
+	recess?: number;
+	/** The reveal's sill, when it is not the wall's material (tiled). */
+	sillMaterial?: string;
 }
 
 /** One room: its own closed outline, walked turtle-style from `start` (world XZ
