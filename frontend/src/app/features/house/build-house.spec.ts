@@ -5,6 +5,9 @@ import { partsOf } from './assembly';
 import type { HouseScene } from './house.model';
 import { MaterialLibrary } from './materials';
 import { buildHouse, solidTag } from './room-builder';
+import { mergeStatic } from './merge';
+import { oneSided } from './sides';
+import { unwrap } from './unwrap';
 import { roomPerimeter, segments } from './scene-geometry';
 
 const scene = json as unknown as HouseScene;
@@ -77,5 +80,28 @@ describe('buildHouse', () => {
 			.filter((e) => e.n === 1 && e.upright && !onWall(e.x, e.z))
 			.map((e) => `(${e.x.toFixed(3)}, ${e.z.toFixed(3)})`);
 		expect(open).toEqual([]);
+	});
+
+	it('draws no surface twice in one place, where a ray would meet both at once', () => {
+		// As the everyday view lays the house out: two charts of the same triangles
+		// are the same key twice.
+		const stage = { scene: new THREE.Scene(), own: <T>(r: T) => r };
+		buildHouse(stage, scene, new MaterialLibrary(stage.own, false), false, false);
+		oneSided(stage.scene, () => undefined);
+		const merged = mergeStatic(stage.scene, () => undefined);
+		const atlas = unwrap(
+			merged.map((m) => m.geometry),
+			0.02,
+		);
+		const twins = [...atlas.layout]
+			.filter(([k]) => k.includes('~'))
+			.map(([, p]) =>
+				p.box
+					.getCenter(new THREE.Vector3())
+					.toArray()
+					.map((v) => v.toFixed(2))
+					.join(', '),
+			);
+		expect(twins).toEqual([]);
 	});
 });
