@@ -1,8 +1,15 @@
 <div class="wrap">
 	<div #canvas class="canvas"></div>
 	<div #stick class="stick" aria-hidden="true"></div>
+	<div #crosshair class="crosshair" aria-hidden="true"></div>
 	@if (walking() && !moved()) {
-		<p class="hint">Drag to look · hold the left side to walk</p>
+		<p class="hint">
+			@if (mouse) {
+				Click to look around · W A S D to walk, Shift to run · click or E opens
+			} @else {
+				Swipe to look · hold the left side to walk, further to run
+			}
+		</p>
 	}
 
 	@if (fps()) {

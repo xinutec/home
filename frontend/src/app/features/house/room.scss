@@ -105,6 +105,26 @@
 	}
 }
 
+// The middle of the view, while the mouse is captured: what a click or E opens.
+.crosshair {
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	z-index: 1;
+	width: 6px;
+	height: 6px;
+	margin: -3px 0 0 -3px;
+	border-radius: 50%;
+	background: var(--on-media);
+	box-shadow: 0 0 0 1px var(--scrim);
+	display: none;
+	pointer-events: none;
+
+	&.shown {
+		display: block;
+	}
+}
+
 // How to walk, until the first move.
 .hint {
 	position: absolute;

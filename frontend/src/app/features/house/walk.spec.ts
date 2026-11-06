@@ -1,10 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import json from '../../../../../scenes/house.json';
 import type { HouseScene } from './house.model';
 import { MaterialLibrary } from './materials';
 import { buildHouse } from './room-builder';
-import { Collider, WalkControls } from './walk';
+import { Collider, RUN_SPEED, WALK_SPEED, WalkControls, stickSpeed } from './walk';
 
 const house = json as unknown as HouseScene;
 
@@ -171,5 +171,132 @@ describe('walking', () => {
 			expect(taps).toEqual([]);
 			expect(camera.rotation.y).not.toBe(yaw);
 		});
+	});
+});
+
+describe('the controls, as a first-person game’s', () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+		Reflect.deleteProperty(document, 'pointerLockElement');
+	});
+
+	/** A pointer event of `type` at (x, y), by a finger or the mouse. */
+	const at = (type: string, x: number, y: number, more: object = {}) =>
+		Object.assign(new Event(type), {
+			pointerId: 1,
+			pointerType: 'touch',
+			clientX: x,
+			clientY: y,
+			movementX: 0,
+			movementY: 0,
+			...more,
+		});
+	const key = (type: 'keydown' | 'keyup', code: string) =>
+		window.dispatchEvent(Object.assign(new Event(type), { code }));
+
+	/** Controls on a `width` × 800 screen, far from anything to bump into. */
+	function controls(width = 400) {
+		const dom = document.createElement('div');
+		dom.getBoundingClientRect = () => new DOMRect(0, 0, width, 800);
+		dom.setPointerCapture = () => undefined;
+		dom.requestPointerLock = () => Promise.resolve();
+		const camera = new THREE.PerspectiveCamera();
+		const taps: number[][] = [];
+		const walker = new WalkControls(
+			camera,
+			dom,
+			document.createElement('div'),
+			new Collider([box(1, 1, 1, 100, 0.5, 100)]),
+			() => undefined,
+			true,
+			(x, y) => taps.push([x, y]),
+		);
+		return { dom, camera, taps, walker };
+	}
+	const forward = (c: THREE.Camera) => new THREE.Vector3(0, 0, -1).applyQuaternion(c.quaternion);
+	const right = (c: THREE.Camera) => new THREE.Vector3(1, 0, 0).applyQuaternion(c.quaternion);
+
+	it('looks the way a finger swipes: right to the right, up upward', () => {
+		const { dom, camera } = controls();
+		const was = right(camera);
+		dom.dispatchEvent(at('pointerdown', 300, 400));
+		dom.dispatchEvent(at('pointermove', 340, 400));
+		expect(forward(camera).dot(was)).toBeGreaterThan(0);
+		dom.dispatchEvent(at('pointermove', 340, 360));
+		expect(forward(camera).y).toBeGreaterThan(0);
+	});
+
+	it('turns by as much for a swipe across a phone as across a tablet', () => {
+		const turned = (width: number) => {
+			const { dom, camera } = controls(width);
+			dom.dispatchEvent(at('pointerdown', width * 0.5, 400));
+			dom.dispatchEvent(at('pointermove', width * 0.9, 400));
+			return camera.rotation.y;
+		};
+		expect(turned(800)).toBeCloseTo(turned(400), 6);
+	});
+
+	it('stands still for a resting thumb, walks, then runs at the stick’s edge', () => {
+		expect(stickSpeed(0.05)).toBe(0);
+		expect(stickSpeed(0.75)).toBeCloseTo(WALK_SPEED, 6);
+		expect(stickSpeed(1)).toBeCloseTo(RUN_SPEED, 6);
+		expect(stickSpeed(0.4)).toBeGreaterThan(0);
+		expect(stickSpeed(0.4)).toBeLessThan(WALK_SPEED);
+	});
+
+	it('eases into a walk and out of it, and runs with Shift', () => {
+		let now = 0;
+		vi.spyOn(performance, 'now').mockImplementation(() => now);
+		const { camera, walker } = controls();
+		/** The speed over the next frames, metres a second, and whether it still moves. */
+		const speed = (ms: number) => {
+			const from = camera.position.clone();
+			let moving = false;
+			for (let t = 0; t < ms; t += 16) {
+				now += 16;
+				moving = walker.update();
+			}
+			return { v: camera.position.distanceTo(from) / (ms / 1000), moving };
+		};
+		key('keydown', 'KeyW');
+		walker.update();
+		expect(speed(48).v).toBeLessThan(WALK_SPEED * 0.6);
+		speed(500);
+		expect(speed(160).v).toBeCloseTo(WALK_SPEED, 1);
+		key('keydown', 'ShiftLeft');
+		speed(500);
+		expect(speed(160).v).toBeCloseTo(RUN_SPEED, 1);
+		key('keyup', 'ShiftLeft');
+		key('keyup', 'KeyW');
+		expect(speed(32).moving).toBe(true);
+		expect(speed(1000).moving).toBe(false);
+	});
+
+	it('captures the mouse on a click, then looks by its movement', () => {
+		const { dom, camera, taps } = controls();
+		let asked = false;
+		dom.requestPointerLock = () => ((asked = true), Promise.resolve());
+		dom.dispatchEvent(at('pointerdown', 100, 100, { pointerType: 'mouse' }));
+		dom.dispatchEvent(at('pointerup', 100, 100, { pointerType: 'mouse' }));
+		expect(asked).toBe(true);
+		// The click that captures it opens nothing.
+		expect(taps).toEqual([]);
+		Object.defineProperty(document, 'pointerLockElement', { value: dom, configurable: true });
+		const was = right(camera);
+		dom.dispatchEvent(at('pointermove', 100, 100, { pointerType: 'mouse', movementX: 30 }));
+		expect(forward(camera).dot(was)).toBeGreaterThan(0);
+	});
+
+	it('opens what is in the middle of the view, by a click with the mouse captured or by E', () => {
+		const { dom, taps } = controls();
+		Object.defineProperty(document, 'pointerLockElement', { value: dom, configurable: true });
+		dom.dispatchEvent(at('pointerdown', 10, 10, { pointerType: 'mouse' }));
+		dom.dispatchEvent(at('pointerup', 10, 10, { pointerType: 'mouse' }));
+		key('keydown', 'KeyE');
+		key('keyup', 'KeyE');
+		expect(taps).toEqual([
+			[200, 400],
+			[200, 400],
+		]);
 	});
 });

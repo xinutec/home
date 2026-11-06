@@ -83,6 +83,8 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 	readonly loading = signal(false);
 	/** Walking the room in the first person (not while tracing or baking). */
 	readonly walking = signal(false);
+	/** A mouse and keys, not a finger: the hint says how to walk by them. */
+	readonly mouse = typeof matchMedia === 'function' && matchMedia('(pointer: fine)').matches;
 	/** Whether the walker has looked or moved yet: the hint shows until then. */
 	readonly moved = signal(false);
 	/** Frames a second while the view moves, and the slowest frame; `idle` while still. */
@@ -95,6 +97,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 	private zone = inject(NgZone);
 	private host = viewChild.required<ElementRef<HTMLDivElement>>('canvas');
 	private stick = viewChild.required<ElementRef<HTMLDivElement>>('stick');
+	private crosshair = viewChild.required<ElementRef<HTMLDivElement>>('crosshair');
 	private view?: ThreeView;
 	private tracer?: WebGLPathTracer;
 	/** The light of the doors and drawers as they open, once a lightmap applies. */
@@ -243,6 +246,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			},
 			standing,
 			tapped,
+			this.crosshair().nativeElement,
 		);
 		view.useMover(walker);
 		this.walking.set(true);

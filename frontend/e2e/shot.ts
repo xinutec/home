@@ -48,6 +48,8 @@ const browser = await chromium.launch({
 const ctx = await browser.newContext({
 	serviceWorkers: 'block',
 	viewport: { width: 1200, height: 860 },
+	// A tap is a finger's, as on the phone: a mouse's click captures the mouse.
+	hasTouch: true,
 });
 await ctx.route(new RegExp(`^${ORIGIN}/(?!api/|auth/|login)`), (r) => {
 	const p = new URL(r.request().url()).pathname;
@@ -95,7 +97,8 @@ if (a.tap) {
 }
 for (const tap of a.tap ? a.tap.split(';') : []) {
 	const [x, y] = tap.split(',').map(Number);
-	await canvas.click({ position: { x, y } });
+	const at = await canvas.boundingBox();
+	await page.touchscreen.tap((at?.x ?? 0) + x, (at?.y ?? 0) + y);
 	await page.clock.runFor(Number(a.after));
 }
 writeFileSync(a.out, await canvas.screenshot());
