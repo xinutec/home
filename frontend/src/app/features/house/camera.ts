@@ -1,6 +1,6 @@
 /** A camera asked for in the URL, overriding the room's own `view`:
  *  `?eye=x,y,z&look=x,y,z&fov=deg` (vertical field of view), with `trace`,
- *  `exposure`, `tone=linear`, `stats`, `bake` (with `since`), `export` and `night`. For comparing a render against a photograph
+ *  `exposure`, `tone=linear`, `stats`, `bake` (with `since` or `shut`), `export` and `night`. For comparing a render against a photograph
  *  taken from the same spot. */
 export interface CameraQuery {
 	eye?: [number, number, number];
@@ -19,6 +19,9 @@ export interface CameraQuery {
 	/** Bake only near what changed since the bake the page is fed, from its raw sums
 	 *  (e2e/bake.ts feeds both): the rest is that bake's. */
 	since?: boolean;
+	/** Bake only the house with every door and drawer shut, none opened: to measure
+	 *  its light by, not to ship. */
+	shut?: boolean;
 	/** Write the physical scene `trace` would draw as glTF, for the tracer crate. */
 	export?: boolean;
 	/** The physical scene at night: no daylight, the ceiling lights lit. */
@@ -48,6 +51,7 @@ export function cameraFromQuery(search: string): CameraQuery {
 	const bake = Math.round(Number(q.get('bake')));
 	if (bake > 0 && bake <= 100_000) out.bake = bake;
 	if (q.has('since')) out.since = true;
+	if (q.has('shut')) out.shut = true;
 	if (q.has('export')) out.export = true;
 	if (q.has('night')) out.night = true;
 	return out;

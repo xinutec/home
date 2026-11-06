@@ -63,6 +63,7 @@ export interface HouseBake {
  * `progress` hears samples done of all. `since` the last bake, it traces only near
  * the surfaces that changed since then and on charts no bake has lit, and bakes
  * again only the joints near them, in those places only: the rest is that bake's.
+ * `shutOnly`, it bakes no joint: the shut house's light alone, to measure.
  */
 export async function bakeHouse(
 	renderer: THREE.WebGLRenderer,
@@ -71,6 +72,7 @@ export async function bakeHouse(
 	samples: number,
 	progress: (done: number, of: number) => void,
 	since?: LastBake,
+	shutOnly = false,
 ): Promise<HouseBake> {
 	const started = performance.now();
 	const { width, height } = lit.atlas;
@@ -87,7 +89,7 @@ export async function bakeHouse(
 		joints.keys().map((key) => ({ key, at: joints.openAt(key), region: region(key) })),
 		(r) => !!edited?.meets(r),
 	);
-	const keys = joints.keys().filter((k) => !kept.has(k));
+	const keys = shutOnly ? [] : joints.keys().filter((k) => !kept.has(k));
 	// Progress over every bake: the shut one, then each joint's.
 	const report = (k: number) => (done: number) =>
 		progress(k * samples + done, (keys.length + 1) * samples);
@@ -125,8 +127,7 @@ export async function bakeHouse(
 		for (const k of ['build', 'trace', 'read', 'finish'] as const) times.joints[k] += open.ms[k];
 	}
 	// Every joint, in the order they are keyed: the kept ones as they were.
-	const all = joints
-		.keys()
+	const all = (shutOnly ? [] : joints.keys())
 		.map((key) => kept.get(key) ?? changes.find((c) => c.key === key))
 		.filter((c) => c !== undefined);
 	const seen = new Uint8Array(4 + surfaces.tris.byteLength + surfaces.salts.byteLength);

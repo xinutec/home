@@ -8,7 +8,9 @@
 // or went. It needs that bake's raw sums and the surfaces it saw, which each bake
 // leaves in .bake-cache/ (outside git), and the same light to bake by: the baker's and sky's code, the
 // scene's lights and the samples, as when they were summed. Else, or with --full,
-// it bakes the whole house, its atlas laid out afresh.
+// it bakes the whole house, its atlas laid out afresh. --shut bakes the house with
+// every door shut and none opened, into .bake-cache/shut.bake: to measure its light
+// by, never the scene's bake, and the cache's sums are left as they were.
 //
 // The local build (`pnpm run build` first), fed the local scenes/house.json, on
 // this machine's GPU in headless Chromium; e2e/bake-horus.sh runs it on horus. Bake again after any change to the
@@ -26,14 +28,15 @@ const { values: args } = parseArgs({
 	options: {
 		samples: { type: 'string', default: '1024' },
 		full: { type: 'boolean', default: false },
+		shut: { type: 'boolean', default: false },
 	},
 });
 const ORIGIN = 'https://home.xinutec.org';
 const ROOT = new URL('../..', import.meta.url).pathname;
 const DIST = new URL('../dist/frontend/browser', import.meta.url).pathname;
 const SCENE = join(ROOT, 'scenes/house.json');
-const OUT = join(ROOT, 'scenes/house.bake');
 const CACHE = join(ROOT, '.bake-cache');
+const OUT = args.shut ? join(CACHE, 'shut.bake') : join(ROOT, 'scenes/house.bake');
 const md5 = (b: Buffer) => createHash('md5').update(b).digest('hex');
 // What the light is baked by, besides the charts an edit shows: changed, every
 // texel's light may have, and only a whole bake will do.
@@ -57,6 +60,7 @@ const meta = existsSync(join(CACHE, 'house.json'))
 const previous = existsSync(OUT) ? readFileSync(OUT) : undefined;
 const since =
 	!args.full &&
+	!args.shut &&
 	!!previous &&
 	previous.readUInt32LE(28) > 0 &&
 	meta?.bake === md5(previous) &&
@@ -117,9 +121,12 @@ const page = await ctx.newPage();
 page.on('console', (m) => {
 	if (m.type() === 'error') console.error(`page: ${m.text()}`);
 });
-await page.goto(`${ORIGIN}/house/living?bake=${args.samples}${since ? '&since' : ''}`, {
-	waitUntil: 'domcontentloaded',
-});
+await page.goto(
+	`${ORIGIN}/house/living?bake=${args.samples}${since ? '&since' : ''}${args.shut ? '&shut' : ''}`,
+	{
+		waitUntil: 'domcontentloaded',
+	},
+);
 // A GPU that failed to start falls back to SwiftShader, on the CPU, without a word.
 const gpu = await page.evaluate(() => {
 	const gl = document.createElement('canvas').getContext('webgl2');
@@ -194,7 +201,13 @@ let fnv = 0x811c9dc5;
 for (const byte of readFileSync(SCENE)) fnv = Math.imul(fnv ^ byte, 0x01000193);
 head.writeUInt32LE(fnv >>> 0, 16);
 const bytes = Buffer.concat([head, gzipSync(raw.subarray(HEADER), { level: 9 })]);
+mkdirSync(CACHE, { recursive: true });
 writeFileSync(OUT, bytes);
+if (args.shut) {
+	console.log(`${OUT}: ${(bytes.length / 1e6).toFixed(2)} MB, ${done}`);
+	await browser.close();
+	process.exit(0);
+}
 // Its raw sums, for the next bake to start from: the atlas's size, then the sums.
 const sums = await fetchBytes('houseRaw');
 const size = Buffer.alloc(8);

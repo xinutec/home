@@ -255,7 +255,8 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		else if (this.query.trace) this.trace(view, this.query.trace);
 		else if (this.query.bake) {
 			const since = this.query.since && map ? await fetchLastBake(map) : undefined;
-			this.bake(view, new Joints(scene, lit.meshes), lit, this.query.bake, since);
+			const joints = new Joints(scene, lit.meshes);
+			this.bake(view, joints, lit, this.query.bake, since, this.query.shut);
 		} else {
 			const joints = new Joints(scene, lit.meshes);
 			this.light(view, lit, map);
@@ -353,7 +354,14 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 	 *  asked, and leaves it, as scenes/house.bake stores it before compression, on
 	 *  `window.houseBake` for e2e/bake.ts, with its raw sums and the surfaces it saw
 	 *  for the next bake; the canvas's host then carries `data-baked`. */
-	private bake(view: ThreeView, joints: Joints, lit: Lit, samples: number, since?: LastBake): void {
+	private bake(
+		view: ThreeView,
+		joints: Joints,
+		lit: Lit,
+		samples: number,
+		since?: LastBake,
+		shutOnly = false,
+	): void {
 		const host = this.host().nativeElement;
 		const run = async () => {
 			const baked = await bakeHouse(
@@ -363,6 +371,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 				samples,
 				(done, of) => (host.dataset['baking'] = `${done} of ${of}`),
 				since,
+				shutOnly,
 			);
 			// The room it is for, beside it, for e2e scripts that inspect the light.
 			Object.assign(window, {
