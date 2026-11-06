@@ -9,6 +9,7 @@ import { mergeStatic } from './merge';
 import { oneSided } from './sides';
 import { unwrap } from './unwrap';
 import type { Atlas, Layout } from './unwrap';
+import type { Surfaces } from './edits';
 import {
 	bounds,
 	covingProfile,
@@ -19,9 +20,8 @@ import {
 	nearestRoom,
 	revealQuads,
 	roomPerimeter,
+	roomSkirting,
 	segments,
-	skirtingRuns,
-	skirtingStops,
 	wallPanels,
 } from './scene-geometry';
 import type { P3, Passage } from './scene-geometry';
@@ -76,9 +76,33 @@ export function buildInterior(
 		lit ?? {
 			meshes: [],
 			centres: new Map(),
-			atlas: { width: 0, height: 0, charts: 0, layout: new Map(), added: [], removed: [] },
+			atlas: {
+				width: 0,
+				height: 0,
+				charts: 0,
+				layout: new Map(),
+				added: [],
+				removed: [],
+				fresh: [],
+			},
 		}
 	);
+}
+
+/** The surfaces of `meshes` as the bake sees them, where they stand: each triangle,
+ *  and a hash of what it is made of (`madeOf`). */
+export function surfacesOf(meshes: THREE.Mesh[]): Surfaces {
+	const tris: number[] = [];
+	const salts: number[] = [];
+	for (const m of meshes) {
+		m.updateMatrixWorld();
+		const p = m.geometry.getAttribute('position').clone().applyMatrix4(m.matrixWorld);
+		let h = 0x811c9dc5;
+		for (const c of madeOf(m)) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
+		for (let i = 0; i < p.count; i++) tris.push(p.getX(i), p.getY(i), p.getZ(i));
+		for (let t = 0; t < p.count / 3; t++) salts.push(h >>> 0);
+	}
+	return { tris: Float32Array.from(tris), salts: Uint32Array.from(salts) };
 }
 
 /** What a mesh is made of, as the bake sees it: its colour, roughness, how much
@@ -137,9 +161,10 @@ export function buildHouse(
 			if (o instanceof THREE.Mesh) solids.set(o, solid(o));
 		}
 	};
+	const plan = skirtingPlan(scene);
 	for (const r of scene.rooms) {
 		const from = stage.scene.children.length;
-		addRoomShell(stage, mats, scene, r, physical, night);
+		addRoomShell(stage, mats, scene, r, physical, night, plan);
 		tag(from, r.name, (o) => ({ kind: shellKind(o), room: r.name }));
 	}
 	for (const p of passages(scene)) {
@@ -239,6 +264,7 @@ function addRoomShell(
 	room: Room,
 	physical: boolean,
 	night: boolean,
+	plan: SkirtingPlan,
 ): void {
 	const pts = roomPerimeter(room);
 	const into = inwardNormals(pts);
@@ -258,14 +284,9 @@ function addRoomShell(
 		into[step(i, -1)],
 		into[step(i, 1)],
 	];
-	// Every wall's runs of skirting first: a run's end is mitred only where the next
-	// wall's run comes to the same corner, else (the next wall a bay's opening) closed.
-	const runs = segs.map((s, i) => {
-		const len = Math.hypot(s.bx - s.ax, s.bz - s.az);
-		if (!room.skirting || len < 1e-6) return [];
-		const ops = (room.openings ?? []).filter((o) => o.wall === i);
-		return skirtingRuns(len, ops, scene.height, skirtingStops(scene, room, i));
-	});
+	// A run's end is mitred where the next wall's run comes to the same corner, or an
+	// open passage's side does (its board runs on round it); else it is closed.
+	const runs = plan.runs.get(room) ?? [];
 	const meetsBefore = (i: number) => {
 		const j = step(i, -1);
 		const len = Math.hypot(segs[j].bx - segs[j].ax, segs[j].bz - segs[j].az);
@@ -295,22 +316,106 @@ function addRoomShell(
 					'coving',
 				),
 			);
+		const [before, after] = neighbours(i);
+		const along = (a: number): [number, number] => [
+			s.ax + ((s.bx - s.ax) * a) / len,
+			s.az + ((s.bz - s.az) * a) / len,
+		];
 		if (room.skirting)
 			for (const [a0, a1] of runs[i])
 				view.scene.add(
 					shell(
-						skirting(view, s, len, a0, a1, inward, neighbours(i), room.skirting, skirtingMat, [
-							a0 < 1e-6 && meetsBefore(i),
-							a1 > len - 1e-6 && meetsAfter(i),
+						skirting(view, s, len, a0, a1, inward, room.skirting, skirtingMat, [
+							a0 < 1e-6 && meetsBefore(i) ? before : plan.reveal(along(a0)),
+							a1 > len - 1e-6 && meetsAfter(i) ? after : plan.reveal(along(a1)),
 						]),
 						'skirting',
 					),
 				);
 	});
+	// Round each open passage's sides that this room's surfaces take, a board on each,
+	// meeting the rooms' boards on either side.
+	for (const r of plan.reveals)
+		if (r.room === room && room.skirting) {
+			const len = Math.hypot(r.b[0] - r.a[0], r.b[1] - r.a[1]);
+			const seg = { ax: r.a[0], az: r.a[1], bx: r.b[0], bz: r.b[1] };
+			view.scene.add(
+				shell(
+					skirting(view, seg, len, 0, len, r.into, room.skirting, skirtingMat, [
+						plan.board(r.room, r.a),
+						plan.board(r.other, r.b),
+					]),
+					'skirting',
+				),
+			);
+		}
 	const floor = mats.get(surfaceMaterial(scene, room, 'floor'), THREE.DoubleSide);
 	const ceiling = mats.get(surfaceMaterial(scene, room, 'ceiling'), THREE.DoubleSide);
 	view.scene.add(shell(facing(flat(view, pts, 0, floor), [0, 1, 0]), 'floor'));
 	view.scene.add(shell(facing(flat(view, pts, scene.height, ceiling), [0, -1, 0]), 'ceiling'));
+}
+
+/** Where every room's skirting runs and ends, and round which passages' sides it
+ *  goes on: what a room's boards need to know of each other's, and of the sides'. */
+interface SkirtingPlan {
+	/** Each room's runs, by wall (`roomSkirting`). */
+	runs: Map<Room, [number, number][][]>;
+	/** Each open passage's sides: a board from `a` (in `room`) to `b` (in `other`),
+	 *  facing `into` the opening. */
+	reveals: {
+		room: Room;
+		other: Room;
+		a: [number, number];
+		b: [number, number];
+		into: [number, number];
+	}[];
+	/** The side whose board meets a room's board ending at `p`: its facing; else none. */
+	reveal(p: [number, number]): [number, number] | undefined;
+	/** The wall's inward normal of `room`'s board ending at `p`; none if no board does. */
+	board(room: Room, p: [number, number]): [number, number] | undefined;
+}
+
+function skirtingPlan(scene: HouseScene): SkirtingPlan {
+	const near = (p: [number, number], q: [number, number]) =>
+		Math.hypot(p[0] - q[0], p[1] - q[1]) < 1e-6;
+	const runs = new Map(scene.rooms.map((r) => [r, roomSkirting(scene, r)]));
+	const ends = scene.rooms.flatMap((r) => {
+		const pts = roomPerimeter(r);
+		const into = inwardNormals(pts);
+		return segments(pts).flatMap((s, i) => {
+			const len = Math.hypot(s.bx - s.ax, s.bz - s.az);
+			return (runs.get(r)?.[i] ?? []).flatMap((run) =>
+				run.map((a) => ({
+					room: r,
+					p: [s.ax + ((s.bx - s.ax) * a) / len, s.az + ((s.bz - s.az) * a) / len] as [
+						number,
+						number,
+					],
+					normal: into[i],
+				})),
+			);
+		});
+	});
+	const reveals = passages(scene)
+		.filter((p) => p.skirtingRound)
+		.flatMap((p) =>
+			p.jambs.map(([a, b], k) => {
+				const into: [number, number] = k === 0 ? p.into : [-p.into[0], -p.into[1]];
+				return {
+					room: p.room,
+					other: p.other,
+					a: [a[0], a[2]] as [number, number],
+					b: [b[0], b[2]] as [number, number],
+					into,
+				};
+			}),
+		);
+	return {
+		runs,
+		reveals,
+		reveal: (p) => reveals.find((r) => near(r.a, p) || near(r.b, p))?.into,
+		board: (room, p) => ends.find((e) => e.room === room && near(e.p, p))?.normal,
+	};
 }
 
 /** Names what a shell mesh is, for the physics (`solidTag`). */
@@ -710,9 +815,9 @@ function coving(
 }
 
 /** One run of skirting, `a0` to `a1` along the wall: a board `height` tall and
- *  `depth` out from it. Where it meets the next wall's run at a corner (`meets`,
- *  at its start and end) its end is mitred to that one's, as a moulding is cut;
- *  anywhere else (a doorway, a bay's opening) it ends square, closed. */
+ *  `depth` out from it. Where another board meets it (`meets`, at its start and end:
+ *  that board's wall's inward normal) its end is mitred to that one's, as a moulding
+ *  is cut; anywhere else (a doorway) it ends square, closed. */
 function skirting(
 	view: Stage,
 	s: WallSeg,
@@ -720,21 +825,20 @@ function skirting(
 	a0: number,
 	a1: number,
 	inward: [number, number],
-	[before, after]: [[number, number], [number, number]],
 	k: { height: number; depth: number },
 	mat: THREE.Material,
-	[cornerAtStart, cornerAtEnd]: [boolean, boolean],
+	[before, after]: [[number, number] | undefined, [number, number] | undefined],
 ): THREE.Mesh {
 	const [dx, dz] = [(s.bx - s.ax) / len, (s.bz - s.az) / len];
 	const atWall = (a: number) => ({ x: s.ax + dx * a, z: s.az + dz * a });
 	// The board's two ends, `u` out from the wall.
 	const start = (u: number) =>
-		cornerAtStart
-			? mitre(atWall(0), inward, before, u)
+		before
+			? mitre(atWall(a0), inward, before, u)
 			: { x: atWall(a0).x + inward[0] * u, z: atWall(a0).z + inward[1] * u };
 	const end = (u: number) =>
-		cornerAtEnd
-			? mitre(atWall(len), inward, after, u)
+		after
+			? mitre(atWall(a1), inward, after, u)
 			: { x: atWall(a1).x + inward[0] * u, z: atWall(a1).z + inward[1] * u };
 	const pos: number[] = [];
 	const uv: number[] = [];
@@ -758,12 +862,12 @@ function skirting(
 		new THREE.Vector3(0, 1, 0),
 	);
 	const along = new THREE.Vector3(dx, 0, dz);
-	if (!cornerAtStart)
+	if (!before)
 		quad(
 			[v3(start(0), 0), v3(start(d), 0), v3(start(d), h), v3(start(0), h)],
 			along.clone().negate(),
 		);
-	if (!cornerAtEnd) quad([v3(end(0), 0), v3(end(d), 0), v3(end(d), h), v3(end(0), h)], along);
+	if (!after) quad([v3(end(0), 0), v3(end(d), 0), v3(end(d), h), v3(end(0), h)], along);
 	const geom = view.own(new THREE.BufferGeometry());
 	geom.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
 	geom.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));

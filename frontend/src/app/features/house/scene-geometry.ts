@@ -223,11 +223,17 @@ export type P3 = [number, number, number];
  *  so the two walls stand apart and the gap between their openings must be filled
  *  with a floor, a soffit above and the two side jambs. */
 export interface Passage {
-	/** The room whose surfaces it takes. */
+	/** The room whose surfaces it takes, and the one it leads to. */
 	room: Room;
+	other: Room;
 	floor: P3[];
 	soffit: P3[];
+	/** Its two sides, each from `room`'s face of the wall to `other`'s. */
 	jambs: P3[][];
+	/** Along the opening from its first side to its second, in `room`'s wall, [x, z]. */
+	into: [number, number];
+	/** The skirting runs round its sides (`WallOpening.skirtingRound`), at the floor. */
+	skirtingRound: boolean;
 }
 
 /** How far apart two facing walls may stand and still be one wall's two faces. */
@@ -271,8 +277,12 @@ export function passages(scene: HouseScene): Passage[] {
 				const yb = Math.max(o.sill ?? 0, o2.sill ?? 0);
 				const yt = Math.min((o.sill ?? 0) + o.height, (o2.sill ?? 0) + o2.height);
 				const at = (p: [number, number], y: number): P3 => [p[0], y, p[1]];
+				const len = d(here.a, here.b) || 1;
 				out.push({
 					room,
+					other,
+					into: [(here.b[0] - here.a[0]) / len, (here.b[1] - here.a[1]) / len],
+					skirtingRound: yb <= 1e-6 && (o.skirtingRound === true || o2.skirtingRound === true),
 					floor: [at(here.a, yb), at(here.b, yb), at(qb, yb), at(qa, yb)],
 					soffit: [at(here.a, yt), at(here.b, yt), at(qb, yt), at(qa, yt)],
 					jambs: [
@@ -323,6 +333,16 @@ export function skirtingRuns(
 		out = cut;
 	}
 	return out;
+}
+
+/** Every wall's runs of skirting in `room`, by wall: none where it has no skirting. */
+export function roomSkirting(scene: HouseScene, room: Room): [number, number][][] {
+	return segments(roomPerimeter(room)).map((s, i) => {
+		const len = Math.hypot(s.bx - s.ax, s.bz - s.az);
+		if (!room.skirting || len < 1e-6) return [];
+		const ops = (room.openings ?? []).filter((o) => o.wall === i);
+		return skirtingRuns(len, ops, scene.height, skirtingStops(scene, room, i));
+	});
 }
 
 /** Where a room's wall `i` has something built against it (`builtIn`), as spans

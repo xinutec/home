@@ -5,8 +5,8 @@
 //
 // After an edit it bakes only near what changed (the page's ?since): every chart
 // the last bake laid out keeps its place, and its light where nothing near it came
-// or went. It needs that bake's raw sums, which each bake leaves in .bake-cache/
-// (outside git), and the same light to bake by: the baker's and sky's code, the
+// or went. It needs that bake's raw sums and the surfaces it saw, which each bake
+// leaves in .bake-cache/ (outside git), and the same light to bake by: the baker's and sky's code, the
 // scene's lights and the samples, as when they were summed. Else, or with --full,
 // it bakes the whole house, its atlas laid out afresh.
 //
@@ -61,7 +61,8 @@ const since =
 	previous.readUInt32LE(28) > 0 &&
 	meta?.bake === md5(previous) &&
 	meta.inputs === inputs &&
-	existsSync(join(CACHE, 'house.raw.gz'));
+	existsSync(join(CACHE, 'house.raw.gz')) &&
+	existsSync(join(CACHE, 'house.surfaces.gz'));
 console.log(since ? 'baking only what changed since the last bake' : 'baking the whole house');
 const TYPES: Record<string, string> = {
 	'.js': 'text/javascript',
@@ -99,6 +100,12 @@ await ctx.route('**/api/house/bake', (route) =>
 	since && previous
 		? route.fulfill({ body: previous, contentType: 'application/octet-stream' })
 		: route.fulfill({ status: 404, body: '' }),
+);
+await ctx.route('**/api/house/bake-tris', (route) =>
+	route.fulfill({
+		body: gunzipSync(readFileSync(join(CACHE, 'house.surfaces.gz'))),
+		contentType: 'application/octet-stream',
+	}),
 );
 await ctx.route('**/api/house/bake-raw', (route) =>
 	route.fulfill({
@@ -151,7 +158,7 @@ if (!done || 'error' in (JSON.parse(done) as object)) {
 }
 process.stdout.write('\n');
 // The page's bytes, a chunk at a time: one string of the raw sums would be 45 MB.
-const fetchBytes = async (name: 'houseBake' | 'houseRaw') => {
+const fetchBytes = async (name: 'houseBake' | 'houseRaw' | 'houseSurfaces') => {
 	const size = await page.evaluate(
 		(n) => (window as unknown as Record<string, ArrayBufferView>)[n].byteLength,
 		name,
@@ -195,6 +202,10 @@ size.writeUInt32LE(raw.readUInt32LE(8), 0);
 size.writeUInt32LE(raw.readUInt32LE(12), 4);
 mkdirSync(CACHE, { recursive: true });
 writeFileSync(join(CACHE, 'house.raw.gz'), gzipSync(Buffer.concat([size, sums]), { level: 1 }));
+writeFileSync(
+	join(CACHE, 'house.surfaces.gz'),
+	gzipSync(await fetchBytes('houseSurfaces'), { level: 1 }),
+);
 writeFileSync(join(CACHE, 'house.json'), JSON.stringify({ bake: md5(bytes), inputs }));
 console.log(`${OUT}: ${(bytes.length / 1e6).toFixed(2)} MB, ${done}`);
 await browser.close();

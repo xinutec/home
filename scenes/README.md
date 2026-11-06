@@ -46,6 +46,8 @@ hand. The 3D house view (`frontend/.../features/house`) renders from these.
 - **skirting** (optional, per room) — the board along every wall's foot, wherever
   the wall reaches the floor: `height` up the wall, `depth` out from it, in the
   room's `surfaces.skirting` material. Drawn only; the physics does not see it.
+  It stops at a doorway; an opening with `"skirtingRound": true` (an open passage,
+  no door: the bay's, the dining room's) has it run on round its sides.
 - **shared walls** — adjacent rooms each include the shared wall in their own
   outline (it's simply drawn by both), and a connecting doorway is an opening in
   each room's copy. There are no special "partition" or "between-rooms" objects —

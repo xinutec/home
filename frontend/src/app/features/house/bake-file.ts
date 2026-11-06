@@ -154,6 +154,26 @@ export function encodeLightmap(
 /** A chart's bytes in the layout. */
 const CHART_BYTES = 38;
 
+/** A joint's change of light after an edit: `fresh`, baked again where `retraced`,
+ *  and `old` everywhere else, where the edit changed nothing. */
+export function mergedChange(
+	old: JointLight,
+	fresh: JointLight,
+	retraced: (texel: number) => boolean,
+): JointLight {
+	const out = new Map<number, ArrayLike<number>>();
+	old.texels.forEach((t, i) => {
+		if (!retraced(t)) out.set(t, old.delta.subarray(i * 3, i * 3 + 3));
+	});
+	fresh.texels.forEach((t, i) => {
+		if (retraced(t)) out.set(t, fresh.delta.subarray(i * 3, i * 3 + 3));
+	});
+	const texels = Uint32Array.from([...out.keys()].sort((a, b) => a - b));
+	const delta = new Float32Array(texels.length * 3);
+	texels.forEach((t, i) => delta.set(out.get(t) ?? [0, 0, 0], i * 3));
+	return { key: fresh.key, at: fresh.at, texels, delta };
+}
+
 /** A bake's raw sums (RGBA a pixel, `width` × `height`) in an atlas as wide but
  *  `rows` tall: every chart a layout keeps stays on its pixels; rows added are empty. */
 export function relaid(

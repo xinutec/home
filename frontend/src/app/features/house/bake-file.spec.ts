@@ -1,6 +1,14 @@
 import { Box3, DataUtils, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
-import { HEADER, checksum, decodeLightmap, encodeLightmap, lightChange, relaid } from './bake-file';
+import {
+	HEADER,
+	checksum,
+	decodeLightmap,
+	encodeLightmap,
+	lightChange,
+	mergedChange,
+	relaid,
+} from './bake-file';
 
 // The bytes as stored but not compressed: decoding then inflates nothing.
 const raw = (b: Uint8Array) => Promise.resolve(b.slice());
@@ -136,5 +144,18 @@ describe('lightmap file', () => {
 		expect([...relaid(raw, 1, 2, 1, 3)]).toEqual([1, 1, 1, 8, 2, 2, 2, 8, 0, 0, 0, 0]);
 		expect([...relaid(raw, 1, 2, 1, 1)]).toEqual([1, 1, 1, 8]);
 		expect(() => relaid(raw, 1, 2, 2, 2)).toThrow(/wide/);
+	});
+
+	it('keeps a joint’s old change of light wherever its bake did not trace again', () => {
+		const j = (texels: number[], d: number) => ({
+			key: 'k',
+			at: 1,
+			texels: Uint32Array.from(texels),
+			delta: Float32Array.from(texels.flatMap(() => [d, d, d])),
+		});
+		// Traced again: texels 4 to 6. Old changes at 2, 5; new ones at 4, 9 (9 not traced).
+		const merged = mergedChange(j([2, 5], 1), j([4, 9], 2), (t) => t >= 4 && t <= 6);
+		expect([...merged.texels]).toEqual([2, 4]);
+		expect([...merged.delta]).toEqual([1, 1, 1, 2, 2, 2]);
 	});
 });

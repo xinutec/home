@@ -54,9 +54,9 @@
         [0, 3.19], [90, 3.9], [90, 4.0], [90, 1.32], [90, 0.35]
       ],
       "openings": [
-        {"wall": 4, "offset": 0, "width": 2.4, "height": 2.22, "sill": 0, "leads": "bay"},
+        {"wall": 4, "offset": 0, "width": 2.4, "height": 2.22, "sill": 0, "leads": "bay", "skirtingRound": true},
         {"wall": 5, "offset": 1.165, "width": 0.75, "height": 1.97, "sill": 0, "estimate": "inside the glazed door's measured frame; this wall is 3.90 m in the model and 3.95 m by the tape across the door: measure the wall itself"},
-        {"wall": 6, "offset": 1.37, "width": 1.5, "height": 1.94, "sill": 0, "leads": "dining"}
+        {"wall": 6, "offset": 1.37, "width": 1.5, "height": 1.94, "sill": 0, "leads": "dining", "skirtingRound": true}
       ],
       "surfaces": {"walls": "wall-paint", "floor": "carpet", "ceiling": "ceiling-paint", "skirting": "pvc-white"}, "skirting": {"height": 0.17, "depth": 0.02, "estimate": "its top at 0.17 m as observe's lines read it along the dining wall (#2056), 2 cm thick; the furniture is not yet held 2 cm off the walls by it; measure its height and thickness"},
       "view": {"eye": [-0.87, 1.6, 1.53], "look": [2.6, 1.3, 1.6]}, "coving": {"drop": 0.08, "depth": 0.11, "estimate": "its edges in keyframe 1, through the solved camera, on the alcove's back wall; measure its drop down the wall and its depth across the ceiling"}
@@ -70,7 +70,7 @@
       "openings": [
         {"wall": 0, "offset": 0.14, "width": 0.765, "height": 1.97, "sill": 0, "depth": 0.15, "leads": "kitchen"},
         {"wall": 0, "offset": 1.245, "width": 0.84, "height": 0.84, "sill": 1.03, "leads": "kitchen"},
-        {"wall": 3, "offset": 1.13, "width": 1.5, "height": 1.94, "sill": 0, "leads": "living"},
+        {"wall": 3, "offset": 1.13, "width": 1.5, "height": 1.94, "sill": 0, "leads": "living", "skirtingRound": true},
         {"wall": 1, "offset": 0.35, "width": 1.15, "height": 1.15, "sill": 0.9, "leads": "outside", "glazing": {"frame": 0.06, "transom": 0.85, "upperPanes": 2, "lower": "glass-clear", "upper": "glass-clear", "frameMaterial": "pvc-white"}, "estimate": "the window on the dining room's end wall, nearer the kitchen, its radiator below and curtains either side, from keyframes 281, 411 and 441 from the 4 November walk; measure its width, its distance from the kitchen wall, its sill and its height"}
       ],
       "surfaces": {"walls": "wall-paint", "floor": "carpet", "ceiling": "ceiling-paint", "skirting": "pvc-white"},
@@ -104,7 +104,7 @@
         {"wall": 0, "offset": 0.07, "width": 0.52, "height": 1.25, "sill": 0.9, "leads": "outside", "glazing": {"frame": 0.06, "transom": 0.92, "upperPanes": 1, "lower": "glass-frosted", "upper": "glass-clear", "frameMaterial": "pvc-white"}, "estimate": "estimate from keyframe 822 of the 26 September walk; measure the frame's width and height, the sill, the transom, and whether the lower pane is frosted"},
         {"wall": 1, "offset": 0.1, "width": 1.4, "height": 1.25, "sill": 0.9, "leads": "outside", "glazing": {"frame": 0.06, "transom": 0.92, "upperPanes": 2, "lower": "glass-frosted", "upper": "glass-clear", "frameMaterial": "pvc-white"}, "estimate": "estimate from keyframe 822 of the 26 September walk; measure the frame's width and height, the sill, the transom, and whether the lower pane is frosted"},
         {"wall": 2, "offset": 0.07, "width": 0.52, "height": 1.25, "sill": 0.9, "leads": "outside", "glazing": {"frame": 0.06, "transom": 0.92, "upperPanes": 1, "lower": "glass-frosted", "upper": "glass-clear", "frameMaterial": "pvc-white"}, "estimate": "estimate from keyframe 822 of the 26 September walk; measure the frame's width and height, the sill, the transom, and whether the lower pane is frosted"},
-        {"wall": 3, "offset": 0, "width": 2.4, "height": 2.22, "sill": 0, "leads": "living"}
+        {"wall": 3, "offset": 0, "width": 2.4, "height": 2.22, "sill": 0, "leads": "living", "skirtingRound": true}
       ],
       "surfaces": {"walls": "wall-paint", "floor": "carpet", "ceiling": "ceiling-paint", "skirting": "pvc-white"}, "skirting": {"height": 0.17, "depth": 0.02, "estimate": "its top at 0.17 m as observe's lines read it along the dining wall (#2056), 2 cm thick; the furniture is not yet held 2 cm off the walls by it; measure its height and thickness"}
     }

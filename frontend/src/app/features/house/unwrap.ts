@@ -31,6 +31,9 @@ export interface Atlas {
 	 *  that are gone. */
 	added: THREE.Box3[];
 	removed: THREE.Box3[];
+	/** The pixels of the charts it did not have, each [x, y, width, height]: no bake
+	 *  has lit them yet. */
+	fresh: [number, number, number, number][];
 }
 
 /** A chart's place in the atlas (its corner, pixels), and where it is in the room. */
@@ -166,6 +169,7 @@ export function unwrap(
 	let row = 0;
 	let covered = 0;
 	const added: THREE.Box3[] = [];
+	const rects: [number, number, number, number][] = [];
 	const fresh: number[] = [];
 	charts.forEach((c, i) => {
 		const was = previous.get(c.key);
@@ -191,6 +195,7 @@ export function unwrap(
 		row = Math.max(row, h);
 		covered += px(c.size[0]) * px(c.size[1]);
 		added.push(boxOf(c));
+		rects.push([c.at[0], c.at[1], px(c.size[0]), px(c.size[1])]);
 	}
 	const height = Math.max(4, Math.ceil((y + row) / 4) * 4);
 	const layout: Layout = new Map(charts.map((c) => [c.key, { at: c.at, box: boxOf(c) }]));
@@ -215,7 +220,7 @@ export function unwrap(
 			}
 	}
 	geoms.forEach((g, i) => g.setAttribute('uv1', new THREE.Float32BufferAttribute(uvs[i], 2)));
-	return { width: WIDTH, height, charts: covered, layout, added, removed };
+	return { width: WIDTH, height, charts: covered, layout, added, removed, fresh: rects };
 }
 
 /** FNV-1a of a string's UTF-16 units. */

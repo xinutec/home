@@ -33,18 +33,25 @@ export async function bakeLightmap(
 	samples: number,
 	bounces = 4,
 	progress: (done: number) => void = () => undefined,
-	/** Trace only the texels whose point is in one of `regions`; every other one a
-	 *  surface covers takes the samples `base` summed there (another bake's `raw`),
-	 *  before the sums are made into light: a door's bake, or the house's after an
-	 *  edit, as what either changes is near it, which comes out as a whole bake would
-	 *  wherever its samples are the same. */
-	local?: { regions: THREE.Box3[]; base: Float32Array },
+	/** Trace only the texels `traces` says (by its pixel and its point in the room);
+	 *  every other one a surface covers takes the samples `base` summed there
+	 *  (another bake's `raw`), before the sums are made into light: a door's bake, or
+	 *  the house's after an edit, as what either changes is near it, which comes out
+	 *  as a whole bake would wherever its samples are the same. */
+	local?: { traces: (pixel: number, at: THREE.Vector3) => boolean; base: Float32Array },
 ): Promise<{
 	light: Float32Array;
 	summed: number;
 	raw: Float32Array;
 	/** Texels traced: a local bake's region's, else every one. */
 	traced: number;
+	/** A local bake's pixels whose light is all its own (1): a texel it traced with
+	 *  its neighbours, which the light is smoothed with; a gutter pixel with every
+	 *  texel it is filled from within reach. Elsewhere its light is part its base's. */
+	retraced?: Uint8Array;
+	/** A local bake's pixels no surface is within a gutter's reach of (1): nothing
+	 *  reads them, as a removed chart's left behind. */
+	unread?: (pixel: number) => boolean;
 	ms: BakeTimes;
 }> {
 	const started = performance.now();
@@ -232,7 +239,7 @@ export async function bakeLightmap(
 		for (let i = 0; i < width * height; i++) {
 			if (points[i * 4 + 3] === 0) continue;
 			at.fromArray(points, i * 4);
-			if (local.regions.some((r) => r.containsPoint(at))) inRegion.push(i);
+			if (local.traces(i, at)) inRegion.push(i);
 		}
 	}
 	const packedRows = Math.max(1, Math.ceil(inRegion.length / ROW));
@@ -500,7 +507,60 @@ export async function bakeLightmap(
 		read: Math.round(readBack - traced),
 		finish: Math.round(finished - readBack),
 	};
-	return { light, summed, raw: read, traced: local ? inRegion.length : width * height, ms };
+	let retraced: Uint8Array | undefined;
+	if (points) {
+		const traced = new Uint8Array(width * height);
+		for (const i of inRegion) traced[i] = 1;
+		const covered = (i: number) => points[i * 4 + 3] !== 0;
+		// Every surface pixel within `r` traced: `finish` smooths a texel with those a
+		// pixel off, and fills a gutter from those GUTTER_RINGS off.
+		const allTraced = (x: number, y: number, r: number) => {
+			for (let dy = -r; dy <= r; dy++)
+				for (let dx = -r; dx <= r; dx++) {
+					const [u, v] = [x + dx, y + dy];
+					if (u < 0 || v < 0 || u >= width || v >= height) continue;
+					const j = v * width + u;
+					if (covered(j) && !traced[j]) return false;
+				}
+			return true;
+		};
+		retraced = new Uint8Array(width * height);
+		// Each pixel judged once, however many traced texels it is near.
+		const judged = new Uint8Array(width * height);
+		const reach = GUTTER_RINGS + 1;
+		for (const i of inRegion) {
+			const [x, y] = [i % width, Math.floor(i / width)];
+			for (let dy = -reach; dy <= reach; dy++)
+				for (let dx = -reach; dx <= reach; dx++) {
+					const [u, v] = [x + dx, y + dy];
+					if (u < 0 || v < 0 || u >= width || v >= height) continue;
+					const j = v * width + u;
+					if (judged[j]) continue;
+					judged[j] = 1;
+					if (covered(j) && !traced[j]) continue;
+					if (allTraced(u, v, covered(j) ? 1 : reach)) retraced[j] = 1;
+				}
+		}
+	}
+	const unread =
+		points &&
+		((i: number) => {
+			const [x, y] = [i % width, Math.floor(i / width)];
+			const r = GUTTER_RINGS + 1;
+			for (let v = Math.max(0, y - r); v <= Math.min(height - 1, y + r); v++)
+				for (let u = Math.max(0, x - r); u <= Math.min(width - 1, x + r); u++)
+					if (points[(v * width + u) * 4 + 3] !== 0) return false;
+			return true;
+		});
+	return {
+		light,
+		summed,
+		raw: read,
+		traced: local ? inRegion.length : width * height,
+		retraced,
+		unread,
+		ms,
+	};
 }
 
 /** Milliseconds a bake spent on each phase: building the scene's BVH and textures,
@@ -522,6 +582,9 @@ function floatTarget(width: number, height: number): THREE.WebGLRenderTarget {
 		depthBuffer: false,
 	});
 }
+
+/** Rings of pixels a chart's light is spread into its gutter by. */
+const GUTTER_RINGS = 4;
 
 function isGlass(m: THREE.Material): boolean {
 	return m instanceof THREE.MeshPhysicalMaterial && m.transmission > 0;
@@ -571,7 +634,7 @@ function finish(
 		return out;
 	};
 	// Ring by ring into the gutters: a pixel takes the mean of its good neighbours.
-	for (let ring = 0; ring < 4; ring++) {
+	for (let ring = 0; ring < GUTTER_RINGS; ring++) {
 		const add: number[] = [];
 		for (let i = 0; i < n; i++) {
 			if (good[i]) continue;

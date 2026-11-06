@@ -160,19 +160,19 @@ export class Joints {
 /**
  * The joints' changes of light a bake since the `last` can keep as they were: of a
  * joint still there (`now`, each with how far it opens and the region its light is
- * baked in), opening as far as it did, and with no edit's region (`edited`) meeting
- * its own. Every other joint is baked again.
+ * baked in), opening as far as it did, and whose region no edit reaches (`edited`
+ * says if one does). Every other joint is baked again.
  */
 export function keptJointLights(
 	last: JointLight[],
 	now: { key: string; at: number; region: THREE.Box3 }[],
-	edited: THREE.Box3[],
+	edited: (region: THREE.Box3) => boolean,
 ): Map<string, JointLight> {
 	const out = new Map<string, JointLight>();
 	for (const j of last) {
 		const n = now.find((m) => m.key === j.key);
 		if (!n) continue;
-		if (n.at !== j.at || edited.some((e) => e.intersectsBox(n.region))) continue;
+		if (n.at !== j.at || edited(n.region)) continue;
 		out.set(j.key, j);
 	}
 	return out;

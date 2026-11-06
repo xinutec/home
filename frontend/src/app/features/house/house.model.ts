@@ -104,6 +104,9 @@ export interface WallOpening {
 	leads?: string;
 	/** A window in the opening: its frame and panes. */
 	glazing?: Glazing;
+	/** An open passage, no door in it: the skirting runs on round its sides, where a
+	 *  doorway's frame would stop it. On either room's opening. */
+	skirtingRound?: boolean;
 	/** Not measured yet: where the numbers came from and what to measure. */
 	estimate?: string;
 }

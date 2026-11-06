@@ -503,9 +503,19 @@ engine keeps each object's place in its lightmap. The bake file carries its
 atlas's layout: each chart keyed by its triangles, the one its plane is taken
 from, and what it is made of, with its place and its box in the room. The page
 lays its atlas out to it, so every chart the last bake had keeps its pixels, and
-new ones are packed below. The next bake traces only within 0.75 m of the charts
-that came or went, starting from the last bake's raw sums (kept outside git, in
-.bake-cache/), and bakes again only the joints whose regions those meet. It needs
+new ones are packed below. The next bake finds where the surfaces changed
+(`editedCells`): points 5 cm apart over every surface, old and new, each looked
+for on the other's surfaces of the same make; those not found are marked in a
+grid of 25 cm cells, widened by 0.75 m. It traces only those cells' texels and
+every new chart's (no bake has lit them), starting from the last bake's raw sums
+and the surfaces it saw (kept outside git, in .bake-cache/; bake-horus.sh carries
+it there and back). A joint whose region a marked cell meets is baked again in
+those cells only, its old change of light kept wherever the new one is not all
+its own (a texel beside one not traced, a gutter within reach of one: `finish`
+mixes them), and dropped where no surface is left. A wall's board grown at its
+end is a new chart along the whole wall, but only its end is marked: by whole
+charts, such an edit traced 40% of the house and 17 of the 21 joints, 22 minutes
+on the Mac. It needs
 the same light to bake by (the baker's and sky's code, the scene's lights, the
 samples); else, or with `--full`, the whole house is baked and laid out afresh.
 Checked by moving the bean bag 20 cm, at 256 samples: the bake since the last
@@ -513,8 +523,15 @@ took 46 s where a whole one takes about 4 minutes; it traced 65k of 980k texels
 and kept 17 of the 21 joints. Against everything traced on the same layout, the
 texels it traced differ by 0.011% on average, and the light of those it kept sums
 to within 0.002% (single texels differ either way, as the reference's own noise
-does where the moved bean bag turned its paths). The page waits for the bake's
-layout before it lays its atlas out: decoding the file takes about 125 ms on the Mac.
+does where the moved bean bag turned its paths). Checked again on the dining
+passage's skirting taken off and put back (two bakes since the last, at 2048
+samples, against a whole bake): each took 40 s on horus where a whole bake takes
+200 s (33 minutes on the Mac); every joint it kept is exact, those it baked again
+are within 1% of their change summed, the door nearest the passage 3% (its boards'
+texels counted twice across the two layouts); a render differs on 0.2% of its
+pixels, by 12/255 at most, on the boards laid out anew, whose texels draw other
+random numbers (they are seeded by pixel). The page waits for the bake's layout
+before it lays its atlas out: decoding the file takes about 125 ms on the Mac.
 
 **A sheet's two sides stand 0.5 mm apart** (`SHEET_GAP`, sides.ts). A curtain or a
 plant's leaves, seen from both sides, is drawn as two copies facing apart; in one

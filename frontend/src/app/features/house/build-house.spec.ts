@@ -8,7 +8,7 @@ import { buildHouse, solidTag } from './room-builder';
 import { mergeStatic } from './merge';
 import { oneSided } from './sides';
 import { unwrap } from './unwrap';
-import { roomPerimeter, segments } from './scene-geometry';
+import { passages, roomPerimeter, segments } from './scene-geometry';
 
 const scene = json as unknown as HouseScene;
 
@@ -103,5 +103,31 @@ describe('buildHouse', () => {
 					.join(', '),
 			);
 		expect(twins).toEqual([]);
+	});
+
+	it('runs the skirting round an open passage’s sides, as a moulding does', () => {
+		const boards = meshes
+			.filter((m) => solidTag(m)?.kind === 'skirting')
+			.map((m) => new THREE.Box3().setFromObject(m));
+		const round = passages(scene).filter((p) => p.skirtingRound);
+		expect(round.map((p) => p.room.name).sort()).toEqual(['living', 'living']);
+		const bare = round.flatMap((p) =>
+			p.jambs
+				.map(([a, b], k) => {
+					// Halfway along the side, 1 cm off its face into the opening, at the board's
+					// height: the first side faces along the opening, the second back.
+					const s = k === 0 ? 0.01 : -0.01;
+					const [mx, mz] = [(a[0] + b[0]) / 2, (a[2] + b[2]) / 2];
+					return new THREE.Vector3(mx + p.into[0] * s, 0.08, mz + p.into[1] * s);
+				})
+				.filter((q) => !boards.some((b) => b.containsPoint(q)))
+				.map((q) =>
+					q
+						.toArray()
+						.map((v) => v.toFixed(2))
+						.join(', '),
+				),
+		);
+		expect(bare).toEqual([]);
 	});
 });

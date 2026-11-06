@@ -147,7 +147,7 @@ describe('keptJointLights', () => {
 			{ key: 'new', at: 1, region: box(30) },
 		];
 		const last = [light('far'), light('near'), light('turned'), light('gone')];
-		const kept = keptJointLights(last, now, [box(0.5)]);
+		const kept = keptJointLights(last, now, (r) => r.intersectsBox(box(0.5)));
 		expect([...kept.keys()]).toEqual(['far']);
 	});
 });
