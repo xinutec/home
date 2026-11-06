@@ -483,6 +483,11 @@ export async function bakeLightmap(
 	])
 		r.dispose();
 	bvhUniform.dispose();
+	// A shader that failed to compile draws nothing, and every texel would count none.
+	const most = local ? inRegion.reduce((m, i) => Math.max(m, read[i * 4 + 3]), 0) : summed;
+	const asked = Math.ceil(samples / PER_PASS) * PER_PASS;
+	if ((!local || inRegion.length > 0) && most !== asked)
+		throw new Error(`the trace counted at most ${most} of ${asked} samples on a texel`);
 	const ms = {
 		build: Math.round(built - started),
 		trace: Math.round(traced - built),
