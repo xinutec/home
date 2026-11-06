@@ -67,4 +67,52 @@ describe('unwrap', () => {
 	it('refuses indexed geometry, whose shared corners cannot be in two charts', () => {
 		expect(() => unwrap([new THREE.BoxGeometry(1, 1, 1)], 0.02)).toThrow();
 	});
+
+	describe('over a previous layout', () => {
+		const box = (x: number) =>
+			new THREE.BoxGeometry(0.4, 0.2, 0.1).translate(x, 0, 0).toNonIndexed();
+		const pixels = (g: THREE.BufferGeometry, atlas: { width: number; height: number }) =>
+			placed(g, atlas).map((t) => t.map((c) => [Math.round(c.x * 1e3), Math.round(c.y * 1e3)]));
+
+		it('keeps every chart where it was, and lays a new one out apart from them', () => {
+			const a = box(0);
+			const first = unwrap([a], 0.01);
+			const kept = pixels(a, first);
+			const b = box(2);
+			const next = unwrap([a, b], 0.01, first.layout);
+			expect(pixels(a, next)).toEqual(kept);
+			const old = new THREE.Box2().setFromPoints(placed(a, next).flat());
+			for (const t of placed(b, next)) {
+				const tri = new THREE.Box2().setFromPoints(t);
+				expect(tri.intersectsBox(old.clone().expandByScalar(-1e-3))).toBe(false);
+			}
+			// What came and what went, where they are in the room.
+			expect(next.added).toHaveLength(6);
+			expect(next.removed).toEqual([]);
+			expect(next.added.every((c) => c.min.x > 1.7)).toBe(true);
+		});
+
+		it('takes a chart that moved as one gone from where it was and one come where it is', () => {
+			const first = unwrap([box(0)], 0.01);
+			const next = unwrap([box(0.5)], 0.01, first.layout);
+			expect(next.removed).toHaveLength(6);
+			expect(next.added).toHaveLength(6);
+			expect(next.removed.every((c) => c.max.x < 0.3)).toBe(true);
+		});
+
+		it('takes a chart painted anew as a new one', () => {
+			const a = box(0);
+			const first = unwrap([a], 0.01, undefined, ['white']);
+			expect(unwrap([a], 0.01, first.layout, ['white']).added).toEqual([]);
+			expect(unwrap([a], 0.01, first.layout, ['red']).added).toHaveLength(6);
+		});
+
+		it('lays out as it would with none, when there was none', () => {
+			const [a, b] = [box(0), box(2)];
+			unwrap([a, b], 0.01);
+			const fresh = [pixels(a, unwrap([a, b], 0.01)), pixels(b, unwrap([a, b], 0.01))];
+			const atlas = unwrap([a, b], 0.01, new Map());
+			expect([pixels(a, atlas), pixels(b, atlas)]).toEqual(fresh);
+		});
+	});
 });

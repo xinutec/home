@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { partsOf, pieceId, solidsOf } from './assembly';
 import type { JointState, Solid } from './assembly';
+import type { JointLight } from './bake-file';
 import type { Furniture, HouseScene, Joint } from './house.model';
 
 /** Milliseconds a joint takes over its whole travel: a door swung, a drawer pulled. */
@@ -154,4 +155,25 @@ export class Joints {
 		if (!j) throw new Error(`no joint ${key}`);
 		return j;
 	}
+}
+
+/**
+ * The joints' changes of light a bake since the `last` can keep as they were: of a
+ * joint still there (`now`, each with how far it opens and the region its light is
+ * baked in), opening as far as it did, and with no edit's region (`edited`) meeting
+ * its own. Every other joint is baked again.
+ */
+export function keptJointLights(
+	last: JointLight[],
+	now: { key: string; at: number; region: THREE.Box3 }[],
+	edited: THREE.Box3[],
+): Map<string, JointLight> {
+	const out = new Map<string, JointLight>();
+	for (const j of last) {
+		const n = now.find((m) => m.key === j.key);
+		if (!n) continue;
+		if (n.at !== j.at || edited.some((e) => e.intersectsBox(n.region))) continue;
+		out.set(j.key, j);
+	}
+	return out;
 }

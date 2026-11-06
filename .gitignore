@@ -14,3 +14,6 @@ frontend/dist/
 
 # The tracer's build output.
 tracer/target/
+
+# The last bake's raw sums, for e2e/bake.ts to bake only what changed since.
+.bake-cache/

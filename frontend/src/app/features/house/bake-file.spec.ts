@@ -1,6 +1,6 @@
-import { DataUtils } from 'three';
+import { Box3, DataUtils, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
-import { HEADER, checksum, decodeLightmap, encodeLightmap, lightChange } from './bake-file';
+import { HEADER, checksum, decodeLightmap, encodeLightmap, lightChange, relaid } from './bake-file';
 
 // The bytes as stored but not compressed: decoding then inflates nothing.
 const raw = (b: Uint8Array) => Promise.resolve(b.slice());
@@ -93,5 +93,48 @@ describe('lightmap file', () => {
 	it('refuses a joint whose texels are not in order', () => {
 		const joint = { key: 'k', at: 1, texels: Uint32Array.from([9, 5]), delta: new Float32Array(6) };
 		expect(() => encodeLightmap(new Float32Array(3), 1, 1, 0, [joint])).toThrow(/in order/);
+	});
+
+	it('reads back the layout of the atlas it was baked in', async () => {
+		const layout = new Map([
+			[
+				'1a2b.3c4d',
+				{
+					at: [2, 3] as [number, number],
+					box: new Box3(new Vector3(0, 0, 0), new Vector3(1, 2, 3)),
+				},
+			],
+			[
+				'1a2b.3c4d~1',
+				{
+					at: [40, 3] as [number, number],
+					box: new Box3(new Vector3(-1, 0, 0.5), new Vector3(0, 0.25, 1)),
+				},
+			],
+		]);
+		const joint = { key: 'k', at: 1, texels: Uint32Array.from([0]), delta: new Float32Array(3) };
+		const file = encodeLightmap(new Float32Array(3), 1, 1, 0, [joint], layout);
+		const got = await decodeLightmap(file.buffer as ArrayBuffer, raw);
+		expect(
+			[...(got?.layout ?? [])].map(([k, p]) => [k, p.at, p.box.min.toArray(), p.box.max.toArray()]),
+		).toEqual([
+			['1a2b.3c4d', [2, 3], [0, 0, 0], [1, 2, 3]],
+			['1a2b.3c4d~1', [40, 3], [-1, 0, 0.5], [0, 0.25, 1]],
+		]);
+		expect(got?.joints).toHaveLength(1);
+		// One baked before layouts has none: the page lays its atlas out afresh.
+		const old = await decodeLightmap(
+			encodeLightmap(new Float32Array(3), 1, 1, 0).buffer as ArrayBuffer,
+			raw,
+		);
+		expect(old?.layout.size).toBe(0);
+	});
+
+	it('keeps a raw bake’s pixels where they were in an atlas grown or shrunk below', () => {
+		// 1 wide, RGBA a pixel: two rows become three, then one.
+		const raw = Float32Array.from([1, 1, 1, 8, 2, 2, 2, 8]);
+		expect([...relaid(raw, 1, 2, 1, 3)]).toEqual([1, 1, 1, 8, 2, 2, 2, 8, 0, 0, 0, 0]);
+		expect([...relaid(raw, 1, 2, 1, 1)]).toEqual([1, 1, 1, 8]);
+		expect(() => relaid(raw, 1, 2, 2, 2)).toThrow(/wide/);
 	});
 });

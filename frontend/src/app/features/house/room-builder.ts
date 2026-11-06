@@ -8,7 +8,7 @@ import { MaterialLibrary, partMaterial, surfaceMaterial } from './materials';
 import { mergeStatic } from './merge';
 import { oneSided } from './sides';
 import { unwrap } from './unwrap';
-import type { Atlas } from './unwrap';
+import type { Atlas, Layout } from './unwrap';
 import {
 	bounds,
 	covingProfile,
@@ -44,6 +44,8 @@ export function buildInterior(
 	camera: CameraQuery = {},
 	/** Light only from the world outside (the path-traced reference), not the approximations. */
 	physical = false,
+	/** The last bake's atlas layout, which every chart it has keeps (`unwrap`). */
+	layout?: Layout,
 ): Lit | undefined {
 	const room = scene.rooms.find((r) => r.name === roomName);
 	if (!room) return undefined;
@@ -63,12 +65,30 @@ export function buildInterior(
 			atlas: unwrap(
 				meshes.map((m) => m.geometry),
 				LIGHTMAP_TEXEL,
+				layout,
+				meshes.map(madeOf),
 			),
 		};
 	}
 	if (!physical) addLight(view);
 	placeCamera(view, room, camera);
-	return lit ?? { meshes: [], centres: new Map(), atlas: { width: 0, height: 0, charts: 0 } };
+	return (
+		lit ?? {
+			meshes: [],
+			centres: new Map(),
+			atlas: { width: 0, height: 0, charts: 0, layout: new Map(), added: [], removed: [] },
+		}
+	);
+}
+
+/** What a mesh is made of, as the bake sees it: its colour, roughness, how much
+ *  light it lets through, and how many sides it shows. Changed, its charts are new. */
+function madeOf(m: THREE.Mesh): string {
+	const mat = m.material;
+	if (Array.isArray(mat)) return 'many';
+	const std = mat instanceof THREE.MeshStandardMaterial ? mat : undefined;
+	const through = mat instanceof THREE.MeshPhysicalMaterial ? mat.transmission : 0;
+	return [std?.color.getHexString() ?? '-', std?.roughness ?? '-', through, mat.side].join('|');
 }
 
 /** Where the builder puts what it makes: a scene, and a keeper of what to dispose.
@@ -226,16 +246,32 @@ function addRoomShell(
 	const covingMat = mats.get(surfaceMaterial(scene, room, 'ceiling'), THREE.DoubleSide);
 	const skirtingMat = mats.get(surfaceMaterial(scene, room, 'skirting'));
 	const segs = segments(pts);
-	// The inward normals of the walls before and after wall i, round the outline,
-	// skipping any of no length.
+	// The wall `by` walls on from wall i, round the outline, skipping any of no length.
 	const real = segs.map((s) => Math.hypot(s.bx - s.ax, s.bz - s.az) > 1e-6);
 	const step = (i: number, by: number) => {
 		let j = i;
 		do j = (j + by + segs.length) % segs.length;
 		while (!real[j] && j !== i);
-		return into[j];
+		return j;
 	};
-	const neighbours = (i: number): [[number, number], [number, number]] => [step(i, -1), step(i, 1)];
+	const neighbours = (i: number): [[number, number], [number, number]] => [
+		into[step(i, -1)],
+		into[step(i, 1)],
+	];
+	// Every wall's runs of skirting first: a run's end is mitred only where the next
+	// wall's run comes to the same corner, else (the next wall a bay's opening) closed.
+	const runs = segs.map((s, i) => {
+		const len = Math.hypot(s.bx - s.ax, s.bz - s.az);
+		if (!room.skirting || len < 1e-6) return [];
+		const ops = (room.openings ?? []).filter((o) => o.wall === i);
+		return skirtingRuns(len, ops, scene.height, skirtingStops(scene, room, i));
+	});
+	const meetsBefore = (i: number) => {
+		const j = step(i, -1);
+		const len = Math.hypot(segs[j].bx - segs[j].ax, segs[j].bz - segs[j].az);
+		return runs[j].some(([, a1]) => a1 > len - 1e-6);
+	};
+	const meetsAfter = (i: number) => runs[step(i, 1)].some(([a0]) => a0 < 1e-6);
 	segs.forEach((s, i) => {
 		const len = Math.hypot(s.bx - s.ax, s.bz - s.az);
 		if (len < 1e-6) return;
@@ -260,10 +296,13 @@ function addRoomShell(
 				),
 			);
 		if (room.skirting)
-			for (const [a0, a1] of skirtingRuns(len, ops, scene.height, skirtingStops(scene, room, i)))
+			for (const [a0, a1] of runs[i])
 				view.scene.add(
 					shell(
-						skirting(view, s, len, a0, a1, inward, neighbours(i), room.skirting, skirtingMat),
+						skirting(view, s, len, a0, a1, inward, neighbours(i), room.skirting, skirtingMat, [
+							a0 < 1e-6 && meetsBefore(i),
+							a1 > len - 1e-6 && meetsAfter(i),
+						]),
 						'skirting',
 					),
 				);
@@ -671,9 +710,9 @@ function coving(
 }
 
 /** One run of skirting, `a0` to `a1` along the wall: a board `height` tall and
- *  `depth` out from it. Where the run reaches a corner its end is mitred to meet
- *  the next wall's, as a moulding is cut; where it stops at a doorway it ends
- *  square, closed. */
+ *  `depth` out from it. Where it meets the next wall's run at a corner (`meets`,
+ *  at its start and end) its end is mitred to that one's, as a moulding is cut;
+ *  anywhere else (a doorway, a bay's opening) it ends square, closed. */
 function skirting(
 	view: Stage,
 	s: WallSeg,
@@ -684,11 +723,10 @@ function skirting(
 	[before, after]: [[number, number], [number, number]],
 	k: { height: number; depth: number },
 	mat: THREE.Material,
+	[cornerAtStart, cornerAtEnd]: [boolean, boolean],
 ): THREE.Mesh {
 	const [dx, dz] = [(s.bx - s.ax) / len, (s.bz - s.az) / len];
 	const atWall = (a: number) => ({ x: s.ax + dx * a, z: s.az + dz * a });
-	const cornerAtStart = a0 < 1e-6;
-	const cornerAtEnd = a1 > len - 1e-6;
 	// The board's two ends, `u` out from the wall.
 	const start = (u: number) =>
 		cornerAtStart

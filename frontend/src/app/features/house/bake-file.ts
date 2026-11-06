@@ -1,4 +1,5 @@
-import { DataUtils } from 'three';
+import { Box3, DataUtils, Vector3 } from 'three';
+import type { Layout } from './unwrap';
 
 /**
  * The baked lightmap, as served from scenes/house.bake: the irradiance on every
@@ -11,13 +12,18 @@ import { DataUtils } from 'three';
  * and height, the FNV-1a of the scene file's bytes it was baked from (e2e/bake.ts
  * writes it; tests/scene.test.ts fails while it differs from scenes/house.json's,
  * so no edit ships unbaked), the RGBM range (f32), how many joints' changes follow
- * the pixels (u32; 0 in a lightmap from before them), and a zero.
+ * the pixels (u32; 0 in a lightmap from before them), and how many charts its
+ * layout has (u32; 0 in one from before layouts).
  *
  * After the pixels, each joint's change of light (`JointLight`): its key's length
  * (u16) and UTF-8 bytes, the value it was baked open at (f64), how many texels it
  * changes (u32), their indices in order as the gaps between them (u32 each, the
  * first from 0), and their RGB changes as half floats, every low byte and then
  * every high one: so laid out they compress, the gaps small, the high bytes alike.
+ *
+ * Then the atlas's layout (`Layout`), chart by chart: its key's two hashes (u32
+ * each) and twin number (u16), its corner in the atlas (u16 x, y), and its box in
+ * the room (f32 min x, y, z, max x, y, z).
  */
 export interface Lightmap {
 	checksum: number;
@@ -27,6 +33,8 @@ export interface Lightmap {
 	data: Uint16Array;
 	/** What opening each door or drawer does to the light, with it shut in `data`. */
 	joints: JointLight[];
+	/** Where each chart is in the atlas: the page lays its atlas out to it. */
+	layout: Layout;
 }
 
 /** What one joint's opening does to the light: baked with it open at `at` and all
@@ -77,12 +85,15 @@ export function encodeLightmap(
 	height: number,
 	checksum: number,
 	joints: JointLight[] = [],
+	layout: Layout = new Map(),
 ): Uint8Array {
 	let peak = 0;
 	for (const v of light) peak = Math.max(peak, v);
 	const range = Math.max(peak, 1e-6);
 	const keys = joints.map((j) => new TextEncoder().encode(j.key));
-	const tail = joints.reduce((n, j, k) => n + 2 + keys[k].length + 8 + 4 + j.texels.length * 10, 0);
+	const tail =
+		joints.reduce((n, j, k) => n + 2 + keys[k].length + 8 + 4 + j.texels.length * 10, 0) +
+		layout.size * CHART_BYTES;
 	const out = new Uint8Array(HEADER + width * height * 4 + tail);
 	const head = new DataView(out.buffer);
 	head.setUint32(0, MAGIC, true);
@@ -91,6 +102,7 @@ export function encodeLightmap(
 	head.setUint32(12, height, true);
 	head.setFloat32(20, range, true);
 	head.setUint32(24, joints.length, true);
+	head.setUint32(28, layout.size, true);
 	for (let i = 0; i < width * height; i++) {
 		const [r, g, b] = [light[i * 3], light[i * 3 + 1], light[i * 3 + 2]];
 		const m = Math.min(255, Math.ceil((Math.max(r, g, b) / range) * 255));
@@ -123,6 +135,39 @@ export function encodeLightmap(
 		});
 		at += n * 2;
 	});
+	for (const [key, p] of layout) {
+		const [hashes, twin] = key.split('~');
+		const [k1, k2] = hashes.split('.').map((h) => parseInt(h, 16));
+		head.setUint32(at, k1, true);
+		head.setUint32(at + 4, k2, true);
+		head.setUint16(at + 8, Number(twin ?? 0), true);
+		head.setUint16(at + 10, p.at[0], true);
+		head.setUint16(at + 12, p.at[1], true);
+		[...p.box.min.toArray(), ...p.box.max.toArray()].forEach((v, i) =>
+			head.setFloat32(at + 14 + i * 4, v, true),
+		);
+		at += CHART_BYTES;
+	}
+	return out;
+}
+
+/** A chart's bytes in the layout. */
+const CHART_BYTES = 38;
+
+/** A bake's raw sums (RGBA a pixel, `width` × `height`) in an atlas as wide but
+ *  `rows` tall: every chart a layout keeps stays on its pixels; rows added are empty. */
+export function relaid(
+	raw: Float32Array,
+	width: number,
+	height: number,
+	w: number,
+	rows: number,
+): Float32Array {
+	if (w !== width) throw new Error(`an atlas ${width} wide relaid ${w} wide`);
+	if (raw.length !== width * height * 4)
+		throw new Error(`raw sums for ${raw.length / 4} pixels, not ${width} × ${height}`);
+	const out = new Float32Array(w * rows * 4);
+	out.set(raw.subarray(0, Math.min(height, rows) * w * 4));
 	return out;
 }
 
@@ -146,13 +191,37 @@ export async function decodeLightmap(
 		for (let c = 0; c < 3; c++) data[i * 4 + c] = DataUtils.toHalfFloat(px[i * 4 + c] * k);
 		data[i * 4 + 3] = one;
 	}
-	const joints = readJoints(px, width * height * 4, head.getUint32(24, true));
-	if (!joints) return undefined;
-	return { checksum: head.getUint32(4, true), width, height, data, joints };
+	const read = readJoints(px, width * height * 4, head.getUint32(24, true));
+	if (!read) return undefined;
+	const layout = readLayout(px, read.at, head.getUint32(28, true));
+	if (!layout) return undefined;
+	return { checksum: head.getUint32(4, true), width, height, data, joints: read.joints, layout };
 }
 
-/** The `count` joints' changes of light in `px` from `at` on; undefined if cut short. */
-function readJoints(px: Uint8Array, at: number, count: number): JointLight[] | undefined {
+/** The `count` charts' places in `px` from `at` on; undefined if cut short. */
+function readLayout(px: Uint8Array, at: number, count: number): Layout | undefined {
+	if (at + count * CHART_BYTES > px.length) return undefined;
+	const view = new DataView(px.buffer, px.byteOffset, px.byteLength);
+	const out: Layout = new Map();
+	for (let k = 0; k < count; k++, at += CHART_BYTES) {
+		const hashes = `${view.getUint32(at, true).toString(16)}.${view.getUint32(at + 4, true).toString(16)}`;
+		const twin = view.getUint16(at + 8, true);
+		const f = (i: number) => view.getFloat32(at + 14 + i * 4, true);
+		out.set(twin ? `${hashes}~${twin}` : hashes, {
+			at: [view.getUint16(at + 10, true), view.getUint16(at + 12, true)],
+			box: new Box3(new Vector3(f(0), f(1), f(2)), new Vector3(f(3), f(4), f(5))),
+		});
+	}
+	return out;
+}
+
+/** The `count` joints' changes of light in `px` from `at` on, and where they end;
+ *  undefined if cut short. */
+function readJoints(
+	px: Uint8Array,
+	at: number,
+	count: number,
+): { joints: JointLight[]; at: number } | undefined {
 	const view = new DataView(px.buffer, px.byteOffset, px.byteLength);
 	const out: JointLight[] = [];
 	for (let k = 0; k < count; k++) {
@@ -175,7 +244,7 @@ function readJoints(px: Uint8Array, at: number, count: number): JointLight[] | u
 		at += n * 6;
 		out.push({ key, at: value, texels, delta });
 	}
-	return out;
+	return { joints: out, at };
 }
 
 /** A fingerprint of vertex positions and coordinates, to the micrometre (FNV-1a):

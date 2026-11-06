@@ -33,12 +33,20 @@ export async function bakeLightmap(
 	samples: number,
 	bounces = 4,
 	progress: (done: number) => void = () => undefined,
-	/** Trace only the texels whose point is in `region`; every other one takes the
-	 *  samples `base` summed there (another bake's `raw`), before the sums are made
-	 *  into light: a door's bake, as what it can change is near it, which comes out
-	 *  as that bake did wherever its samples are the same. */
-	local?: { region: THREE.Box3; base: Float32Array },
-): Promise<{ light: Float32Array; summed: number; raw: Float32Array; ms: BakeTimes }> {
+	/** Trace only the texels whose point is in one of `regions`; every other one a
+	 *  surface covers takes the samples `base` summed there (another bake's `raw`),
+	 *  before the sums are made into light: a door's bake, or the house's after an
+	 *  edit, as what either changes is near it, which comes out as a whole bake would
+	 *  wherever its samples are the same. */
+	local?: { regions: THREE.Box3[]; base: Float32Array },
+): Promise<{
+	light: Float32Array;
+	summed: number;
+	raw: Float32Array;
+	/** Texels traced: a local bake's region's, else every one. */
+	traced: number;
+	ms: BakeTimes;
+}> {
 	const started = performance.now();
 	const meshes = lit.meshes;
 	const { width, height } = lit.atlas;
@@ -216,13 +224,16 @@ export async function bakeLightmap(
 	// says where each is in the atlas): scattered over the atlas, they would leave the
 	// GPU running every group of texels that holds one, and every pass over them all.
 	const inRegion: number[] = [];
-	if (local) {
-		const points = new Float32Array(width * height * 4);
+	// Where a surface is: a pixel no chart covers now (a removed one's) keeps no sums.
+	const points = local ? new Float32Array(width * height * 4) : undefined;
+	if (local && points) {
 		renderer.readRenderTargetPixels(posTarget, 0, 0, width, height, points);
 		const at = new THREE.Vector3();
-		for (let i = 0; i < width * height; i++)
-			if (points[i * 4 + 3] !== 0 && local.region.containsPoint(at.fromArray(points, i * 4)))
-				inRegion.push(i);
+		for (let i = 0; i < width * height; i++) {
+			if (points[i * 4 + 3] === 0) continue;
+			at.fromArray(points, i * 4);
+			if (local.regions.some((r) => r.containsPoint(at))) inRegion.push(i);
+		}
 	}
 	const packedRows = Math.max(1, Math.ceil(inRegion.length / ROW));
 	const where = new Float32Array(ROW * packedRows * 4).fill(-1);
@@ -254,8 +265,6 @@ export async function bakeLightmap(
 			packed: { value: local ? 1 : 0 },
 			pointNormal: { value: nrmTarget.texture },
 			seed: { value: 0 },
-			regionMin: { value: local?.region.min ?? new THREE.Vector3(-1e9, -1e9, -1e9) },
-			regionMax: { value: local?.region.max ?? new THREE.Vector3(1e9, 1e9, 1e9) },
 			skyTint: { value: new THREE.Vector3(...SKY) },
 			groundLight: { value: new THREE.Vector3(...GROUND).multiplyScalar((GROUND_ALBEDO * 7) / 9) },
 		},
@@ -283,8 +292,6 @@ export async function bakeLightmap(
 			uniform int packed;
 			uniform sampler2D pointNormal;
 			uniform float seed;
-			uniform vec3 regionMin;
-			uniform vec3 regionMax;
 			uniform vec3 skyTint;
 			uniform vec3 groundLight;
 			out vec4 outColor;
@@ -381,10 +388,6 @@ export async function bakeLightmap(
 				}
 				vec4 p = texelFetch(pointPos, px, 0);
 				if (p.w == 0.0) { outColor = vec4(0.0); return; }
-				if (any(lessThan(p.xyz, regionMin)) || any(greaterThan(p.xyz, regionMax))) {
-					outColor = vec4(0.0);
-					return;
-				}
 				vec3 n = normalize(texelFetch(pointNormal, px, 0).xyz);
 				rng = uint(px.x) * 1973u + uint(px.y) * 9277u + uint(seed) * 26699u + 1u;
 				vec3 sum = vec3(0.0);
@@ -455,6 +458,9 @@ export async function bakeLightmap(
 		const sums = new Float32Array(ROW * packedRows * 4);
 		renderer.readRenderTargetPixels(target, 0, 0, ROW, packedRows, sums);
 		read = local.base.slice();
+		if (points)
+			for (let i = 0; i < width * height; i++)
+				if (points[i * 4 + 3] === 0) read.fill(0, i * 4, i * 4 + 4);
 		inRegion.forEach((i, k) => read.set(sums.subarray(k * 4, k * 4 + 4), i * 4));
 	} else renderer.readRenderTargetPixels(target, 0, 0, width, height, read);
 	const normalsRead = new Float32Array(width * height * 4);
@@ -494,7 +500,7 @@ export async function bakeLightmap(
 		read: Math.round(readBack - traced),
 		finish: Math.round(finished - readBack),
 	};
-	return { light, summed, raw: read, ms };
+	return { light, summed, raw: read, traced: local ? inRegion.length : width * height, ms };
 }
 
 /** Milliseconds a bake spent on each phase: building the scene's BVH and textures,

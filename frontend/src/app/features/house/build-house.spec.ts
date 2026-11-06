@@ -5,6 +5,7 @@ import { partsOf } from './assembly';
 import type { HouseScene } from './house.model';
 import { MaterialLibrary } from './materials';
 import { buildHouse, solidTag } from './room-builder';
+import { roomPerimeter, segments } from './scene-geometry';
 
 const scene = json as unknown as HouseScene;
 
@@ -37,5 +38,44 @@ describe('buildHouse', () => {
 		const kinds = new Set(tags.map((t) => t?.kind));
 		for (const k of ['wall', 'floor', 'ceiling', 'coving', 'skirting', 'frame', 'glass', 'passage'])
 			expect(kinds).toContain(k);
+	});
+
+	it('leaves no end of skirting open: a board ends at another, mitred, or closed', () => {
+		// An edge of one face only, upright and out from every wall, is an open end.
+		const walls = scene.rooms.flatMap((r) => segments(roomPerimeter(r)));
+		const onWall = (x: number, z: number) =>
+			walls.some((w) => {
+				const [dx, dz] = [w.bx - w.ax, w.bz - w.az];
+				const t = Math.max(
+					0,
+					Math.min(1, ((x - w.ax) * dx + (z - w.az) * dz) / (dx * dx + dz * dz || 1)),
+				);
+				return Math.hypot(w.ax + dx * t - x, w.az + dz * t - z) < 1e-4;
+			});
+		const edges = new Map<string, { n: number; x: number; z: number; upright: boolean }>();
+		const key = (v: THREE.Vector3) =>
+			v
+				.toArray()
+				.map((c) => c.toFixed(4))
+				.join(',');
+		for (const m of meshes) {
+			if (solidTag(m)?.kind !== 'skirting') continue;
+			const p = m.geometry.getAttribute('position');
+			for (let t = 0; t < p.count; t += 3)
+				for (let e = 0; e < 3; e++) {
+					const [a, b] = [t + e, t + ((e + 1) % 3)].map((i) =>
+						new THREE.Vector3().fromBufferAttribute(p, i),
+					);
+					const k = [key(a), key(b)].sort().join('|');
+					const upright = Math.hypot(a.x - b.x, a.z - b.z) < 1e-6;
+					const got = edges.get(k) ?? { n: 0, x: a.x, z: a.z, upright };
+					got.n++;
+					edges.set(k, got);
+				}
+		}
+		const open = [...edges.values()]
+			.filter((e) => e.n === 1 && e.upright && !onWall(e.x, e.z))
+			.map((e) => `(${e.x.toFixed(3)}, ${e.z.toFixed(3)})`);
+		expect(open).toEqual([]);
 	});
 });

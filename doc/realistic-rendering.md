@@ -498,6 +498,24 @@ MB: each joint's texels are written as the gaps between them, and its changes'
 low bytes apart from their high ones, which compress (8.6 MB written plainly).
 `data-baked` says each phase's time (`ms`).
 
+**After an edit, only what changed is baked** (`?since`, e2e/bake.ts), as an
+engine keeps each object's place in its lightmap. The bake file carries its
+atlas's layout: each chart keyed by its triangles, the one its plane is taken
+from, and what it is made of, with its place and its box in the room. The page
+lays its atlas out to it, so every chart the last bake had keeps its pixels, and
+new ones are packed below. The next bake traces only within 0.75 m of the charts
+that came or went, starting from the last bake's raw sums (kept outside git, in
+.bake-cache/), and bakes again only the joints whose regions those meet. It needs
+the same light to bake by (the baker's and sky's code, the scene's lights, the
+samples); else, or with `--full`, the whole house is baked and laid out afresh.
+Checked by moving the bean bag 20 cm, at 256 samples: the bake since the last
+took 46 s where a whole one takes about 4 minutes; it traced 65k of 980k texels
+and kept 17 of the 21 joints. Against everything traced on the same layout, the
+texels it traced differ by 0.011% on average, and the light of those it kept sums
+to within 0.002% (single texels differ either way, as the reference's own noise
+does where the moved bean bag turned its paths). The page waits for the bake's
+layout before it lays its atlas out: decoding the file takes about 125 ms on the Mac.
+
 **A sheet's two sides stand 0.5 mm apart** (`SHEET_GAP`, sides.ts). A curtain or a
 plant's leaves, seen from both sides, is drawn as two copies facing apart; in one
 place, a ray met both at the same distance and the baker took whichever its BVH

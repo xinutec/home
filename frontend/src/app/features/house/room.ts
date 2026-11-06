@@ -20,7 +20,14 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { WebGLPathTracer } from 'three-gpu-pathtracer';
 
-import { decodeLightmap, encodeLightmap, lightChange } from './bake-file';
+import {
+	type JointLight,
+	type Lightmap,
+	decodeLightmap,
+	encodeLightmap,
+	lightChange,
+	relaid,
+} from './bake-file';
 import { JointLights, addReflections, applyLightmap, roomChecksum } from './baked-light';
 import { bakeLightmap } from './baker';
 import type { HouseScene } from './house.model';
@@ -31,7 +38,7 @@ import { buildInterior } from './room-builder';
 import type { Lit } from './room-builder';
 import { nightSkyImage, overcastSky, overcastSkyImage } from './sky';
 import { ThreeView } from './three-view';
-import { Joints } from './joints';
+import { Joints, keptJointLights } from './joints';
 import { Collider, WalkControls } from './walk';
 
 /** Inflates a gzipped lightmap: the browser's own stream, no library. */
@@ -55,9 +62,10 @@ const BAKED_EXPOSURE = 150;
  *  1's view meters 0.00136 (`data-meter`), so the living room keeps about its fitted
  *  exposure, and the kitchen, metering ten times brighter, gets a tenth of it. */
 const AUTO_KEY = 0.2;
-/** Metres around where a door or drawer passes that its opening can change the
- *  light by more than lightChange's floor: the bake traces only there. */
-const JOINT_LIGHT_REACH = 0.75;
+/** Metres around where a door or drawer passes, or around what an edit added or
+ *  took away, that it can change the light by more than lightChange's floor: the
+ *  bake traces only there. */
+const LIGHT_REACH = 0.75;
 /** Milliseconds between frame-rate readouts. */
 const FPS_READ_MS = 500;
 /** Milliseconds of path tracing a frame under `?trace`: the page stays responsive. */
@@ -157,24 +165,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			.get('/api/house/bake', { responseType: 'arraybuffer' })
 			.pipe(catchError(() => of(undefined)));
 		forkJoin([this.http.get<HouseScene>('/api/house'), bake]).subscribe({
-			next: ([scene, baked]) => {
-				this.loading.set(false);
-				const view = this.view;
-				if (!view) return;
-				const physical = !!this.query.trace || !!this.query.export;
-				const lit = buildInterior(view, scene, this.room, this.query, physical);
-				if (!lit) this.empty.set(true);
-				else if (this.query.export) this.export(view);
-				else if (this.query.trace) this.trace(view, this.query.trace);
-				else if (this.query.bake)
-					this.bake(view, new Joints(scene, lit.meshes), lit, this.query.bake);
-				else {
-					const joints = new Joints(scene, lit.meshes);
-					void this.light(view, lit, baked);
-					this.walk(view, joints, lit);
-				}
-				view.requestFrame();
-			},
+			next: ([scene, baked]) => void this.open(scene, baked),
 			error: (e) => {
 				this.loading.set(false);
 				if (e instanceof HttpErrorResponse && e.status === 404) this.empty.set(true);
@@ -252,10 +243,50 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		this.walking.set(true);
 	}
 
+	/** Builds the room the scene describes, its atlas laid out to the bake's (where
+	 *  each chart was baked), then walks it, or bakes, traces or exports it. A whole
+	 *  bake lays its atlas out afresh. */
+	private async open(scene: HouseScene, baked: ArrayBuffer | undefined): Promise<void> {
+		const map = baked ? await decodeLightmap(baked, gunzip) : undefined;
+		this.loading.set(false);
+		const view = this.view;
+		if (!view) return;
+		const physical = !!this.query.trace || !!this.query.export;
+		const fresh = !!this.query.bake && !this.query.since;
+		const lit = buildInterior(
+			view,
+			scene,
+			this.room,
+			this.query,
+			physical,
+			fresh ? undefined : map?.layout,
+		);
+		if (!lit) this.empty.set(true);
+		else if (this.query.export) this.export(view);
+		else if (this.query.trace) this.trace(view, this.query.trace);
+		else if (this.query.bake) {
+			const since = this.query.since && map ? { map, raw: await this.rawSums() } : undefined;
+			this.bake(view, new Joints(scene, lit.meshes), lit, this.query.bake, since);
+		} else {
+			const joints = new Joints(scene, lit.meshes);
+			this.light(view, lit, map);
+			this.walk(view, joints, lit);
+		}
+		view.requestFrame();
+	}
+
+	/** The raw sums of the bake the page is fed, as e2e/bake.ts serves them: the
+	 *  atlas's width and height (u32), then RGB summed and samples counted a pixel. */
+	private async rawSums(): Promise<Float32Array> {
+		const r = await fetch('/api/house/bake-raw');
+		if (!r.ok) throw new Error(`the last bake's sums: ${r.status}`);
+		const bytes = await r.arrayBuffer();
+		return new Float32Array(bytes, 8);
+	}
+
 	/** Lights the room from its lightmap, if one came and it is for this room as built;
 	 *  else it keeps the approximate light. */
-	private async light(view: ThreeView, lit: Lit, baked: ArrayBuffer | undefined): Promise<void> {
-		const map = baked ? await decodeLightmap(baked, gunzip) : undefined;
+	private light(view: ThreeView, lit: Lit, map: Lightmap | undefined): void {
 		const texture = map && applyLightmap(view.scene, lit, map);
 		const applied = !!texture;
 		if (map && texture && map.joints.length > 0)
@@ -341,32 +372,55 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 	/** Bakes the room's lightmap, `samples` a pixel, with every door and drawer shut,
 	 *  then once more for each with it alone open, keeping what that changes; and
 	 *  leaves it, as scenes/house.bake stores it before compression, on
-	 *  `window.houseBake` for e2e/bake.ts; the canvas's host then carries `data-baked`. */
-	private bake(view: ThreeView, joints: Joints, lit: Lit, samples: number): void {
+	 *  `window.houseBake` for e2e/bake.ts, its raw sums on `window.houseRaw`; the
+	 *  canvas's host then carries `data-baked`. `since` a bake and its raw sums, it
+	 *  traces only near the charts that came or went since then, and bakes again only
+	 *  the joints near them: the rest is that bake's. */
+	private bake(
+		view: ThreeView,
+		joints: Joints,
+		lit: Lit,
+		samples: number,
+		since?: { map: Lightmap; raw: Float32Array },
+	): void {
 		const host = this.host().nativeElement;
 		const started = performance.now();
-		const keys = joints.keys();
+		const { width, height } = lit.atlas;
+		// Where an edit can have changed the light: near what it added or took away.
+		const edited = since
+			? [...lit.atlas.added, ...lit.atlas.removed].map((b) => b.clone().expandByScalar(LIGHT_REACH))
+			: [];
+		const region = (key: string) => joints.reach(key).expandByScalar(LIGHT_REACH);
+		const kept = keptJointLights(
+			since?.map.joints ?? [],
+			joints.keys().map((key) => ({ key, at: joints.openAt(key), region: region(key) })),
+			edited,
+		);
+		const keys = joints.keys().filter((k) => !kept.has(k));
 		const run = async () => {
 			// Progress over every bake: the shut one, then each joint's.
 			const report = (k: number) => (done: number) =>
 				(host.dataset['baking'] = `${k * samples + done} of ${(keys.length + 1) * samples}`);
-			const { light, summed, raw, ms } = await bakeLightmap(
+			const { light, summed, raw, traced, ms } = await bakeLightmap(
 				view.renderer,
 				lit,
 				samples,
 				4,
 				report(0),
+				since && {
+					regions: edited,
+					base: relaid(since.raw, since.map.width, since.map.height, width, height),
+				},
 			);
-			const changes = [];
+			const changes: JointLight[] = [];
 			// Each phase's time, the shut bake's and the joints' summed.
 			const times = { shut: ms, joints: { build: 0, trace: 0, read: 0, finish: 0 } };
 			for (const [k, key] of keys.entries()) {
 				// Only near what moves: further off, what it changes is under lightChange's floor.
-				const region = joints.reach(key).expandByScalar(JOINT_LIGHT_REACH);
 				const at = joints.openAt(key);
 				joints.set(key, at);
 				const open = await bakeLightmap(view.renderer, lit, samples, 4, report(k + 1), {
-					region,
+					regions: [region(key)],
 					base: raw,
 				});
 				joints.set(key, joints.closedAt(key));
@@ -374,14 +428,26 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 				for (const k of ['build', 'trace', 'read', 'finish'] as const)
 					times.joints[k] += open.ms[k];
 			}
-			const { width, height } = lit.atlas;
-			const file = encodeLightmap(light, width, height, roomChecksum(lit), changes);
+			// Every joint, in the order they are keyed: the kept ones as they were.
+			const all = joints
+				.keys()
+				.map((key) => kept.get(key) ?? changes.find((c) => c.key === key))
+				.filter((c) => c !== undefined);
+			const file = encodeLightmap(light, width, height, roomChecksum(lit), all, lit.atlas.layout);
 			// The room it is for, beside it, for e2e scripts that inspect the light.
-			Object.assign(window, { houseBake: file, houseRoom: lit, houseLight: light });
+			Object.assign(window, { houseBake: file, houseRaw: raw, houseRoom: lit, houseLight: light });
 			host.dataset['baked'] = JSON.stringify({
 				atlas: [width, height],
 				covered: lit.atlas.charts,
 				samples: summed,
+				...(since && {
+					since: {
+						added: lit.atlas.added.length,
+						removed: lit.atlas.removed.length,
+						traced,
+						kept: [...kept.keys()].length,
+					},
+				}),
 				joints: Object.fromEntries(changes.map((c) => [c.key, c.texels.length])),
 				ms: times,
 				seconds: Math.round((performance.now() - started) / 100) / 10,

@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import json from '../../../../../scenes/house.json';
 import { corners, solidsOf } from './assembly';
 import type { HouseScene } from './house.model';
-import { Joints } from './joints';
+import { Joints, keptJointLights } from './joints';
 import { MaterialLibrary } from './materials';
 import { mergeStatic } from './merge';
 import { buildHouse } from './room-builder';
@@ -126,5 +126,28 @@ describe('joints', () => {
 		// And it is left shut.
 		expect(new Joints(house, meshes).reach(key).isEmpty()).toBe(false);
 		expect(joints.value(key)).toBe(-95);
+	});
+});
+
+describe('keptJointLights', () => {
+	const light = (key: string, at = 1) => ({
+		key,
+		at,
+		texels: new Uint32Array(),
+		delta: new Float32Array(),
+	});
+	const box = (x: number) =>
+		new THREE.Box3(new THREE.Vector3(x, 0, 0), new THREE.Vector3(x + 1, 1, 1));
+
+	it('keeps a joint’s light from the last bake where no edit came near it, opening as far', () => {
+		const now = [
+			{ key: 'far', at: 1, region: box(10) },
+			{ key: 'near', at: 1, region: box(0) },
+			{ key: 'turned', at: 2, region: box(20) },
+			{ key: 'new', at: 1, region: box(30) },
+		];
+		const last = [light('far'), light('near'), light('turned'), light('gone')];
+		const kept = keptJointLights(last, now, [box(0.5)]);
+		expect([...kept.keys()]).toEqual(['far']);
 	});
 });
