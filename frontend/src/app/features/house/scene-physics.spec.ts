@@ -40,11 +40,13 @@ const KNOWN_COLLISIONS = [
 ].sort();
 
 /**
- * Doors that loose furniture stands in front of. They really do not open until it is
- * moved (the bean bag, the armchair), so the physics is right to find them; each is
- * one door and what it meets, however many of its parts.
+ * Doors that meet something before their hinge's end: loose furniture standing in
+ * front (the bean bag, the armchair), which they really do not open past until it is
+ * moved, and the plank by the fridge, which the serving cabinet's left door swings
+ * into at 109°. Each is one door and what it meets, however many of its parts.
  */
 const BLOCKED_DOORS = [
+	'kitchen-serving-cabinet/door-a by kitchen-divider-plank',
 	'living-ikea-cupboard-fireplace-wall/door-a by living-bean-bag',
 	'living-ikea-cupboard-fireplace-wall/door-b by living-bean-bag',
 	'living-ikea-cupboard-opposite-wall/door-a by living-armchair',

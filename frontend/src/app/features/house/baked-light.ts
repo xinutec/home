@@ -96,9 +96,44 @@ export function texelPoints(
 	return out;
 }
 
-/** The most joints one texel's light may take a change from: the house has up to
- *  six on one (a sideboard's inside, its three doors and two drawers). */
-const SHARED = 8;
+/**
+ * Every texel any joint changes, once, with its list of changes: `first` and
+ * `count` say where in `entries` its list is, an entry four numbers (the joint, by
+ * its index in `joints`, then the change of light, RGB). A texel takes a change
+ * from as many joints as there are, as a kitchen's do from a dozen.
+ */
+export function jointLists(joints: JointLight[]): {
+	texels: Uint32Array;
+	first: Float32Array;
+	count: Float32Array;
+	entries: Float32Array;
+} {
+	// Each texel's place in the lists, by texel: an array, as a map of 380k is slow.
+	let top = -1;
+	for (const j of joints) for (const t of j.texels) top = Math.max(top, t);
+	const place = new Int32Array(top + 1).fill(-1);
+	const order: number[] = [];
+	for (const j of joints) for (const t of j.texels) if (place[t] < 0) place[t] = order.push(t) - 1;
+	const n = order.length;
+	const count = new Float32Array(n);
+	for (const j of joints) for (const t of j.texels) count[place[t]]++;
+	const first = new Float32Array(n);
+	for (let u = 1; u < n; u++) first[u] = first[u - 1] + count[u - 1];
+	const entries = new Float32Array((n > 0 ? first[n - 1] + count[n - 1] : 0) * 4);
+	const filled = new Float32Array(n);
+	joints.forEach((j, k) =>
+		j.texels.forEach((t, i) => {
+			const u = place[t];
+			const at = (first[u] + filled[u]++) * 4;
+			entries[at] = k;
+			for (let c = 0; c < 3; c++) entries[at + 1 + c] = j.delta[i * 3 + c];
+		}),
+	);
+	return { texels: Uint32Array.from(order), first, count, entries };
+}
+
+/** Entries a row of the joint lights' list texture. */
+const LIST_ROW = 2048;
 
 /**
  * The light of the doors and drawers as they open, worked out on the GPU: the
@@ -150,63 +185,50 @@ export class JointLights {
 		copy.dispose();
 		quad.geometry.dispose();
 
-		// Every texel any joint changes, once: its light shut, and which joints change it
-		// by how much (unused slots name joint -1).
+		// Every texel any joint changes, once, as a point: its light shut, and where its
+		// list of changes is in a texture of them all.
 		const data: unknown = base.image.data;
 		if (!(data instanceof Uint16Array)) throw new Error('the lightmap is not half floats');
-		const place = new Map<number, number>();
-		for (const j of joints) for (const t of j.texels) if (!place.has(t)) place.set(t, place.size);
-		const n = place.size;
-		const texels = new Uint32Array(n);
+		const lists = jointLists(joints);
+		const n = lists.texels.length;
 		const shut = new Float32Array(n * 3);
-		for (const [t, u] of place) {
-			texels[u] = t;
+		lists.texels.forEach((t, u) => {
 			for (let c = 0; c < 3; c++) shut[u * 3 + c] = THREE.DataUtils.fromHalfFloat(data[t * 4 + c]);
-		}
-		const which = new Float32Array(n * SHARED).fill(-1);
-		const by = Array.from({ length: SHARED }, () => new Float32Array(n * 3));
-		const used = new Uint8Array(n);
-		joints.forEach((j, k) =>
-			j.texels.forEach((t, i) => {
-				const u = place.get(t) ?? 0;
-				const slot = used[u]++;
-				if (slot >= SHARED) throw new Error(`a texel takes light from over ${SHARED} joints`);
-				which[u * SHARED + slot] = k;
-				by[slot].set(j.delta.subarray(i * 3, i * 3 + 3), u * 3);
-			}),
-		);
+		});
+		const rows = Math.max(1, Math.ceil(lists.entries.length / 4 / LIST_ROW));
+		const half = new Uint16Array(LIST_ROW * rows * 4);
+		lists.entries.forEach((v, i) => (half[i] = THREE.DataUtils.toHalfFloat(v)));
+		const list = new THREE.DataTexture(half, LIST_ROW, rows, THREE.RGBAFormat, THREE.HalfFloatType);
+		list.needsUpdate = true;
 		const g = new THREE.BufferGeometry();
 		g.setAttribute(
 			'position',
-			new THREE.Float32BufferAttribute(texelPoints(texels, width, height), 3),
+			new THREE.Float32BufferAttribute(texelPoints(lists.texels, width, height), 3),
 		);
 		g.setAttribute('shut', new THREE.Float32BufferAttribute(shut, 3));
-		const whichOf = (h: number) => which.filter((_, i) => Math.floor((i % SHARED) / 4) === h);
-		g.setAttribute('which0', new THREE.Float32BufferAttribute(whichOf(0), 4));
-		g.setAttribute('which1', new THREE.Float32BufferAttribute(whichOf(1), 4));
-		by.forEach((d, slot) => g.setAttribute(`by${slot}`, new THREE.Float32BufferAttribute(d, 3)));
+		g.setAttribute('first', new THREE.Float32BufferAttribute(lists.first, 1));
+		g.setAttribute('count', new THREE.Float32BufferAttribute(lists.count, 1));
 		this.keys = joints.map((j) => j.key);
 		this.open = { value: joints.map(() => 0) };
-		const sum = Array.from(
-			{ length: SHARED },
-			(_, s) => `if (w[${s}] >= 0.0) light += open[int(w[${s}])] * by${s};`,
-		).join('\n');
 		const material = new THREE.ShaderMaterial({
 			glslVersion: THREE.GLSL3,
-			defines: { JOINTS: Math.max(1, joints.length) },
-			uniforms: { open: this.open },
+			defines: { JOINTS: Math.max(1, joints.length), LIST_ROW },
+			uniforms: { open: this.open, list: { value: list } },
 			blending: THREE.NoBlending,
 			vertexShader: /* glsl */ `
 				uniform float open[JOINTS];
+				uniform highp sampler2D list;
 				in vec3 shut;
-				in vec4 which0;
-				in vec4 which1;
-				${by.map((_, s) => `in vec3 by${s};`).join('\n')}
+				in float first;
+				in float count;
 				out vec3 vLight;
 				void main() {
-					float w[${SHARED}] = float[${SHARED}](which0.x, which0.y, which0.z, which0.w, which1.x, which1.y, which1.z, which1.w);
 					vec3 light = shut;
-					${sum}
+					int at = int(first);
+					for (int i = 0; i < int(count); i++, at++) {
+						vec4 e = texelFetch(list, ivec2(at % LIST_ROW, at / LIST_ROW), 0);
+						light += open[int(e.x)] * e.yzw;
+					}
 					vLight = max(light, vec3(0.0));
 					gl_PointSize = 1.0;
 					gl_Position = vec4(position.xy, 0.0, 1.0);
@@ -221,7 +243,7 @@ export class JointLights {
 		const mesh = new THREE.Points(g, material);
 		mesh.frustumCulled = false;
 		this.points.add(mesh);
-		this.owned.push(g, material);
+		this.owned.push(g, material, list);
 		// Drawn once now, everything shut (what is there already), so its program is
 		// compiled at load and not on the first frame a door moves.
 		this.draw(this.points);

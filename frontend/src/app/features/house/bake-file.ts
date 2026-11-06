@@ -6,7 +6,7 @@ import { DataUtils } from 'three';
  * light runs from a dark corner to the window's glow, and RGBM keeps a pixel's
  * own range), the bytes gzipped.
  *
- * Header, little-endian, 32 bytes: the magic "HBK2", the room's checksum (its
+ * Header, little-endian, 32 bytes: the magic "HBK3", the room's checksum (its
  * vertices and lightmap coordinates, as `checksum` reads them), the atlas's width
  * and height, the FNV-1a of the scene file's bytes it was baked from (e2e/bake.ts
  * writes it; tests/scene.test.ts fails while it differs from scenes/house.json's,
@@ -15,7 +15,9 @@ import { DataUtils } from 'three';
  *
  * After the pixels, each joint's change of light (`JointLight`): its key's length
  * (u16) and UTF-8 bytes, the value it was baked open at (f64), how many texels it
- * changes (u32), their indices (u32 each), and their RGB changes (half floats).
+ * changes (u32), their indices in order as the gaps between them (u32 each, the
+ * first from 0), and their RGB changes as half floats, every low byte and then
+ * every high one: so laid out they compress, the gaps small, the high bytes alike.
  */
 export interface Lightmap {
 	checksum: number;
@@ -65,7 +67,7 @@ export function lightChange(
 	return { key, at, texels: Uint32Array.from(texels), delta: Float32Array.from(delta) };
 }
 
-const MAGIC = 0x324b4248; // "HBK2"
+const MAGIC = 0x334b4248; // "HBK3"
 export const HEADER = 32;
 
 /** The header and the uncompressed RGBM pixels of a lightmap. */
@@ -107,14 +109,19 @@ export function encodeLightmap(
 		head.setFloat64(at, j.at, true);
 		head.setUint32(at + 8, j.texels.length, true);
 		at += 12;
-		for (const t of j.texels) {
-			head.setUint32(at, t, true);
+		j.texels.forEach((t, i) => {
+			const gap = t - (i > 0 ? j.texels[i - 1] : 0);
+			if (i > 0 && gap <= 0) throw new Error(`${j.key}'s texels are not in order`);
+			head.setUint32(at, gap, true);
 			at += 4;
-		}
-		for (const d of j.delta) {
-			head.setUint16(at, DataUtils.toHalfFloat(d), true);
-			at += 2;
-		}
+		});
+		const n = j.delta.length;
+		j.delta.forEach((d, i) => {
+			const h = DataUtils.toHalfFloat(d);
+			out[at + i] = h & 0xff;
+			out[at + n + i] = h >> 8;
+		});
+		at += n * 2;
 	});
 	return out;
 }
@@ -159,11 +166,12 @@ function readJoints(px: Uint8Array, at: number, count: number): JointLight[] | u
 		at += 12;
 		if (at + n * 10 > px.length) return undefined;
 		const texels = new Uint32Array(n);
-		for (let i = 0; i < n; i++) texels[i] = view.getUint32(at + i * 4, true);
+		for (let i = 0; i < n; i++)
+			texels[i] = (i > 0 ? texels[i - 1] : 0) + view.getUint32(at + i * 4, true);
 		at += n * 4;
 		const delta = new Float32Array(n * 3);
 		for (let i = 0; i < n * 3; i++)
-			delta[i] = DataUtils.fromHalfFloat(view.getUint16(at + i * 2, true));
+			delta[i] = DataUtils.fromHalfFloat(px[at + i] | (px[at + n * 3 + i] << 8));
 		at += n * 6;
 		out.push({ key, at: value, texels, delta });
 	}

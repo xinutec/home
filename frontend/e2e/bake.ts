@@ -70,18 +70,25 @@ if (/SwiftShader|no WebGL/.test(gpu)) {
 	await browser.close();
 	process.exit(1);
 }
-const ticker = setInterval(() => {
-	void page
-		.locator('.canvas')
-		.getAttribute('data-baking')
-		.then((d) => d && process.stdout.write(`\r${d} samples`))
-		// dev-lint: allow-ignored-error a progress line skipped while the page is busy; the bake's own result is checked below
-		.catch(() => undefined);
-}, 5000);
-const done = await page
-	.locator('.canvas[data-baked]')
-	.getAttribute('data-baked', { timeout: 1_800_000 });
-clearInterval(ticker);
+// However long the bake, it fails only if its progress stops: a whole house of
+// joints on the Mac outlasts any one limit.
+const STALL_MS = 300_000;
+const baked = page.locator('.canvas[data-baked]');
+let last = '';
+let moved = Date.now();
+while ((await baked.count()) === 0) {
+	await page.waitForTimeout(5000);
+	const d = (await page.locator('.canvas').getAttribute('data-baking')) ?? '';
+	if (d !== last) {
+		[last, moved] = [d, Date.now()];
+		process.stdout.write(`\r${d} samples`);
+	} else if (Date.now() - moved > STALL_MS) {
+		console.error(`\nthe bake stopped at ${d || 'its start'} for ${STALL_MS / 60_000} minutes`);
+		await browser.close();
+		process.exit(1);
+	}
+}
+const done = await baked.getAttribute('data-baked');
 if (!done || 'error' in (JSON.parse(done) as object)) {
 	console.error(`\nthe bake failed: ${done}`);
 	await browser.close();

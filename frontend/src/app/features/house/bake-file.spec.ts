@@ -69,4 +69,29 @@ describe('lightmap file', () => {
 		const old = await decodeLightmap(encodeLightmap(shut, 2, 2, 7).buffer as ArrayBuffer, raw);
 		expect(old?.joints).toEqual([]);
 	});
+
+	it('writes a joint’s texels as the gaps between them, its changes low bytes then high', async () => {
+		const joint = {
+			key: 'k',
+			at: 1,
+			texels: Uint32Array.from([5, 9]),
+			delta: Float32Array.from([1, 2, 3, -1, -2, -3]),
+		};
+		const file = encodeLightmap(new Float32Array(3), 1, 1, 0, [joint]);
+		const view = new DataView(file.buffer);
+		// After the pixel: the key's length and byte, the value, the count.
+		const at = HEADER + 4 + 2 + 1 + 8 + 4;
+		expect([view.getUint32(at, true), view.getUint32(at + 4, true)]).toEqual([5, 4]);
+		const halves = [...joint.delta].map((d) => DataUtils.toHalfFloat(d));
+		const planes = [...halves.map((h) => h & 0xff), ...halves.map((h) => h >> 8)];
+		expect([...file.subarray(at + 8, at + 8 + 12)]).toEqual(planes);
+		const got = await decodeLightmap(file.buffer as ArrayBuffer, raw);
+		expect([...(got?.joints[0].texels ?? [])]).toEqual([5, 9]);
+		expect([...(got?.joints[0].delta ?? [])]).toEqual([1, 2, 3, -1, -2, -3]);
+	});
+
+	it('refuses a joint whose texels are not in order', () => {
+		const joint = { key: 'k', at: 1, texels: Uint32Array.from([9, 5]), delta: new Float32Array(6) };
+		expect(() => encodeLightmap(new Float32Array(3), 1, 1, 0, [joint])).toThrow(/in order/);
+	});
 });

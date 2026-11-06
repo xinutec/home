@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { specularOnlyChunk, texelPoints } from './baked-light';
+import { jointLists, specularOnlyChunk, texelPoints } from './baked-light';
 
 describe('specularOnlyChunk', () => {
 	it('keeps the probe as reflection and the lightmap as the only diffuse light', () => {
@@ -24,5 +24,30 @@ describe('texelPoints', () => {
 		const p = texelPoints([0, 7], 4, 2);
 		expect([...p.subarray(0, 2)]).toEqual([-0.75, -0.5]);
 		expect([...p.subarray(3, 5)]).toEqual([0.75, 0.5]);
+	});
+});
+
+describe('jointLists', () => {
+	const joint = (key: string, texels: number[], delta: number[]) => ({
+		key,
+		at: 1,
+		texels: Uint32Array.from(texels),
+		delta: Float32Array.from(delta),
+	});
+
+	it('lists each texel once, with every joint that changes it and by how much', () => {
+		const l = jointLists([joint('a', [5, 9], [1, 2, 3, 4, 5, 6]), joint('b', [9], [-1, -2, -3])]);
+		expect([...l.texels]).toEqual([5, 9]);
+		expect([...l.first]).toEqual([0, 1]);
+		expect([...l.count]).toEqual([1, 2]);
+		// Joint, then its change: texel 5's one entry, then texel 9's two.
+		expect([...l.entries]).toEqual([0, 1, 2, 3, 0, 4, 5, 6, 1, -1, -2, -3]);
+	});
+
+	it('takes as many joints on one texel as there are', () => {
+		const many = Array.from({ length: 11 }, (_, k) => joint(`j${k}`, [3], [k, 0, 0]));
+		const l = jointLists(many);
+		expect([...l.count]).toEqual([11]);
+		expect(Array.from({ length: 11 }, (_, k) => l.entries[k * 4])).toEqual(many.map((_, k) => k));
 	});
 });

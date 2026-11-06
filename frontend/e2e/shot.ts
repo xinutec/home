@@ -70,6 +70,9 @@ await ctx.route('**/api/house', (r) =>
 	}),
 );
 const page = await ctx.newPage();
+page.on('console', (m) => {
+	if (m.type() === 'error') console.error(`page: ${m.text()}`);
+});
 const trace =
 	(a.trace ? `&trace=${a.trace}` : '') +
 	(a.tone ? `&tone=${a.tone}` : '') +

@@ -453,7 +453,14 @@ shut, so it keeps its texels in the lightmap and is moved as one, by the move it
 part makes in `solidsOf`. It opens to its joint's `stop` where it has one: where
 the gate's sweeps, halved down to under a millimetre or a degree, find it meets
 something (the IKEA cupboards' doors, 5 to 10 degrees, against the bean bag and
-the armchair), written into the scene and checked against what they find. An
+the armchair; the serving cabinet's left door at 109°, against the plank by the
+fridge), written into the scene and checked against what they find. What opens:
+the sideboard's doors and drawers, the IKEA cupboards' doors, and in the kitchen
+the window run's pan drawers, oak drawers and sink cupboard, the oven housing's
+two drawers and its cupboard, and the serving cabinet's doors. Behind the kitchen's
+fronts the carcasses are hollow (sides, back, bottom, a shelf; the sink's
+cupboard under its bowl, the worktop strips round it on the carcass's rails), the
+drawers boxes on 0.45 m of travel: the insides guessed, as their estimates say. An
 open door stops the walker where it stands now: what moves on each joint is a BVH
 of its own, in its own frame, met through the door's current place. Their light is baked: the lightmap with every
 joint shut, then for each joint alone open (the baker draws a mesh where its matrix
@@ -468,14 +475,22 @@ house, the left door excepted: 89% at any margin, the rest where the bake depend
 its BVH (below), not the door's light. The page
 adds each joint's change as far as it is open (`JointLights`), on the GPU: the
 lightmap is drawn into a texture of its own, and on a change every texel a joint
-changes (112k, up to six joints on one) is drawn again as a point, its light shut
-plus each joint's change times how far it is open, never below none. The GPU holds
-all of that from the start; a frame changes nine numbers and uploads nothing. A
+changes is drawn again as a point, its light shut plus each joint's change times
+how far it is open, never below none. A point reads its changes from a list in a
+texture (`jointLists`: where its list starts and how long it is), so a texel takes
+light from as many joints as change it: in the kitchen up to a dozen (a fixed eight
+slots a texel, as it first had, failed there). The GPU holds all of that from the
+start; a frame changes one number a joint and uploads nothing. Making the lists at
+load takes 40 to 60 ms on the Mac, for 380k texels. A
 door swinging costs what turning the view does, 2.4 ms a frame on the Mac (it was
 7.3 with the changed rows uploaded each frame: each upload call cost about 9 µs,
-358 of them, where the bytes hardly counted). A bake is the shut house and the nine joints: on the Mac 12.6 and 7.7 minutes
-(the joints' share is the texels they trace); on horus 60 s and, by their texels (not yet timed there), about 40 s.
-The file is 4.7 MB. `data-baked` says each phase's time (`ms`).
+358 of them, where the bytes hardly counted; timed before the kitchen's joints).
+A bake is the shut house and each joint: on the Mac, with the 21 joints, 11.6 and
+20.8 minutes (the joints' share is the texels they trace). e2e/bake.ts fails a
+bake whose progress stops for 5 minutes, not one that runs long. The file is 6.6
+MB: each joint's texels are written as the gaps between them, and its changes'
+low bytes apart from their high ones, which compress (8.6 MB written plainly).
+`data-baked` says each phase's time (`ms`).
 
 **A sheet's two sides stand 0.5 mm apart** (`SHEET_GAP`, sides.ts). A curtain or a
 plant's leaves, seen from both sides, is drawn as two copies facing apart; in one
@@ -483,9 +498,14 @@ place, a ray met both at the same distance and the baker took whichever its BVH
 reached first, so the light on and near every curtain depended on how the tree was
 built (two builds of the same house, SAH and centre splits, differed by over 2% on
 99k texels). Apart, the two builds differ on 3k, where hidden faces touch (a wall
-behind a cupboard), drawn as hairlines on 0.02% of a kitchen view's pixels. Nine joints, 23k to
-114k texels each, ten bakes in 10 minutes on horus; the file grows from 2.9 to
-5.3 MB. The sideboard's drawers are drawers: a front, two sides, a
+behind a cupboard), drawn as hairlines on 0.02% of a kitchen view's pixels. A
+joint's change does not depend on the tree: its open bake, built anew, finds the
+same ties as the shut one (one door under SAH and centre splits: 12 and 59 texels
+apart of 23,942); refitting the shut bake's tree instead, as an engine does for
+what moves, changed nothing, so the baker builds anew. Dropping a sample that
+starts inside a part at any distance, not only within 5 cm (`INSIDE`), made the
+two trees differ on more texels, 4,912 against 1,721 over 10%: the tie then
+decides whether the sample counts. The sideboard's drawers are drawers: a front, two sides, a
 back and a bottom, riding 9 mm over the shelf (their boxes guessed).
 
 ### 6. Detail, judged in that light
