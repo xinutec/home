@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { jointLists, specularOnlyChunk, texelPoints } from './baked-light';
+import { jointLists, jointOwners, specularOnlyChunk, texelPoints } from './baked-light';
 
 describe('specularOnlyChunk', () => {
 	it('keeps the probe as reflection and the lightmap as the only diffuse light', () => {
@@ -49,5 +49,29 @@ describe('jointLists', () => {
 		const l = jointLists(many);
 		expect([...l.count]).toEqual([11]);
 		expect(Array.from({ length: 11 }, (_, k) => l.entries[k * 4])).toEqual(many.map((_, k) => k));
+	});
+});
+
+describe('jointOwners', () => {
+	/** A square of two triangles at lightmap coordinates u0..u1, v0..v1, on joint `moves`. */
+	function square(u0: number, u1: number, v0: number, v1: number, moves?: string): THREE.Mesh {
+		const g = new THREE.BufferGeometry();
+		const uv = [u0, v0, u1, v0, u1, v1, u0, v0, u1, v1, u0, v1];
+		g.setAttribute('position', new THREE.Float32BufferAttribute(new Array(18).fill(0), 3));
+		g.setAttribute('uv1', new THREE.Float32BufferAttribute(uv, 2));
+		const m = new THREE.Mesh(g);
+		if (moves) m.userData['moves'] = moves;
+		return m;
+	}
+
+	it('says which joint moves each texel, its gutter too, and none for the fixed room', () => {
+		// A 16 x 1 atlas: a fixed chart at texels 0-3, a drawer's at 8-11.
+		const own = jointOwners(
+			[square(0, 4 / 16, 0, 1), square(8 / 16, 12 / 16, 0, 1, 'cab/drawer')],
+			['cab/door', 'cab/drawer'],
+			16,
+			1,
+		);
+		expect([...own]).toEqual([-1, -1, -1, -1, -1, -1, 1, 1, 1, 1, 1, 1, 1, 1, -1, -1]);
 	});
 });

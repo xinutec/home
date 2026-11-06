@@ -4,6 +4,7 @@ import type { JointLight, Lightmap } from './bake-file';
 import { checksum } from './bake-file';
 import type { Lit } from './room-builder';
 import { SKY, windowRadiance } from './sky';
+import { GUTTER } from './unwrap';
 
 /** The merged room's fingerprint, as its lightmap stores it: every vertex's place
  *  and its lightmap coordinates. */
@@ -132,6 +133,36 @@ export function jointLists(joints: JointLight[]): {
 	return { texels: Uint32Array.from(order), first, count, entries };
 }
 
+/**
+ * Which joint moves each texel of a `width` x `height` atlas, by its index in
+ * `keys`: the texels of every mesh that moves on one (`userData.moves`), with their
+ * gutter; -1 where the room stands still. A joint's change of light was baked with
+ * every other joint shut, so it holds on another's part only while that is shut.
+ */
+export function jointOwners(
+	meshes: THREE.Mesh[],
+	keys: string[],
+	width: number,
+	height: number,
+): Int16Array {
+	const own = new Int16Array(width * height).fill(-1);
+	for (const m of meshes) {
+		const j = keys.indexOf(String(m.userData['moves'] ?? ''));
+		if (j < 0) continue;
+		const uv = m.geometry.getAttribute('uv1');
+		for (let t = 0; t < uv.count; t += 3) {
+			const xs = [0, 1, 2].map((k) => uv.getX(t + k) * width);
+			const ys = [0, 1, 2].map((k) => uv.getY(t + k) * height);
+			// A chart's triangles lie in its rectangle, which only its gutter surrounds.
+			const [x0, x1] = [Math.floor(Math.min(...xs)) - GUTTER, Math.ceil(Math.max(...xs)) + GUTTER];
+			const [y0, y1] = [Math.floor(Math.min(...ys)) - GUTTER, Math.ceil(Math.max(...ys)) + GUTTER];
+			for (let y = Math.max(0, y0); y < Math.min(height, y1); y++)
+				own.fill(j, y * width + Math.max(0, x0), y * width + Math.min(width, x1));
+		}
+	}
+	return own;
+}
+
 /** Entries a row of the joint lights' list texture. */
 const LIST_ROW = 2048;
 
@@ -155,6 +186,8 @@ export class JointLights {
 		scene: THREE.Scene,
 		base: THREE.DataTexture,
 		joints: JointLight[],
+		/** The room's meshes as laid out in the lightmap: which of them moves on what. */
+		meshes: THREE.Mesh[],
 	) {
 		const { width, height } = base.image;
 		this.target = new THREE.WebGLRenderTarget(width, height, {
@@ -208,6 +241,19 @@ export class JointLights {
 		g.setAttribute('shut', new THREE.Float32BufferAttribute(shut, 3));
 		g.setAttribute('first', new THREE.Float32BufferAttribute(lists.first, 1));
 		g.setAttribute('count', new THREE.Float32BufferAttribute(lists.count, 1));
+		const owners = jointOwners(
+			meshes,
+			joints.map((j) => j.key),
+			width,
+			height,
+		);
+		g.setAttribute(
+			'owner',
+			new THREE.Float32BufferAttribute(
+				Float32Array.from(lists.texels, (t) => owners[t]),
+				1,
+			),
+		);
 		this.keys = joints.map((j) => j.key);
 		this.open = { value: joints.map(() => 0) };
 		const material = new THREE.ShaderMaterial({
@@ -221,13 +267,17 @@ export class JointLights {
 				in vec3 shut;
 				in float first;
 				in float count;
+				in float owner;
 				out vec3 vLight;
 				void main() {
 					vec3 light = shut;
 					int at = int(first);
 					for (int i = 0; i < int(count); i++, at++) {
 						vec4 e = texelFetch(list, ivec2(at % LIST_ROW, at / LIST_ROW), 0);
-						light += open[int(e.x)] * e.yzw;
+						// Another joint's change, on a part this texel's joint moves, as far as
+						// that part is still shut: it was baked with it shut.
+						float shut = owner >= 0.0 && int(owner) != int(e.x) ? 1.0 - open[int(owner)] : 1.0;
+						light += shut * open[int(e.x)] * e.yzw;
 					}
 					vLight = max(light, vec3(0.0));
 					gl_PointSize = 1.0;

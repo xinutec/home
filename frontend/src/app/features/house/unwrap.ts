@@ -48,7 +48,8 @@ export type Layout = Map<string, Placed>;
 const CHART_ANGLE = (45 * Math.PI) / 180;
 /** And while each neighbour faces within this of the triangle it joins from. */
 const STEP_ANGLE = (30 * Math.PI) / 180;
-const GUTTER = 2;
+/** Pixels kept free round each chart, its light spread into them. */
+export const GUTTER = 2;
 const WIDTH = 2048;
 
 interface Chart {
