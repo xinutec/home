@@ -7,6 +7,7 @@
  * /house/bake serves the light baked for it, when there is one.
  */
 
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { Hono } from "hono";
 import type { AppEnv } from "../env.js";
@@ -42,7 +43,15 @@ export function houseRoutes(scenePath: string): Hono<AppEnv> {
 			}
 			throw err;
 		}
-		return c.body(new Uint8Array(bytes), 200, { "content-type": "application/octet-stream" });
+		// Megabytes a visit, the same until the next bake: the browser asks each time
+		// (no-cache) and, the tag its bytes', is told it has it (304).
+		const tag = `"${createHash("sha1").update(bytes).digest("base64url")}"`;
+		const headers = { etag: tag, "cache-control": "no-cache" };
+		if (c.req.header("if-none-match") === tag) return c.body(null, 304, headers);
+		return c.body(new Uint8Array(bytes), 200, {
+			...headers,
+			"content-type": "application/octet-stream",
+		});
 	});
 
 	return app;

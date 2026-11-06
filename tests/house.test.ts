@@ -39,6 +39,27 @@ describe("GET /house/bake", () => {
 		expect(Array.from(new Uint8Array(await res.arrayBuffer()))).toEqual([1, 2, 3, 4]);
 	});
 
+	it("is fetched again only when it changed: a tag of its bytes, checked each time", async () => {
+		const file = join(dir, "tagged.json");
+		writeFileSync(file, "{}");
+		writeFileSync(join(dir, "tagged.bake"), Buffer.from([1, 2, 3, 4]));
+		const first = await houseRoutes(file).request("/house/bake");
+		const tag = first.headers.get("etag");
+		expect(tag).toMatch(/^"[^"]+"$/);
+		expect(first.headers.get("cache-control")).toBe("no-cache");
+		const again = await houseRoutes(file).request("/house/bake", {
+			headers: { "if-none-match": tag ?? "" },
+		});
+		expect(again.status).toBe(304);
+		expect((await again.arrayBuffer()).byteLength).toBe(0);
+		writeFileSync(join(dir, "tagged.bake"), Buffer.from([5, 6]));
+		const changed = await houseRoutes(file).request("/house/bake", {
+			headers: { "if-none-match": tag ?? "" },
+		});
+		expect(changed.status).toBe(200);
+		expect(changed.headers.get("etag")).not.toBe(tag);
+	});
+
 	it("answers 404 until the scene is baked", async () => {
 		const res = await houseRoutes(join(dir, "house.json")).request("/house/bake");
 		expect(res.status).toBe(404);
