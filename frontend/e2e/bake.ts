@@ -1,7 +1,7 @@
 // Bakes the house's light into the everyday view's lightmap and writes it to
 // scenes/house.bake, beside the scene it is for, which /api/house/bake serves.
 //
-//   node e2e/bake.ts [--samples 1024] [--full]
+//   node e2e/bake.ts [--samples 2048] [--full]
 //
 // After an edit it bakes only near what changed (the page's ?since): every chart
 // the last bake laid out keeps its place, and its light where nothing near it came
@@ -26,7 +26,7 @@ import { HEADER } from '../src/app/features/house/bake-file.ts';
 
 const { values: args } = parseArgs({
 	options: {
-		samples: { type: 'string', default: '1024' },
+		samples: { type: 'string', default: '2048' },
 		full: { type: 'boolean', default: false },
 		shut: { type: 'boolean', default: false },
 	},

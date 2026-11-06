@@ -381,14 +381,16 @@ of a wall between two rooms no longer meet in one plane; a curtain or a doorway'
 lining gains a back), merges the fixed room by material (41 meshes, about 10,800
 triangles), and lays every surface out in one atlas at 2 cm a pixel (`unwrap.ts`:
 charts of neighbouring triangles facing within 45°, packed in rows; 2048 × 752
-pixels). `e2e/bake-horus.sh --samples 2048` fills it on horus's RTX 4090 in about
-40 s, a minute with the copy and build (`node e2e/bake.ts` does it on the Mac's
-GPU in about 8 minutes; `baker.ts`): every surface drawn at its lightmap coordinates gives each
+pixels). `e2e/bake-horus.sh` fills it, the shut house and each joint, at 2048
+samples, on horus's RTX 4090 in about 3.5 minutes (`node e2e/bake.ts` on the Mac's
+GPU in about half an hour; `baker.ts`): every surface drawn at its lightmap coordinates gives each
 pixel its place and facing, then the trace's sky and panes with four diffuse
-bounces, the light sampled on the panes at every bounce, bounced light capped per
-sample, samples that start inside another part dropped; the gutters filled ring by
+bounces, the light sampled on the panes at every bounce (a pane's triangle picked
+by how large it looks from the point, then a direction within the solid angle it
+fills, Arvo's sampling of a spherical triangle, so no sample's weight grows near
+the glass), samples that start inside another part dropped; the gutters filled ring by
 ring and the rest smoothed with neighbours facing alike. Stored as 8-bit RGBM,
-gzipped, 1.7 MB (`scenes/house.bake`, `/api/house/bake`), and drawn as three's
+gzipped, about 7 MB with the joints' changes (`scenes/house.bake`, `/api/house/bake`), and drawn as three's
 own light map. The page applies it only to exactly the geometry and layout it was
 baked for (a checksum of every vertex and coordinate); `tests/scene.test.ts` fails
 while it is not the bake of the current scene file. Light detail no longer depends
@@ -532,6 +534,25 @@ texels counted twice across the two layouts); a render differs on 0.2% of its
 pixels, by 12/255 at most, on the boards laid out anew, whose texels draw other
 random numbers (they are seeded by pixel). The page waits for the bake's layout
 before it lays its atlas out: decoding the file takes about 125 ms on the Mac.
+
+**The panes sampled by the angle they fill, not their area** (6 November). Picked
+by area, a point on a pane weighs as one over its distance squared, so near the
+glass a rare sample was huge; the bake capped each sample's bounced light, which
+hid the noise and took real light with it. Against a reference (4096 samples,
+`e2e/bake.ts --shut`, scored texel by texel with an edge mask), the capped bake
+was 9.7% too dark inside surfaces and 15% at their edges, with 10.7% and 18%
+error; by solid angle, uncapped, 2048 samples are 2.1% and 2.8% off, no bias, at
+the same cost a sample. Picking a triangle by area and weighing it by its angle
+made fireflies (a small pane close by, rarely picked, of great weight): picked by
+how large it looks, its weight stays bounded. At 1024 samples the walls show soft
+blotches the texel scores (3.6%) did not: the bounced light off sunlit reveals,
+which the cap had cut, is real and noisy. Tried and not taken: an edge-aware
+à-trous filter (SVGF's spatial part) on 256 samples halved the noise inside
+surfaces but not at edges, and biased contact shadows; sampling each texel to its
+own noise saved nothing, as the noise is even (9.6% inside, 9.9% at edges, at
+256); gathering bounces from the last pass's lightmap read 3–8% bright, light
+leaking where a ray lands closer than a texel. The bounce paths carry two thirds
+of the noise (82% at edges).
 
 **A sheet's two sides stand 0.5 mm apart** (`SHEET_GAP`, sides.ts). A curtain or a
 plant's leaves, seen from both sides, is drawn as two copies facing apart; in one

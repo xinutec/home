@@ -149,17 +149,15 @@ export async function bakeLightmap(
 	const surfaceTex = new FloatVertexAttributeTexture();
 	surfaceTex.updateFrom(surfaceAttr);
 
-	// The panes as four textures, one texel each a triangle, and their area summed.
+	// The panes as four textures, one texel each a triangle: its corner and area, its
+	// edges, and the light it lets through.
 	const lightRows = Math.max(1, Math.ceil(lights.length / ROW));
 	const lightTex = () => new Float32Array(ROW * lightRows * 4);
 	const [la, lb, lc, ld] = [lightTex(), lightTex(), lightTex(), lightTex()];
-	const totalArea = lights.reduce((t, l) => t + l.area, 0);
-	let running = 0;
 	lights.forEach((l, i) => {
-		running += l.area;
-		la.set([l.a.x, l.a.y, l.a.z, 0], i * 4);
+		la.set([l.a.x, l.a.y, l.a.z, l.area], i * 4);
 		lb.set([l.e1.x, l.e1.y, l.e1.z, l.t], i * 4);
-		lc.set([l.e2.x, l.e2.y, l.e2.z, running / totalArea], i * 4);
+		lc.set([l.e2.x, l.e2.y, l.e2.z, 0], i * 4);
 		ld.set([...l.le, 0], i * 4);
 	});
 	const asTexture = (data: Float32Array, rows: number) => {
@@ -256,7 +254,7 @@ export async function bakeLightmap(
 		blendDst: THREE.OneFactor,
 		depthTest: false,
 		depthWrite: false,
-		defines: { PER_PASS, BOUNCES: bounces, ROW, INSIDE: '0.05', CAP: '0.5' },
+		defines: { PER_PASS, BOUNCES: bounces, ROW, INSIDE: '0.05', SMALL_ANGLE: '1e-4' },
 		uniforms: {
 			bvh: { value: bvhUniform },
 			surfaceTex: { value: surfaceTex },
@@ -265,8 +263,6 @@ export async function bakeLightmap(
 			lightC: { value: lightTexs[2] },
 			lightD: { value: lightTexs[3] },
 			lightCount: { value: lights.length },
-			// A pane is a slab: from the room, its two faces are one window.
-			lightArea: { value: totalArea / 2 },
 			pointPos: { value: posTarget.texture },
 			atlasAt: { value: atlasAt },
 			packed: { value: local ? 1 : 0 },
@@ -293,7 +289,6 @@ export async function bakeLightmap(
 			uniform sampler2D lightC;
 			uniform sampler2D lightD;
 			uniform int lightCount;
-			uniform float lightArea;
 			uniform sampler2D pointPos;
 			uniform sampler2D atlasAt;
 			uniform int packed;
@@ -349,31 +344,80 @@ export async function bakeLightmap(
 				}
 				return false;
 			}
-			// The irradiance at y from the panes, one sample: a point on a pane picked by area.
+			// A direction uniform over the solid angle the triangle (A, B, C) covers from y,
+			// and that solid angle (Arvo, "Stratified sampling of spherical triangles", 1995).
+			vec3 towards(vec3 y, vec3 A, vec3 B, vec3 C, float u1, float u2, out float omega) {
+				vec3 a = normalize(A - y);
+				vec3 b = normalize(B - y);
+				vec3 c = normalize(C - y);
+				vec3 nab = normalize(cross(a, b));
+				vec3 nbc = normalize(cross(b, c));
+				vec3 nca = normalize(cross(c, a));
+				// Its angles at a, b and c: between the planes of the sides meeting there.
+				float alpha = acos(clamp(-dot(nab, nca), -1.0, 1.0));
+				float beta = acos(clamp(-dot(nbc, nab), -1.0, 1.0));
+				float gamma = acos(clamp(-dot(nca, nbc), -1.0, 1.0));
+				omega = alpha + beta + gamma - 3.14159265359;
+				float s = sin(u1 * omega - alpha);
+				float t = cos(u1 * omega - alpha);
+				float u = t - cos(alpha);
+				float v = s + sin(alpha) * dot(a, b);
+				float q = clamp(((v * t - u * s) * cos(alpha) - v) / ((v * s + u * t) * sin(alpha)), -1.0, 1.0);
+				vec3 ch = q * a + sqrt(1.0 - q * q) * normalize(c - dot(c, a) * a);
+				float z = 1.0 - u2 * (1.0 - dot(ch, b));
+				return normalize(z * b + sqrt(max(0.0, 1.0 - z * z)) * normalize(ch - dot(ch, b) * b));
+			}
+			// How large pane triangle k looks from y, near enough: its area over the distance
+			// squared, kept from passing what it can fill close by. It is picked with chance
+			// in proportion, so its weight below, the angle it fills over that, stays
+			// bounded wherever y is; a pick by area alone would be rare for a small pane
+			// close by, and of great weight when it came.
+			float looks(int k, vec3 y) {
+				vec4 a = texelFetch(lightA, cell(k), 0);
+				vec3 d = a.xyz + (texelFetch(lightB, cell(k), 0).xyz + texelFetch(lightC, cell(k), 0).xyz) / 3.0 - y;
+				return a.w / max(dot(d, d), a.w);
+			}
+			// The irradiance at y from the panes, one sample: a pane's triangle picked by how
+			// large it looks, then a direction within the solid angle it fills from y (a
+			// point on it, picked by area, for one too small to measure the angle of).
 			vec3 direct(vec3 y, vec3 n) {
 				if (lightCount == 0) return vec3(0.0);
-				float u = rand();
+				float looksAll = 0.0;
+				for (int k = 0; k < lightCount; k++) looksAll += looks(k, y);
+				float u = rand() * looksAll;
 				int lo = 0;
-				int hi = lightCount - 1;
-				while (lo < hi) {
-					int mid = (lo + hi) / 2;
-					if (texelFetch(lightC, cell(mid), 0).w < u) lo = mid + 1;
-					else hi = mid;
-				}
+				float seen = looks(0, y);
+				while (seen < u && lo < lightCount - 1) seen += looks(++lo, y);
+				float pick = looks(lo, y) / looksAll;
 				vec4 a = texelFetch(lightA, cell(lo), 0);
 				vec4 b = texelFetch(lightB, cell(lo), 0);
 				vec4 c = texelFetch(lightC, cell(lo), 0);
+				vec3 ln = normalize(cross(b.xyz, c.xyz));
 				float r1 = rand();
 				float r2 = rand();
-				if (r1 + r2 > 1.0) { r1 = 1.0 - r1; r2 = 1.0 - r2; }
-				vec3 q = a.xyz + b.xyz * r1 + c.xyz * r2;
-				vec3 ln = normalize(cross(b.xyz, c.xyz));
-				vec3 d = q - y;
-				float dist = length(d);
-				vec3 w = d / dist;
+				vec3 w;
+				float dist;
+				float weight;
+				float omega;
+				vec3 sampled = towards(y, a.xyz, a.xyz + b.xyz, a.xyz + c.xyz, r1, r2, omega);
+				if (omega > SMALL_ANGLE) {
+					w = sampled;
+					float facing = dot(ln, w);
+					if (abs(facing) < 1e-6) return vec3(0.0);
+					dist = dot(a.xyz - y, ln) / facing;
+					weight = omega / pick;
+				} else {
+					if (r1 + r2 > 1.0) { r1 = 1.0 - r1; r2 = 1.0 - r2; }
+					vec3 d = a.xyz + b.xyz * r1 + c.xyz * r2 - y;
+					dist = length(d);
+					w = d / dist;
+					weight = abs(dot(ln, w)) * a.w / (dist * dist) / pick;
+				}
+				// A pane is a slab: from the room, its two faces are one window.
+				weight *= 0.5;
 				float cy = dot(n, w);
-				float cl = abs(dot(ln, w));
-				if (cy <= 0.0 || cl < 1e-4) return vec3(0.0);
+				if (cy <= 0.0 || dist <= 0.0) return vec3(0.0);
+				vec3 q = y + w * dist;
 				float blocked;
 				vec3 bn;
 				vec3 ba;
@@ -383,7 +427,7 @@ export async function bakeLightmap(
 				// panes look onto the dining room, whose light is the bounces'.
 				if (b.w > 0.0 && opaqueHit(q + w * 2e-3, w, blocked, bn, ba, bf)) return vec3(0.0);
 				vec3 le = b.w > 0.0 ? sky(w) * b.w : texelFetch(lightD, cell(lo), 0).rgb;
-				return le * cy * cl * lightArea / (dist * dist);
+				return le * cy * weight;
 			}
 
 			void main() {
@@ -421,10 +465,6 @@ export async function bakeLightmap(
 						rd = cosineAbout(hn);
 					}
 					if (inside) continue;
-					// The rare path that finds a pane at close range would light one vertex
-					// alone: its bounced light is capped (direct light never is).
-					float lum = dot(bounced, vec3(0.2126, 0.7152, 0.0722));
-					if (lum > CAP) bounced *= CAP / lum;
 					sum += direct(p.xyz, n) + bounced;
 					valid += 1.0;
 				}
