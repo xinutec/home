@@ -74,7 +74,9 @@ export interface Part {
 	 *  diameter the box's width, its thickness the box's depth (a wreath); `cushion`,
 	 *  the box with its edges and corners rounded (upholstery); `roll`, round about
 	 *  its left-to-right axis (a chair arm's scroll); `fronds`, a crown of long
-	 *  leaves spreading from one point, the outer ones drooping (a dracaena). */
+	 *  leaves spreading from one point, the outer ones drooping (a dracaena);
+	 *  `extrude`, its `outline` seen from the side, swept across its width (an arcade
+	 *  cabinet's side, a slanted screen). */
 	shape?:
 		| 'cylinder'
 		| 'dome'
@@ -86,13 +88,17 @@ export interface Part {
 		| 'lathe'
 		| 'ring'
 		| 'cushion'
-		| 'roll';
+		| 'roll'
+		| 'extrude';
 	/** For an `arch`: how far its top rises above its shoulders, metres; a half circle
 	 *  across its width when absent. */
 	rise?: number;
 	/** For a `lathe`: its outline from bottom to top, each point [radius, height] as
 	 *  fractions of the box's half-width (and half-depth) and of its height. */
 	profile?: [number, number][];
+	/** For an `extrude`: its outline seen from its +x side, each corner [back to
+	 *  front, bottom to top] as fractions of the box's depth and height. */
+	outline?: [number, number][];
 	/** For a `lathe` lying down: spun about the box's x or z instead of the vertical,
 	 *  its profile's height running along that axis (from its - end) and its radius
 	 *  over the other two half-sizes. */

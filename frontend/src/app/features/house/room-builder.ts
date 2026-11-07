@@ -711,6 +711,18 @@ function partGeometry(part: Part, hw: number, h: number, hd: number): THREE.Buff
 				1,
 			);
 		}
+		case 'extrude': {
+			if (!part.outline || part.outline.length < 3)
+				throw new Error(`part ${part.id} is an extrude without an outline`);
+			// Drawn in the side's plane (depth, height), swept along its width, then turned
+			// so the depth runs to the front (+z) and the sweep across x.
+			const shape = new THREE.Shape(
+				part.outline.map(([u, v]) => new THREE.Vector2((u - 0.5) * hd * 2, (v - 0.5) * h)),
+			);
+			return new THREE.ExtrudeGeometry(shape, { depth: hw * 2, bevelEnabled: false })
+				.rotateY(-Math.PI / 2)
+				.translate(hw, 0, 0);
+		}
 		case 'lathe': {
 			if (!part.profile || part.profile.length < 2)
 				throw new Error(`part ${part.id} is a lathe without a profile`);

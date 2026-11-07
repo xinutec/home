@@ -81,3 +81,41 @@ describe('a lathe lying down', () => {
 		}
 	});
 });
+
+describe('an extrude', () => {
+	it('sweeps its side outline across its width, its front to the box’s front', () => {
+		const stage = { scene: new THREE.Scene(), own: <T>(r: T) => r };
+		// A wedge, tall at its back: [back to front, bottom to top].
+		const f: Furniture = {
+			id: 'wedge',
+			cx: 0,
+			cz: 0,
+			w: 0.3,
+			d: 0.2,
+			h: 0.1,
+			parts: [
+				{
+					id: 'body',
+					size: [0.3, 0.1, 0.2],
+					at: [0, 0.05, 0],
+					shape: 'extrude',
+					outline: [
+						[0, 0],
+						[1, 0],
+						[0, 1],
+					],
+				},
+			],
+		};
+		const scene: HouseScene = { height: 2.4, rooms: [], furniture: [f] };
+		const [mesh] = pieceMeshes(stage, scene, f, new MaterialLibrary(stage.own, false));
+		const g = mesh.geometry;
+		g.computeBoundingBox();
+		const size = g.boundingBox?.getSize(new THREE.Vector3()).toArray() ?? [];
+		[0.3, 0.1, 0.2].forEach((v, i) => expect(size[i]).toBeCloseTo(v, 6));
+		// Its top is at its back.
+		const p = g.getAttribute('position');
+		const top = Array.from({ length: p.count }, (_, i) => i).filter((i) => p.getY(i) > 0.05 - 1e-6);
+		expect(top.every((i) => Math.abs(p.getZ(i) + 0.1) < 1e-6)).toBe(true);
+	});
+});
