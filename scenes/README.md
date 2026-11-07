@@ -86,7 +86,12 @@ hand. The 3D house view (`frontend/.../features/house`) renders from these.
   A piece without parts is one filling its box. `"stairs": n` (no parts) fills it
   with a flight of `n` steps, the bottom one at its front and the top one its full
   height, each a solid block from the floor; the floor above is one step more.
-- **estimate** — on a piece, a room, an opening, a material or a light: the numbers are not
+- **models** — a thing the house has more than one of (`"jbl-xtreme"`): its
+  `size` [w, h, d] in its own frame (front +z), its `parts` in that frame, and its
+  `material` and `color`. A piece with `"model": "jbl-xtreme"` is one placed: it
+  takes the model's parts, material and colour, and keeps its own box, which must
+  be the model's size turned by its `front` (the overview and observe read boxes).
+- **estimate** — on a piece, a room, an opening, a material, a model or a light: the numbers are not
   measured yet, and the text says where they came from and what would settle them
   (`tests/scene.test.ts` holds every estimate to naming its settling). `notes` holds
   what belongs to no one element (the bay's bearing, the dining windows). A

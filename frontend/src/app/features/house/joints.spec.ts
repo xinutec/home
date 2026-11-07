@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import json from '../../../../../scenes/house.json';
-import { corners, solidsOf } from './assembly';
+import { corners, solidsOf, withModels } from './assembly';
 import type { HouseScene } from './house.model';
 import { Joints, keptJointLights } from './joints';
 import { MaterialLibrary } from './materials';
 import { mergeStatic } from './merge';
 import { buildHouse } from './room-builder';
 
-const house = json as unknown as HouseScene;
+const house = withModels(json as unknown as HouseScene);
 const SIDEBOARD = 'living-sideboard';
 const sideboard = house.furniture.find((f) => f.id === SIDEBOARD);
 

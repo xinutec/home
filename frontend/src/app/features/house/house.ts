@@ -16,6 +16,7 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { RouterLink } from '@angular/router';
 import * as THREE from 'three';
 
+import { withModels } from './assembly';
 import type { HouseScene, WallOpening } from './house.model';
 import { bounds, roomPerimeter, segments, wallPanels } from './scene-geometry';
 import type { Pt, WallSeg } from './scene-geometry';
@@ -62,7 +63,7 @@ export class House implements AfterViewInit, OnDestroy {
 		this.http.get<HouseScene>('/api/house').subscribe({
 			next: (scene) => {
 				this.loading.set(false);
-				this.buildHouse(scene);
+				this.buildHouse(withModels(scene));
 			},
 			error: (e) => {
 				this.loading.set(false);

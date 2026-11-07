@@ -27,6 +27,9 @@ export interface Furniture {
 	front?: '+z' | '-z' | '+x' | '-x';
 	/** Not measured yet: where the numbers came from and what to measure. */
 	estimate?: string;
+	/** A key into the scene's `models`: the same thing, placed again. Its parts,
+	 *  material and colour are the model's; its box must be the model's size. */
+	model?: string;
 	/** What it is made of, inside its box (the envelope above). None: one part
 	 *  filling the envelope. */
 	parts?: Part[];
@@ -182,10 +185,23 @@ export interface MaterialSpec {
 	estimate?: string;
 }
 
+/** A thing the house has more than one of, or has once in more than one place:
+ *  its `size` (w, h, d, in its own frame, front +z), and its parts in that frame. */
+export interface Model {
+	name?: string;
+	size: Vec3;
+	material?: string;
+	color?: string;
+	parts: Part[];
+	estimate?: string;
+}
+
 export interface HouseScene {
 	height: number;
 	rooms: Room[];
 	furniture: Furniture[];
+	/** What a piece's `model` names. */
+	models?: Record<string, Model>;
 	materials?: Record<string, MaterialSpec>;
 	/** The light sources inside the house. */
 	lights?: Light[];

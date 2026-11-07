@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Everything in scenes/house.json that is not measured yet, and what would settle
-// it: each piece, room, opening, material and light carrying an `estimate`, then the
+// it: each piece, room, opening, material, model and light carrying an `estimate`, then the
 // scene's `notes`. A measurement replaces the numbers and deletes the estimate.
 //
 //   ./scripts/estimates.mjs
@@ -16,6 +16,7 @@ for (const r of scene.rooms) {
 	if (r.skirting?.estimate) rows.push([`${r.name} skirting`, r.skirting.estimate]);
 }
 for (const [k, m] of Object.entries(scene.materials ?? {})) if (m.estimate) rows.push([`material ${k}`, m.estimate]);
+for (const [k, m] of Object.entries(scene.models ?? {})) if (m.estimate) rows.push([`model ${k}`, m.estimate]);
 for (const l of scene.lights ?? []) if (l.estimate) rows.push([l.name ?? l.id, l.estimate]);
 for (const n of scene.notes ?? []) rows.push(['note', n]);
 for (const [what, why] of rows) console.log(`- ${what}: ${why}`);

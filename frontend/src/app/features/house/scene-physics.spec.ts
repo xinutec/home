@@ -7,12 +7,12 @@ import { MaterialLibrary } from './materials';
 import { check, TOLERANCE } from './physics';
 import { buildHouse } from './room-builder';
 import { unsupported } from './support';
-import { partsOf, pieceId } from './assembly';
+import { partsOf, pieceId, withModels } from './assembly';
 import { stops, sweeps } from './sweeps';
 
 // JSON arrays read as number[], not the format's [x, z] pairs; the format is checked
 // by these very rules, so the cast is the claim under test.
-const scene = json as unknown as HouseScene;
+const scene = withModels(json as unknown as HouseScene);
 const found = check(scene).map((v) => `${v.kind}: ${v.what}`);
 
 // The scene's own numbers: every part inside its piece's box, every joint closed.

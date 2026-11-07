@@ -22,6 +22,7 @@ import { WebGLPathTracer } from 'three-gpu-pathtracer';
 
 import { type Lightmap, decodeLightmap } from './bake-file';
 import { JointLights, addReflections, applyLightmap } from './baked-light';
+import { withModels } from './assembly';
 import type { HouseScene } from './house.model';
 import { cameraFromQuery } from './camera';
 import { AutoExposure } from './exposure';
@@ -154,7 +155,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			.get('/api/house/bake', { responseType: 'arraybuffer' })
 			.pipe(catchError(() => of(undefined)));
 		forkJoin([this.http.get<HouseScene>('/api/house'), bake]).subscribe({
-			next: ([scene, baked]) => void this.open(scene, baked),
+			next: ([scene, baked]) => void this.open(withModels(scene), baked),
 			error: (e) => {
 				this.loading.set(false);
 				if (e instanceof HttpErrorResponse && e.status === 404) this.empty.set(true);

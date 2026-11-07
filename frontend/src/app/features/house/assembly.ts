@@ -1,4 +1,4 @@
-import type { Furniture, Joint, Part } from './house.model';
+import type { Furniture, HouseScene, Joint, Part } from './house.model';
 
 /**
  * Where a piece's parts are in the room, for a given state of its joints.
@@ -75,6 +75,25 @@ const FRONT_YAW: Record<NonNullable<Furniture['front']>, number> = {
 function pieceMove(f: Furniture): Move {
 	const a = FRONT_YAW[f.front ?? '+z'];
 	return { c: Math.cos(a), s: Math.sin(a), tx: f.cx, ty: f.y0 ?? 0, tz: f.cz };
+}
+
+/** The scene with every piece that names a `model` given the model's parts,
+ *  material and colour: what everything else reads. A piece whose box is not its
+ *  model's size, or that names none there is, is an error in the file. */
+export function withModels(scene: HouseScene): HouseScene {
+	const furniture = scene.furniture.map((f) => {
+		if (f.model === undefined) return f;
+		const m = scene.models?.[f.model];
+		if (!m) throw new Error(`${pieceId(f)} is a ${f.model}, which the scene has no model of`);
+		if (f.parts) throw new Error(`${pieceId(f)} is a ${f.model}, and has parts of its own too`);
+		const swap = f.front === '+x' || f.front === '-x';
+		const [w, h, d] = m.size;
+		const box = swap ? [d, h, w] : [w, h, d];
+		if ([f.w, f.h, f.d].some((v, i) => Math.abs(v - box[i]) > 1e-6))
+			throw new Error(`${pieceId(f)}'s box is not its ${f.model}'s size`);
+		return { ...f, parts: m.parts, material: f.material ?? m.material, color: f.color ?? m.color };
+	});
+	return { ...scene, furniture };
 }
 
 /** A piece with no parts is one part filling its envelope, or its flight's steps. */

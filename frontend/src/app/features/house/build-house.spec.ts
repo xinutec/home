@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import json from '../../../../../scenes/house.json';
-import { partsOf } from './assembly';
+import { partsOf, withModels } from './assembly';
 import type { HouseScene } from './house.model';
 import { MaterialLibrary } from './materials';
 import { buildHouse, solidTag } from './room-builder';
@@ -10,7 +10,7 @@ import { oneSided } from './sides';
 import { unwrap } from './unwrap';
 import { passages, roomPerimeter, segments } from './scene-geometry';
 
-const scene = json as unknown as HouseScene;
+const scene = withModels(json as unknown as HouseScene);
 
 /** The real house built as the page draws it, without a browser: no renderer, no textures. */
 function built(): THREE.Mesh[] {

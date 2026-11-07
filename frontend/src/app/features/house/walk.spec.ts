@@ -1,12 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import json from '../../../../../scenes/house.json';
+import { withModels } from './assembly';
 import type { HouseScene } from './house.model';
 import { MaterialLibrary } from './materials';
 import { buildHouse } from './room-builder';
 import { Collider, EYE, RUN_SPEED, WALK_SPEED, WalkControls, stickSpeed } from './walk';
 
-const house = json as unknown as HouseScene;
+const house = withModels(json as unknown as HouseScene);
 
 /** Walks in a straight line in 5 cm steps, kept clear at each; where it ends. */
 function walk(c: Collider, from: [number, number], to: [number, number]): [number, number] {
