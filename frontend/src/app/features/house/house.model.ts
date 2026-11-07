@@ -93,6 +93,10 @@ export interface Part {
 	/** For a `lathe`: its outline from bottom to top, each point [radius, height] as
 	 *  fractions of the box's half-width (and half-depth) and of its height. */
 	profile?: [number, number][];
+	/** For a `lathe` lying down: spun about the box's x or z instead of the vertical,
+	 *  its profile's height running along that axis (from its - end) and its radius
+	 *  over the other two half-sizes. */
+	axis?: 'x' | 'z';
 }
 
 /** An opening (doorway / window / wide cased passage) cut into one of a room's

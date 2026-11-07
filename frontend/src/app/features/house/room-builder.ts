@@ -642,12 +642,18 @@ function addLampLight(view: Stage, glass: THREE.Mesh): void {
 	}
 }
 
-/** Sides for a round shape of this radius: one about every 3 cm of its rim, 8
- *  for a button, 48 at most. Finer is invisible, and each side is vertices the
- *  phone draws and the bake lights. */
+/** Sides for a round shape of this radius: as few as keep each side within SAG of
+ *  the true circle, which is what shows, up close, as a facet; finer is invisible,
+ *  and each side is vertices the phone draws and the bake lights. A multiple of 4,
+ *  so two parts of near radii that meet (a speaker's body and its cap) get the
+ *  same, their rims meeting edge to edge; 8 for a button, 64 at most. */
 function around(radius: number): number {
-	return Math.max(8, Math.min(48, Math.round((2 * Math.PI * radius) / 0.03)));
+	const sides = radius > SAG ? Math.PI / Math.acos(1 - SAG / radius) : 0;
+	return Math.max(8, Math.min(64, Math.ceil(sides / 4) * 4));
 }
+
+/** Metres a round shape's side may stand off its true circle, at most. */
+const SAG = 0.0005;
 
 /** A part's shape, centred on its box (half-width, height, half-depth). */
 function partGeometry(part: Part, hw: number, h: number, hd: number): THREE.BufferGeometry {
@@ -709,6 +715,15 @@ function partGeometry(part: Part, hw: number, h: number, hd: number): THREE.Buff
 			if (!part.profile || part.profile.length < 2)
 				throw new Error(`part ${part.id} is a lathe without a profile`);
 			const pts = part.profile.map(([r, y]) => new THREE.Vector2(r, y - 0.5));
+			// About the vertical, or lying: its length along the box's x or z.
+			if (part.axis === 'x')
+				return new THREE.LatheGeometry(pts, around(Math.max(h / 2, hd)))
+					.rotateZ(-Math.PI / 2)
+					.scale(hw * 2, h / 2, hd);
+			if (part.axis === 'z')
+				return new THREE.LatheGeometry(pts, around(Math.max(hw, h / 2)))
+					.rotateX(Math.PI / 2)
+					.scale(hw, h / 2, hd * 2);
 			return new THREE.LatheGeometry(pts, around(Math.max(hw, hd))).scale(hw, h, hd);
 		}
 		default:
