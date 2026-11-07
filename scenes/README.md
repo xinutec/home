@@ -109,7 +109,9 @@ hand. The 3D house view (`frontend/.../features/house`) renders from these.
 - **images** — a material's `image` names a picture in `images/` (served at
   `/api/house/images/<name>`, letters, digits and dashes, `.jpg` or `.png`): a part
   of that material is a box with the picture on its front (+z), its other faces in
-  the material's `color`, which is the picture's mean, as the bake bounces it. A
+  the material's `color`, which is the picture's mean, as the bake bounces it; or
+  a `"lathe"`, the picture wrapped round it (across: once round from its front;
+  down: along its profile by length, its last point at the top). A
   painting, a postcard: crop the photo to the thing, straightened, at a few pixels
   a millimetre.
 - **lights** — each lamp's bulb: `at` [x, y, z], `lumens`, colour temperature

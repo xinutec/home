@@ -219,21 +219,21 @@ export function pieceMeshes(
 		const part = parts[k];
 		const [hw, h, hd] = [sol.hw, sol.y1 - sol.y0, sol.hd];
 		const spec = partMaterial(scene, f, part);
-		if (spec.image && (part.shape ?? part.split))
-			throw new Error(`${pieceId(f)}/${part.id}: a picture goes on a plain box's front`);
-		// A picture on its front (+z, the fifth of a box's faces), its other faces plain.
-		const shape = spec.image
-			? new THREE.BoxGeometry(hw * 2, h, hd * 2)
-			: partGeometry(part, hw, h, hd);
+		// A picture goes on a box's front (+z, the fifth of its faces, the others plain),
+		// or round a lathe (`byLength`).
+		const onBox = spec.image !== undefined && part.shape === undefined;
+		if (spec.image && ((!onBox && part.shape !== 'lathe') || part.split))
+			throw new Error(`${pieceId(f)}/${part.id}: a picture goes on a box's front or round a lathe`);
+		const shape = onBox ? new THREE.BoxGeometry(hw * 2, h, hd * 2) : partGeometry(part, hw, h, hd);
 		const geom = stage.own(part.split ? split(shape, part.split.plane, hw, h, hd) : shape);
 		// A sheet has two faces to see; a solid shows only its outside.
 		const sheet = part.shape === 'folds' || part.shape === 'fronds';
 		const side = sheet ? THREE.DoubleSide : THREE.FrontSide;
 		const material = mats.get(spec, side);
-		const plain = spec.image ? mats.get({ ...spec, image: undefined }, side) : material;
+		const plain = onBox ? mats.get({ ...spec, image: undefined }, side) : material;
 		const mesh = new THREE.Mesh(
 			geom,
-			spec.image
+			onBox
 				? [plain, plain, plain, plain, material, plain]
 				: part.split
 					? [material, mats.get(named(scene, part.split.material), side)]
@@ -763,11 +763,40 @@ function partGeometry(part: Part, hw: number, h: number, hd: number): THREE.Buff
 				return new THREE.LatheGeometry(pts, around(Math.max(hw, h / 2)))
 					.rotateX(Math.PI / 2)
 					.scale(hw, h / 2, hd * 2);
-			return new THREE.LatheGeometry(pts, around(Math.max(hw, hd))).scale(hw, h, hd);
+			return byLength(
+				new THREE.LatheGeometry(pts, around(Math.max(hw, hd))),
+				part.profile,
+				hw,
+				h,
+			).scale(hw, h, hd);
 		}
 		default:
 			return metricBox(hw * 2, h, hd * 2);
 	}
+}
+
+/** A lathe's UVs along its profile by length (three's are by point), so a picture
+ *  (`MaterialSpec.image`) wraps it evenly: v is the share of the profile's length
+ *  from its first point, the radius in `hw`s and the height in `h`s. */
+function byLength(
+	geom: THREE.LatheGeometry,
+	profile: [number, number][],
+	hw: number,
+	h: number,
+): THREE.LatheGeometry {
+	const along = [0];
+	for (let j = 1; j < profile.length; j++)
+		along.push(
+			along[j - 1] +
+				Math.hypot(
+					(profile[j][0] - profile[j - 1][0]) * hw,
+					(profile[j][1] - profile[j - 1][1]) * h,
+				),
+		);
+	const total = along[along.length - 1] || 1;
+	const uv = geom.getAttribute('uv');
+	for (let i = 0; i < uv.count; i++) uv.setY(i, along[i % profile.length] / total);
+	return geom;
 }
 
 /** `geom`, centred in a box (half-width `hw`, height `h`, half-depth `hd`), cut along
