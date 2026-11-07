@@ -119,3 +119,51 @@ describe('an extrude', () => {
 		expect(top.every((i) => Math.abs(p.getZ(i) + 0.1) < 1e-6)).toBe(true);
 	});
 });
+
+describe('a loft', () => {
+	it('skins its sections into a surface facing out, ends closed', () => {
+		const stage = { scene: new THREE.Scene(), own: <T>(r: T) => r };
+		// A blunt end, a sinking middle, a tip: [along, centre, half-height, half-depth].
+		const f: Furniture = {
+			id: 'fish',
+			cx: 0,
+			cz: 0,
+			w: 0.3,
+			d: 0.1,
+			h: 0.1,
+			parts: [
+				{
+					id: 'body',
+					size: [0.3, 0.1, 0.1],
+					at: [0, 0.05, 0],
+					shape: 'loft',
+					sections: [
+						[0, 0.5, 0.5, 1],
+						[0.5, 0.4, 0.4, 0.8],
+						[1, 0.2, 0, 0],
+					],
+				},
+			],
+		};
+		const scene: HouseScene = { height: 2.4, rooms: [], furniture: [f] };
+		const [mesh] = pieceMeshes(stage, scene, f, new MaterialLibrary(stage.own, false));
+		const g = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry;
+		g.computeBoundingBox();
+		const size = g.boundingBox?.getSize(new THREE.Vector3()).toArray() ?? [];
+		[0.3, 0.1, 0.1].forEach((v, i) => expect(Math.abs(size[i] - v)).toBeLessThan(0.003));
+		// Every face faces away from the axis it is skinned round, or out of its end.
+		const p = g.getAttribute('position');
+		const [a, b, c] = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+		let inward = 0;
+		for (let i = 0; i < p.count; i += 3) {
+			a.fromBufferAttribute(p, i);
+			b.fromBufferAttribute(p, i + 1);
+			c.fromBufferAttribute(p, i + 2);
+			const n = new THREE.Triangle(a, b, c).getNormal(new THREE.Vector3());
+			const mid = a.clone().add(b).add(c).divideScalar(3);
+			// Out from the centre of the box's middle: the loft is convex enough for that.
+			if (n.dot(mid.sub(new THREE.Vector3(-0.05, 0, 0))) < 0) inward++;
+		}
+		expect(inward).toBe(0);
+	});
+});

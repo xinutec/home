@@ -84,7 +84,10 @@ hand. The 3D house view (`frontend/.../features/house`) renders from these.
   its left-to-right axis. `"extrude"`, its `outline` seen from
   the side (corners [back to front, bottom to top] as fractions of the box's depth
   and height) swept across its width: an arcade cabinet's side, a slanted screen. A
-  `"lathe"` with `"axis": "x"` or `"z"` lies along that axis, its profile running
+  `"loft"`, oval `sections` along its width ([along, centre, half-height,
+  half-depth] as shares of the box: of its width, its height, its height, its
+  half-depth; a section of no size a tip) skinned into one smooth surface: a whale's
+  body. A `"lathe"` with `"axis": "x"` or `"z"` lies along that axis, its profile running
   from that axis's - end. An `arch` may give its `rise`, how far its top rises
   above its shoulders. The physics holds each to its box.
   A piece without parts is one filling its box. `"stairs": n` (no parts) fills it

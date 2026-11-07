@@ -711,6 +711,11 @@ function partGeometry(part: Part, hw: number, h: number, hd: number): THREE.Buff
 				1,
 			);
 		}
+		case 'loft': {
+			if (!part.sections || part.sections.length < 2)
+				throw new Error(`part ${part.id} is a loft without sections`);
+			return loft(part.sections, hw, h, hd);
+		}
 		case 'extrude': {
 			if (!part.outline || part.outline.length < 3)
 				throw new Error(`part ${part.id} is an extrude without an outline`);
@@ -741,6 +746,66 @@ function partGeometry(part: Part, hw: number, h: number, hd: number): THREE.Buff
 		default:
 			return metricBox(hw * 2, h, hd * 2);
 	}
+}
+
+/** Ovals along x, [along, centre, half-height, half-depth] as shares of the box
+ *  (half-width `hw`, height `h` from its middle, half-depth `hd`), skinned ring to
+ *  ring, each end closed by a fan unless it is a tip. Its UVs in metres: along x,
+ *  and round each ring. */
+function loft(
+	sections: [number, number, number, number][],
+	hw: number,
+	h: number,
+	hd: number,
+): THREE.BufferGeometry {
+	const rings = sections.map(([u, c, ry, rz]) => ({
+		x: (u - 0.5) * hw * 2,
+		y: (c - 0.5) * h,
+		ry: ry * h,
+		rz: rz * hd,
+	}));
+	const sides = around(Math.max(...rings.map((r) => Math.max(r.ry, r.rz))));
+	const pos: number[] = [];
+	const uv: number[] = [];
+	const index: number[] = [];
+	for (const r of rings) {
+		const girth = Math.PI * (r.ry + r.rz);
+		for (let k = 0; k <= sides; k++) {
+			const a = (2 * Math.PI * k) / sides;
+			pos.push(r.x, r.y - r.ry * Math.cos(a), r.rz * Math.sin(a));
+			uv.push(r.x, (girth * k) / sides);
+		}
+	}
+	const at = (i: number, k: number) => i * (sides + 1) + k;
+	for (let i = 0; i + 1 < rings.length; i++)
+		for (let k = 0; k < sides; k++)
+			index.push(
+				at(i, k),
+				at(i + 1, k),
+				at(i + 1, k + 1),
+				at(i, k),
+				at(i + 1, k + 1),
+				at(i, k + 1),
+			);
+	// Each end that is not a tip closed by a fan from its middle.
+	for (const [i, out] of [
+		[0, -1],
+		[rings.length - 1, 1],
+	] as const) {
+		const r = rings[i];
+		if (Math.max(r.ry, r.rz) < 1e-9) continue;
+		const mid = pos.length / 3;
+		pos.push(r.x, r.y, 0);
+		uv.push(r.x, 0);
+		for (let k = 0; k < sides; k++)
+			index.push(...(out < 0 ? [mid, at(i, k), at(i, k + 1)] : [mid, at(i, k + 1), at(i, k)]));
+	}
+	const geom = new THREE.BufferGeometry();
+	geom.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+	geom.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+	geom.setIndex(index);
+	geom.computeVertexNormals();
+	return geom;
 }
 
 /** A slab `w` wide, `h` tall and `d` deep whose top arches `rise` above its

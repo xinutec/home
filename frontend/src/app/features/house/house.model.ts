@@ -76,7 +76,8 @@ export interface Part {
 	 *  its left-to-right axis (a chair arm's scroll); `fronds`, a crown of long
 	 *  leaves spreading from one point, the outer ones drooping (a dracaena);
 	 *  `extrude`, its `outline` seen from the side, swept across its width (an arcade
-	 *  cabinet's side, a slanted screen). */
+	 *  cabinet's side, a slanted screen); `loft`, oval `sections` along its width,
+	 *  skinned into one smooth surface (a whale's body). */
 	shape?:
 		| 'cylinder'
 		| 'dome'
@@ -89,7 +90,8 @@ export interface Part {
 		| 'ring'
 		| 'cushion'
 		| 'roll'
-		| 'extrude';
+		| 'extrude'
+		| 'loft';
 	/** For an `arch`: how far its top rises above its shoulders, metres; a half circle
 	 *  across its width when absent. */
 	rise?: number;
@@ -99,6 +101,11 @@ export interface Part {
 	/** For an `extrude`: its outline seen from its +x side, each corner [back to
 	 *  front, bottom to top] as fractions of the box's depth and height. */
 	outline?: [number, number][];
+	/** For a `loft`: its cross-sections along its width, in order, each an oval
+	 *  [along, centre, half-height, half-depth]: where it is along the box's width,
+	 *  its centre's and half-height's share of the box's height, and its half-depth's
+	 *  share of the box's half-depth. A section of no size is a tip. */
+	sections?: [number, number, number, number][];
 	/** For a `lathe` lying down: spun about the box's x or z instead of the vertical,
 	 *  its profile's height running along that axis (from its - end) and its radius
 	 *  over the other two half-sizes. */
