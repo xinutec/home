@@ -22,24 +22,39 @@ export function mergeStatic(
 	own: (g: THREE.BufferGeometry) => void,
 ): THREE.Mesh[] {
 	scene.updateMatrixWorld(true);
-	const groups = new Map<string, { mesh: THREE.Mesh; material: THREE.Material }[]>();
+	const groups = new Map<
+		string,
+		{ mesh: THREE.Mesh; material: THREE.Material; range?: THREE.GeometryGroup }[]
+	>();
 	for (const o of [...scene.children]) {
 		if (!isMesh(o)) continue;
 		const mesh = o;
+		// A mesh of several materials (a part split by a plane) is merged group by group.
 		const material = mesh.material;
-		if (Array.isArray(material)) continue;
+		const pieces: { material: THREE.Material; range?: THREE.GeometryGroup }[] = Array.isArray(
+			material,
+		)
+			? mesh.geometry.groups.map((range) => {
+					const m = material.at(range.materialIndex ?? 0);
+					if (!m) throw new Error(`a mesh's group ${range.materialIndex ?? 0} has no material`);
+					return { material: m, range };
+				})
+			: [{ material }];
 		const layout = Object.keys(mesh.geometry.attributes).sort().join(',');
 		const room: unknown = mesh.userData['room'];
 		const moves: unknown = mesh.userData['moves'];
-		const key = `${String(room)}|${String(moves)}|${material.uuid}|${mesh.castShadow}|${mesh.receiveShadow}|${layout}`;
-		groups.set(key, [...(groups.get(key) ?? []), { mesh, material }]);
+		for (const { material, range } of pieces) {
+			const key = `${String(room)}|${String(moves)}|${material.uuid}|${mesh.castShadow}|${mesh.receiveShadow}|${layout}`;
+			groups.set(key, [...(groups.get(key) ?? []), { mesh, material, range }]);
+		}
 	}
 	const out: THREE.Mesh[] = [];
 	for (const meshes of groups.values()) {
 		// Each in room coordinates, unindexed so every layout merges with every other.
-		const geoms = meshes.map(({ mesh }) => {
+		const geoms = meshes.map(({ mesh, range }) => {
 			const g = mesh.geometry.clone().applyMatrix4(mesh.matrixWorld);
-			return g.index ? g.toNonIndexed() : g;
+			const flat = g.index ? g.toNonIndexed() : g;
+			return range ? slice(flat, range) : flat;
 		});
 		const merged = geoms.length > 1 ? mergeGeometries(geoms) : geoms[0];
 		if (!merged) continue;
@@ -57,5 +72,17 @@ export function mergeStatic(
 		scene.add(mesh);
 		out.push(mesh);
 	}
+	return out;
+}
+
+/** The vertices of an unindexed geometry in `range`, as a geometry of their own. */
+function slice(g: THREE.BufferGeometry, range: THREE.GeometryGroup): THREE.BufferGeometry {
+	const out = new THREE.BufferGeometry();
+	for (const [name, attr] of Object.entries(g.attributes)) {
+		const n = attr.itemSize;
+		const data = attr.array.slice(range.start * n, (range.start + range.count) * n);
+		out.setAttribute(name, new THREE.BufferAttribute(data, n));
+	}
+	g.dispose();
 	return out;
 }

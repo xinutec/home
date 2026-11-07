@@ -87,7 +87,9 @@ hand. The 3D house view (`frontend/.../features/house`) renders from these.
   `"loft"`, oval `sections` along its width ([along, centre, half-height,
   half-depth] as shares of the box: of its width, its height, its height, its
   half-depth; a section of no size a tip) skinned into one smooth surface: a whale's
-  body. A `"lathe"` with `"axis": "x"` or `"z"` lies along that axis, its profile running
+  body. `"split": {"plane": [a, b, c, d], "material"}` paints a part's surface
+  where a·u + b·v + c·w < d (u, v, w the point's shares of the box's width, height
+  and depth) in another material, cut along the plane: a whale's white belly. A `"lathe"` with `"axis": "x"` or `"z"` lies along that axis, its profile running
   from that axis's - end. An `arch` may give its `rise`, how far its top rises
   above its shoulders. The physics holds each to its box.
   A piece without parts is one filling its box. `"stairs": n` (no parts) fills it

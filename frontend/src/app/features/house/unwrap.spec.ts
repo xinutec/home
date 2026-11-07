@@ -44,6 +44,32 @@ describe('unwrap', () => {
 			}
 	});
 
+	it('gives a small chart finer pixels than a large one, to a quarter of the texel', () => {
+		// A 10 cm cube's faces: 16 pixels across each, at 6.25 mm; a 4 m floor at 2 cm.
+		const small = new THREE.BoxGeometry(0.1, 0.1, 0.1).toNonIndexed();
+		const floor = new THREE.PlaneGeometry(4, 4).toNonIndexed();
+		const tiny = new THREE.BoxGeometry(0.02, 0.02, 0.02).toNonIndexed();
+		const atlas = unwrap([small, floor, tiny], 0.02);
+		const across = (g: THREE.BufferGeometry) => {
+			const xs = placed(g, atlas)
+				.flat()
+				.map((c) => c.x);
+			return Math.max(...xs) - Math.min(...xs);
+		};
+		expect(across(floor)).toBeCloseTo(200, 6);
+		// Each of the cube's faces 16 pixels wide; six of them packed in a row, with gutters.
+		const face = (g: THREE.BufferGeometry) => {
+			const t = placed(g, atlas)
+				.slice(0, 2)
+				.flat()
+				.map((c) => c.x);
+			return Math.max(...t) - Math.min(...t);
+		};
+		expect(face(small)).toBeCloseTo(16, 6);
+		// No finer than a quarter of the texel: 2 cm at 5 mm is 4 pixels.
+		expect(face(tiny)).toBeCloseTo(4, 6);
+	});
+
 	it('keeps a curved part in few charts, not one a triangle', () => {
 		const tube = new THREE.CylinderGeometry(0.1, 0.1, 0.5, 32, 1, true).toNonIndexed();
 		const before = unwrap([tube], 0.01);

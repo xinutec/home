@@ -4,7 +4,7 @@ import type { CameraQuery } from './camera';
 import type { Furniture, Glazing, HouseScene, Part, Room, WallOpening } from './house.model';
 import { partsOf, solidsOf } from './assembly';
 import type { JointState } from './assembly';
-import { MaterialLibrary, partMaterial, surfaceMaterial } from './materials';
+import { MaterialLibrary, named, partMaterial, surfaceMaterial } from './materials';
 import { mergeStatic } from './merge';
 import { oneSided } from './sides';
 import { unwrap } from './unwrap';
@@ -212,16 +212,23 @@ export function pieceMeshes(
 ): THREE.Mesh[] {
 	const parts = partsOf(f);
 	return solidsOf(f, state).map((sol, k) => {
-		const geom = stage.own(partGeometry(parts[k], sol.hw, sol.y1 - sol.y0, sol.hd));
+		const part = parts[k];
+		const [hw, h, hd] = [sol.hw, sol.y1 - sol.y0, sol.hd];
+		const shape = partGeometry(part, hw, h, hd);
+		const geom = stage.own(part.split ? split(shape, part.split.plane, hw, h, hd) : shape);
 		// A sheet has two faces to see; a solid shows only its outside.
-		const sheet = parts[k].shape === 'folds' || parts[k].shape === 'fronds';
+		const sheet = part.shape === 'folds' || part.shape === 'fronds';
 		const side = sheet ? THREE.DoubleSide : THREE.FrontSide;
-		const mesh = new THREE.Mesh(geom, mats.get(partMaterial(scene, f, parts[k]), side));
+		const material = mats.get(partMaterial(scene, f, part), side);
+		const mesh = new THREE.Mesh(
+			geom,
+			part.split ? [material, mats.get(named(scene, part.split.material), side)] : material,
+		);
 		mesh.position.set(sol.x, (sol.y0 + sol.y1) / 2, sol.z);
 		mesh.rotation.y = sol.yaw;
 		mesh.castShadow = mesh.receiveShadow = true;
-		mesh.userData['material'] = parts[k].material ?? f.material;
-		const joint = movedBy(parts, parts[k]);
+		mesh.userData['material'] = part.material ?? f.material;
+		const joint = movedBy(parts, part);
 		if (joint) mesh.userData['moves'] = `${sol.piece}/${joint}`;
 		solids.set(mesh, { kind: 'part', piece: sol.piece, part: sol.part, sheet, soft: !!f.soft });
 		return mesh;
@@ -746,6 +753,76 @@ function partGeometry(part: Part, hw: number, h: number, hd: number): THREE.Buff
 		default:
 			return metricBox(hw * 2, h, hd * 2);
 	}
+}
+
+/** `geom`, centred in a box (half-width `hw`, height `h`, half-depth `hd`), cut along
+ *  `plane` ([a, b, c, d] over the point's shares of the box): unindexed, the
+ *  triangles where a·u + b·v + c·w >= d in group 0, the rest in group 1. Each
+ *  triangle the plane crosses is cut at it, every attribute taken along the edge. */
+function split(
+	geom: THREE.BufferGeometry,
+	[a, b, c, d]: [number, number, number, number],
+	hw: number,
+	h: number,
+	hd: number,
+): THREE.BufferGeometry {
+	const g = geom.index ? geom.toNonIndexed() : geom;
+	const names = Object.keys(g.attributes);
+	const attrs = names.map((n) => g.getAttribute(n));
+	const pos = g.getAttribute('position');
+	const side = (i: number) =>
+		a * (pos.getX(i) / (2 * hw) + 0.5) +
+		b * (pos.getY(i) / h + 0.5) +
+		c * (pos.getZ(i) / (2 * hd) + 0.5) -
+		d;
+	// A corner: every attribute's values, and which side it is on.
+	interface Corner {
+		v: number[][];
+		s: number;
+	}
+	const corner = (i: number): Corner => ({
+		v: attrs.map((at) => Array.from({ length: at.itemSize }, (_, k) => at.getComponent(i, k))),
+		s: side(i),
+	});
+	const between = (p: Corner, q: Corner): Corner => {
+		const t = p.s / (p.s - q.s);
+		return { v: p.v.map((x, n) => x.map((y, k) => y + (q.v[n][k] - y) * t)), s: 0 };
+	};
+	const out: [number[][][], number[][][]] = [[], []];
+	for (let i = 0; i < pos.count; i += 3) {
+		const tri = [corner(i), corner(i + 1), corner(i + 2)];
+		// Each side's polygon (Sutherland–Hodgman against the plane), as a fan.
+		for (const [k, keep] of [
+			[0, (x: Corner) => x.s >= 0],
+			[1, (x: Corner) => x.s < 0],
+		] as const) {
+			const poly: Corner[] = [];
+			tri.forEach((p, j) => {
+				const q = tri[(j + 1) % 3];
+				if (keep(p)) poly.push(p);
+				if (keep(p) !== keep(q)) poly.push(between(p, q));
+			});
+			for (let j = 1; j + 1 < poly.length; j++) out[k].push(poly[0].v, poly[j].v, poly[j + 1].v);
+		}
+	}
+	const res = new THREE.BufferGeometry();
+	names.forEach((n, ai) => {
+		const size = attrs[ai].itemSize;
+		const data = [...out[0], ...out[1]].flatMap((corner) => corner[ai]);
+		res.setAttribute(n, new THREE.Float32BufferAttribute(data, size));
+	});
+	// A normal taken along an edge is shorter than one.
+	const normal = res.getAttribute('normal');
+	const v = new THREE.Vector3();
+	for (let i = 0; i < normal.count; i++) {
+		v.fromBufferAttribute(normal, i).normalize();
+		normal.setXYZ(i, v.x, v.y, v.z);
+	}
+	res.addGroup(0, out[0].length, 0);
+	res.addGroup(out[0].length, out[1].length, 1);
+	if (g !== geom) g.dispose();
+	geom.dispose();
+	return res;
 }
 
 /** Ovals along x, [along, centre, half-height, half-depth] as shares of the box

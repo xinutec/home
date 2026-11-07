@@ -9,7 +9,7 @@ const SURFACE_DEFAULTS: Record<'walls' | 'floor' | 'ceiling' | 'skirting', Mater
 	skirting: { color: '#f1f1ec', roughness: 0.4 },
 };
 
-function named(scene: HouseScene, key: string): MaterialSpec {
+export function named(scene: HouseScene, key: string): MaterialSpec {
 	const spec = scene.materials?.[key];
 	if (!spec) throw new Error(`the scene's materials have no "${key}"`);
 	return spec;

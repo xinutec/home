@@ -2,8 +2,11 @@ import * as THREE from 'three';
 
 /**
  * Lays every surface of the merged room out flat in one light texture (an atlas),
- * at `texel` metres a pixel, as games lay out their lightmaps: each geometry gets
- * a second set of texture coordinates, `uv1`, saying where its light is stored.
+ * as games lay out their lightmaps: each geometry gets a second set of texture
+ * coordinates, `uv1`, saying where its light is stored. A chart's pixels are
+ * `texel` metres, or finer for a small one, DETAIL of them across it (to a quarter
+ * of `texel`): light changes over the size of what it falls on, so a whale on a
+ * mantel needs the pixels a wall does not.
  *
  * A chart is a patch of neighbouring triangles facing within CHART_ANGLE of its
  * first one: a flat face is one chart, a curved part a few. Each is projected onto
@@ -48,6 +51,9 @@ export type Layout = Map<string, Placed>;
 const CHART_ANGLE = (45 * Math.PI) / 180;
 /** And while each neighbour faces within this of the triangle it joins from. */
 const STEP_ANGLE = (30 * Math.PI) / 180;
+/** Pixels across a chart, at least, while that is no finer than a quarter of the
+ *  atlas's texel. */
+const DETAIL = 16;
 /** Pixels kept free round each chart, its light spread into them. */
 export const GUTTER = 2;
 const WIDTH = 2048;
@@ -60,6 +66,8 @@ interface Chart {
 	v: THREE.Vector3;
 	min: [number, number];
 	size: [number, number];
+	/** Metres a pixel, on this chart. */
+	texel: number;
 	at: [number, number];
 }
 
@@ -118,15 +126,6 @@ export function unwrap(
 						tris.push(o);
 					}
 			}
-			// Its key: what it is made of, its first triangle, and the rest in any order.
-			let [k1, k2] = [salt ^ tri(seed, 0x811c9dc5), salt ^ tri(seed, 0x5bd1e995)];
-			for (const t of tris) {
-				k1 = (k1 + Math.imul(tri(t, 0x811c9dc5), 0x9e3779b1)) >>> 0;
-				k2 = (k2 + Math.imul(tri(t, 0x5bd1e995), 0x85ebca77)) >>> 0;
-			}
-			const base = `${k1.toString(16)}.${k2.toString(16)}`;
-			const twin = seen.get(base) ?? 0;
-			seen.set(base, twin + 1);
 			// The chart's plane: two directions square to its first triangle's normal.
 			const u = new THREE.Vector3().subVectors(corner(seed, 1), corner(seed, 0)).normalize();
 			if (u.lengthSq() < 0.5) u.set(1, 0, 0);
@@ -140,6 +139,19 @@ export function unwrap(
 					minV = Math.min(minV, c.dot(v));
 					maxV = Math.max(maxV, c.dot(v));
 				}
+			const size: [number, number] = [maxU - minU, maxV - minV];
+			const fine = Math.min(texel, Math.max(texel / 4, Math.max(...size) / DETAIL));
+			// Its key: what it is made of, how fine its pixels are, its first triangle, and
+			// the rest in any order.
+			let [k1, k2] = [salt ^ tri(seed, 0x811c9dc5), salt ^ tri(seed, 0x5bd1e995)];
+			k1 = Math.imul(k1 ^ Math.round(fine * 1e6), 16777619) >>> 0;
+			for (const t of tris) {
+				k1 = (k1 + Math.imul(tri(t, 0x811c9dc5), 0x9e3779b1)) >>> 0;
+				k2 = (k2 + Math.imul(tri(t, 0x5bd1e995), 0x85ebca77)) >>> 0;
+			}
+			const base = `${k1.toString(16)}.${k2.toString(16)}`;
+			const twin = seen.get(base) ?? 0;
+			seen.set(base, twin + 1);
 			charts.push({
 				key: twin ? `${base}~${twin}` : base,
 				geom: gi,
@@ -147,7 +159,8 @@ export function unwrap(
 				u,
 				v,
 				min: [minU, minV],
-				size: [maxU - minU, maxV - minV],
+				size,
+				texel: fine,
 				at: [0, 0],
 			});
 		}
@@ -156,7 +169,7 @@ export function unwrap(
 	// Pack in rows, tallest first: each chart its size in pixels, a pixel at least,
 	// and its gutter all round; under every chart the previous layout keeps.
 	// (Less a hair: 0.4 m at 0.01 m a pixel is 40 pixels, not the 41 its rounding error makes.)
-	const px = (m: number) => Math.max(1, Math.ceil(m / texel - 1e-6));
+	const px = (m: number, c: Chart) => Math.max(1, Math.ceil(m / c.texel - 1e-6));
 	const boxOf = (c: Chart) => {
 		const p = geoms[c.geom].getAttribute('position');
 		const b = new THREE.Box3();
@@ -176,15 +189,17 @@ export function unwrap(
 		const was = previous.get(c.key);
 		if (!was) return fresh.push(i);
 		c.at = [was.at[0], was.at[1]];
-		y = Math.max(y, c.at[1] - GUTTER + px(c.size[1]) + 2 * GUTTER);
-		covered += px(c.size[0]) * px(c.size[1]);
+		y = Math.max(y, c.at[1] - GUTTER + px(c.size[1], c) + 2 * GUTTER);
+		covered += px(c.size[0], c) * px(c.size[1], c);
 		return undefined;
 	});
-	const order = fresh.sort((a, b) => px(charts[b].size[1]) - px(charts[a].size[1]) || a - b);
+	const order = fresh.sort(
+		(a, b) => px(charts[b].size[1], charts[b]) - px(charts[a].size[1], charts[a]) || a - b,
+	);
 	for (const i of order) {
 		const c = charts[i];
-		const w = px(c.size[0]) + 2 * GUTTER;
-		const h = px(c.size[1]) + 2 * GUTTER;
+		const w = px(c.size[0], c) + 2 * GUTTER;
+		const h = px(c.size[1], c) + 2 * GUTTER;
 		if (w > WIDTH) throw new Error(`a chart ${c.size[0].toFixed(2)} m wide does not fit the atlas`);
 		if (x + w > WIDTH) {
 			x = 0;
@@ -194,9 +209,9 @@ export function unwrap(
 		c.at = [x + GUTTER, y + GUTTER];
 		x += w;
 		row = Math.max(row, h);
-		covered += px(c.size[0]) * px(c.size[1]);
+		covered += px(c.size[0], c) * px(c.size[1], c);
 		added.push(boxOf(c));
-		rects.push([c.at[0], c.at[1], px(c.size[0]), px(c.size[1])]);
+		rects.push([c.at[0], c.at[1], px(c.size[0], c), px(c.size[1], c)]);
 	}
 	const height = Math.max(4, Math.ceil((y + row) / 4) * 4);
 	const layout: Layout = new Map(charts.map((c) => [c.key, { at: c.at, box: boxOf(c) }]));
@@ -208,8 +223,8 @@ export function unwrap(
 	for (const c of charts) {
 		const p = geoms[c.geom].getAttribute('position');
 		const out = uvs[c.geom];
-		const scaleU = px(c.size[0]) / Math.max(c.size[0], 1e-9);
-		const scaleV = px(c.size[1]) / Math.max(c.size[1], 1e-9);
+		const scaleU = px(c.size[0], c) / Math.max(c.size[0], 1e-9);
+		const scaleV = px(c.size[1], c) / Math.max(c.size[1], 1e-9);
 		for (const t of c.tris)
 			for (let k = 0; k < 3; k++) {
 				const i = t * 3 + k;

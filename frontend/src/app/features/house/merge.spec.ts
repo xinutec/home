@@ -23,6 +23,23 @@ describe('mergeStatic', () => {
 		expect(bounds.max.x).toBeCloseTo(5.5, 6);
 	});
 
+	it('merges a mesh of two materials group by group, each with its own', () => {
+		const scene = new THREE.Scene();
+		const a = new THREE.MeshStandardMaterial();
+		const b = new THREE.MeshStandardMaterial();
+		// A box, its first two faces in b, the rest in a; and a box all a.
+		const two = new THREE.BoxGeometry(1, 1, 1).toNonIndexed();
+		two.clearGroups();
+		two.addGroup(0, 12, 1);
+		two.addGroup(12, 24, 0);
+		scene.add(new THREE.Mesh(two, [a, b]), box(a, 5));
+		const merged = mergeStatic(scene, () => undefined);
+		const count = (m: THREE.Material) =>
+			merged.find((x) => x.material === m)?.geometry.getAttribute('position').count;
+		expect(count(a)).toBe(24 + 36);
+		expect(count(b)).toBe(12);
+	});
+
 	it('keeps a shadow caster apart from a mesh that casts none', () => {
 		const scene = new THREE.Scene();
 		const a = new THREE.MeshStandardMaterial();

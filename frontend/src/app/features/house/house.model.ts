@@ -101,6 +101,10 @@ export interface Part {
 	/** For an `extrude`: its outline seen from its +x side, each corner [back to
 	 *  front, bottom to top] as fractions of the box's depth and height. */
 	outline?: [number, number][];
+	/** Its surface on one side of a plane in another material (a whale's white belly,
+	 *  a dipped pot): where a·u + b·v + c·w < d, u, v and w the point's shares of the
+	 *  box's width, height and depth, `plane` [a, b, c, d]. Cut along the plane. */
+	split?: { plane: [number, number, number, number]; material: string };
 	/** For a `loft`: its cross-sections along its width, in order, each an oval
 	 *  [along, centre, half-height, half-depth]: where it is along the box's width,
 	 *  its centre's and half-height's share of the box's height, and its half-depth's

@@ -167,3 +167,62 @@ describe('a loft', () => {
 		expect(inward).toBe(0);
 	});
 });
+
+describe('a part split by a plane', () => {
+	it('keeps its whole surface, each side in its own material, cut at the plane', () => {
+		const stage = { scene: new THREE.Scene(), own: <T>(r: T) => r };
+		const scene: HouseScene = {
+			height: 2.4,
+			rooms: [],
+			furniture: [],
+			materials: { white: { color: '#ffffff' } },
+		};
+		const part = {
+			id: 'body',
+			size: [0.2, 0.1, 0.1] as [number, number, number],
+			at: [0, 0.05, 0] as [number, number, number],
+		};
+		const area = (g: THREE.BufferGeometry, from: number, count: number) => {
+			const p = g.getAttribute('position');
+			const [a, b, c] = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+			let sum = 0;
+			for (let i = from; i < from + count; i += 3) {
+				a.fromBufferAttribute(p, i);
+				b.fromBufferAttribute(p, i + 1);
+				c.fromBufferAttribute(p, i + 2);
+				sum += new THREE.Triangle(a, b, c).getArea();
+			}
+			return sum;
+		};
+		const mesh = (f: Furniture) =>
+			pieceMeshes(stage, scene, f, new MaterialLibrary(stage.own, false))[0];
+		const plain = mesh({ id: 'a', cx: 0, cz: 0, w: 0.2, d: 0.1, h: 0.1, parts: [part] });
+		// Below a slanted plane, u + v < 0.8, in white.
+		const cut = mesh({
+			id: 'b',
+			cx: 0,
+			cz: 0,
+			w: 0.2,
+			d: 0.1,
+			h: 0.1,
+			parts: [{ ...part, split: { plane: [1, 1, 0, 0.8], material: 'white' } }],
+		});
+		const whole = area(
+			plain.geometry.index ? plain.geometry.toNonIndexed() : plain.geometry,
+			0,
+			36,
+		);
+		const [over, under] = cut.geometry.groups;
+		expect(
+			area(cut.geometry, over.start, over.count) + area(cut.geometry, under.start, under.count),
+		).toBeCloseTo(whole, 9);
+		expect(Array.isArray(cut.material) && cut.material.length).toBe(2);
+		// Every corner on its own side of the plane, or on it.
+		const p = cut.geometry.getAttribute('position');
+		const side = (i: number) => p.getX(i) / 0.2 + 0.5 + p.getY(i) / 0.1 + 0.5 - 0.8;
+		for (let i = over.start; i < over.start + over.count; i++)
+			expect(side(i)).toBeGreaterThan(-1e-6);
+		for (let i = under.start; i < under.start + under.count; i++)
+			expect(side(i)).toBeLessThan(1e-6);
+	});
+});
