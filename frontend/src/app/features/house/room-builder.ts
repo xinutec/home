@@ -234,7 +234,7 @@ export function pieceMeshes(
 		const mesh = new THREE.Mesh(
 			geom,
 			onBox
-				? [plain, plain, plain, plain, material, plain]
+				? BOX_FACES.map((face) => (face === (spec.imageFace ?? 'front') ? material : plain))
 				: part.split
 					? [material, mats.get(named(scene, part.split.material), side)]
 					: material,
@@ -774,6 +774,9 @@ function partGeometry(part: Part, hw: number, h: number, hd: number): THREE.Buff
 			return metricBox(hw * 2, h, hd * 2);
 	}
 }
+
+/** A box's faces as three's BoxGeometry orders its groups: +x, -x, +y, -y, +z, -z. */
+const BOX_FACES = ['right', 'left', 'top', 'bottom', 'front', 'back'] as const;
 
 /** A lathe's UVs along its profile by length (three's are by point), so a picture
  *  (`MaterialSpec.image`) wraps it evenly: v is the share of the profile's length

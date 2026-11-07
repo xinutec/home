@@ -206,6 +206,9 @@ export interface MaterialSpec {
 	 *  painting, a postcard), its other faces in `color`, which is the picture's mean:
 	 *  what the bake bounces. */
 	image?: string;
+	/** Which face of a box the picture is on: its `front` (+z), or its `top` (+y, the
+	 *  picture's top edge at the box's back), as a printed deck is. */
+	imageFace?: 'front' | 'top';
 	/** Not measured yet: where the values came from and what to measure. */
 	estimate?: string;
 }
