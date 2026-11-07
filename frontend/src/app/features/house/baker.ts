@@ -7,6 +7,7 @@ import {
 	SAH,
 } from 'three-mesh-bvh';
 
+import { NO_AREA } from './room-builder';
 import type { Lit } from './room-builder';
 import { GROUND, GROUND_ALBEDO, SKY, windowRadiance } from './sky';
 
@@ -85,7 +86,16 @@ export async function bakeLightmap(
 					(_, i) => mesh.geometry.index?.getX(i) ?? 0,
 				)
 			: Array.from({ length: p.count }, (_, i) => i);
-		for (const i of tri) index.push(base + i);
+		const v = (i: number) => new THREE.Vector3().fromBufferAttribute(p, i);
+		const areaOf = (k: number) =>
+			v(tri[k + 1])
+				.sub(v(tri[k]))
+				.cross(v(tri[k + 2]).sub(v(tri[k])))
+				.length() / 2;
+		// A triangle of no area blocks nothing, and has no facing for a ray it meets to
+		// bounce by.
+		for (let k = 0; k < tri.length; k += 3)
+			if (areaOf(k) >= NO_AREA) index.push(base + tri[k], base + tri[k + 1], base + tri[k + 2]);
 		for (let i = 0; i < p.count; i++) {
 			positions.push(p.getX(i), p.getY(i), p.getZ(i));
 			surface.push(
@@ -97,13 +107,12 @@ export async function bakeLightmap(
 		}
 		if (!glass) continue;
 		const glow = frosted ? windowRadiance(transmission) : 0;
-		const v = (i: number) => new THREE.Vector3().fromBufferAttribute(p, i);
 		for (let k = 0; k < tri.length; k += 3) {
 			const a = v(tri[k]);
 			const e1 = v(tri[k + 1]).sub(a);
 			const e2 = v(tri[k + 2]).sub(a);
 			const area = e1.clone().cross(e2).length() / 2;
-			if (area < 1e-8) continue;
+			if (area < NO_AREA) continue;
 			// A frosted pane glows evenly; a clear one shows the sky beyond it (le 0: the
 			// shader looks the sky up, dimmed by t).
 			lights.push({

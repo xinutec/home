@@ -30,6 +30,10 @@ export interface Furniture {
 	/** What it is made of, inside its box (the envelope above). None: one part
 	 *  filling the envelope. */
 	parts?: Part[];
+	/** A flight of this many steps filling the box, the bottom one at its front and
+	 *  the top one its full height: each a solid block from the floor, the next
+	 *  floor one more step up. Its parts, when it has no `parts`. */
+	stairs?: number;
 }
 
 export type Vec3 = [number, number, number];
@@ -147,6 +151,13 @@ export interface Room {
 	/** The board along the foot of every wall, wherever the wall reaches the floor:
 	 *  `height` up the wall, `depth` out from it, metres. */
 	skirting?: { height: number; depth: number; estimate?: string };
+	/** Metres its floor stands above the ground floor's: an upstairs room. */
+	floor?: number;
+	/** Outlines cut from its floor, [x, z] corners: a stairwell, open to the room
+	 *  under it, whose ceiling is cut the same and the floor's depth drawn round it. */
+	holes?: [number, number][][];
+	/** Not measured yet: where the numbers came from and what to measure. */
+	estimate?: string;
 	/** The room whose reflection probe this one shares: a bay is part of its room,
 	 *  and a probe of its own would stand among its windows. */
 	reflections?: string;
@@ -162,7 +173,7 @@ export interface MaterialSpec {
 	roughness?: number;
 	/** 0 = dielectric (wood, paint), 1 = metal. */
 	metalness?: number;
-	texture?: 'wood' | 'carpet' | 'tiles' | 'quarry' | 'planks';
+	texture?: 'wood' | 'carpet' | 'tiles' | 'quarry' | 'planks' | 'checks' | 'metro';
 	/** 0 = opaque, 1 = clear glass; frosted glass is transmissive and rough. */
 	transmission?: number;
 	/** Metres one repeat of the texture covers. */

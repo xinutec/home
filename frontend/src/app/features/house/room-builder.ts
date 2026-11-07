@@ -23,8 +23,9 @@ import {
 	roomSkirting,
 	segments,
 	wallPanels,
+	wells,
 } from './scene-geometry';
-import type { P3, Passage } from './scene-geometry';
+import type { P3, Passage, Well } from './scene-geometry';
 import type { Pt, WallSeg } from './scene-geometry';
 import { SKY, windowRadiance } from './sky';
 import type { ThreeView } from './three-view';
@@ -162,9 +163,12 @@ export function buildHouse(
 		}
 	};
 	const plan = skirtingPlan(scene);
+	const holes = wells(scene);
 	for (const r of scene.rooms) {
 		const from = stage.scene.children.length;
-		addRoomShell(stage, mats, scene, r, physical, night, plan);
+		addRoomShell(stage, mats, scene, r, physical, night, plan, holes);
+		// Drawn from its floor up; stood on its storey.
+		for (const o of stage.scene.children.slice(from)) o.position.y += r.floor ?? 0;
 		tag(from, r.name, (o) => ({ kind: shellKind(o), room: r.name }));
 	}
 	for (const p of passages(scene)) {
@@ -174,7 +178,7 @@ export function buildHouse(
 	}
 	// Each piece as its parts, closed; a piece without parts is its box.
 	for (const f of scene.furniture) {
-		const room = nearestRoom(scene.rooms, f.cx, f.cz);
+		const room = nearestRoom(scene.rooms, f.cx, f.cz, f.y0 ?? 0);
 		for (const mesh of pieceMeshes(stage, scene, f, mats)) {
 			const from = stage.scene.children.length;
 			stage.scene.add(mesh);
@@ -265,6 +269,7 @@ function addRoomShell(
 	physical: boolean,
 	night: boolean,
 	plan: SkirtingPlan,
+	holes: Well[],
 ): void {
 	const pts = roomPerimeter(room);
 	const into = inwardNormals(pts);
@@ -351,8 +356,48 @@ function addRoomShell(
 		}
 	const floor = mats.get(surfaceMaterial(scene, room, 'floor'), THREE.DoubleSide);
 	const ceiling = mats.get(surfaceMaterial(scene, room, 'ceiling'), THREE.DoubleSide);
-	view.scene.add(shell(facing(flat(view, pts, 0, floor), [0, 1, 0]), 'floor'));
-	view.scene.add(shell(facing(flat(view, pts, scene.height, ceiling), [0, -1, 0]), 'ceiling'));
+	const cut = (by: (w: Well) => Room) => holes.filter((w) => by(w) === room).map((w) => w.outline);
+	view.scene.add(
+		shell(
+			facing(
+				flat(
+					view,
+					pts,
+					0,
+					floor,
+					cut((w) => w.room),
+				),
+				[0, 1, 0],
+			),
+			'floor',
+		),
+	);
+	view.scene.add(
+		shell(
+			facing(
+				flat(
+					view,
+					pts,
+					scene.height,
+					ceiling,
+					cut((w) => w.under),
+				),
+				[0, -1, 0],
+			),
+			'ceiling',
+		),
+	);
+	// Round each stairwell in its floor, the floor's depth: from the ceiling under it up.
+	for (const w of holes.filter((h) => h.room === room)) {
+		const yb = (w.under.floor ?? 0) + scene.height - (room.floor ?? 0);
+		const into = inwardNormals([...w.outline, w.outline[0]]);
+		segments([...w.outline, w.outline[0]]).forEach((s, i) => {
+			const len = Math.hypot(s.bx - s.ax, s.bz - s.az);
+			view.scene.add(
+				shell(facing(wallPanel(view, s, len, 0, len, yb, 0, wallMat), into[i]), 'wall'),
+			);
+		});
+	}
 }
 
 /** Where every room's skirting runs and ends, and round which passages' sides it
@@ -916,13 +961,21 @@ function wallPanel(
 	return mesh;
 }
 
-/** The room's outline as a horizontal surface at height `y`: its floor or ceiling.
- *  ShapeGeometry's UVs are the outline's coordinates, so already in metres. */
-function flat(view: Stage, pts: Pt[], y: number, mat: THREE.Material): THREE.Mesh {
-	const shape = new THREE.Shape();
-	shape.moveTo(pts[0].x, pts[0].z);
-	for (const p of pts.slice(1)) shape.lineTo(p.x, p.z);
-	const geom = view.own(new THREE.ShapeGeometry(shape));
+/** The room's outline as a horizontal surface at height `y`: its floor or ceiling,
+ *  `holes` cut from it. ShapeGeometry's UVs are the outline's coordinates, so already
+ *  in metres. */
+function flat(
+	view: Stage,
+	pts: Pt[],
+	y: number,
+	mat: THREE.Material,
+	holes: Pt[][] = [],
+): THREE.Mesh {
+	const at = (p: Pt) => new THREE.Vector2(p.x, p.z);
+	// The outline closes on its first corner; the shape closes itself.
+	const shape = new THREE.Shape(pts.slice(0, -1).map(at));
+	shape.holes = holes.map((h) => new THREE.Path(h.map(at)));
+	const geom = view.own(withArea(new THREE.ShapeGeometry(shape)));
 	geom.rotateX(Math.PI / 2); // XY shape → XZ plane
 	const mesh = new THREE.Mesh(geom, mat);
 	mesh.position.y = y;
@@ -930,6 +983,36 @@ function flat(view: Stage, pts: Pt[], y: number, mat: THREE.Material): THREE.Mes
 	mesh.castShadow = y > 0; // the ceiling shades what is under it
 	return mesh;
 }
+
+/** `geom` unindexed, without the triangles of no area a triangulation leaves where a
+ *  hole meets its outline: they face no way, so no light can be laid on them. */
+function withArea(geom: THREE.BufferGeometry): THREE.BufferGeometry {
+	const g = geom.toNonIndexed();
+	geom.dispose();
+	const pos = g.getAttribute('position');
+	const [a, b, c] = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+	const keep: number[] = [];
+	for (let i = 0; i < pos.count; i += 3) {
+		a.fromBufferAttribute(pos, i);
+		b.fromBufferAttribute(pos, i + 1);
+		c.fromBufferAttribute(pos, i + 2);
+		if (new THREE.Triangle(a, b, c).getArea() >= NO_AREA) keep.push(i, i + 1, i + 2);
+	}
+	const out = new THREE.BufferGeometry();
+	for (const [name, attr] of Object.entries(g.attributes)) {
+		const n = attr.itemSize;
+		const data = new Float32Array(keep.length * n);
+		keep.forEach((v, k) => {
+			for (let j = 0; j < n; j++) data[k * n + j] = attr.array[v * n + j];
+		});
+		out.setAttribute(name, new THREE.BufferAttribute(data, n));
+	}
+	g.dispose();
+	return out;
+}
+
+/** Square metres under which a triangle has no area, to rounding. */
+export const NO_AREA = 1e-8;
 
 /** A box whose UVs run in metres on every face, not 0..1, so wood grain or
  *  carpet is the same size on a shelf as on a door. The grain (u) runs along

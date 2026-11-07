@@ -77,11 +77,22 @@ function pieceMove(f: Furniture): Move {
 	return { c: Math.cos(a), s: Math.sin(a), tx: f.cx, ty: f.y0 ?? 0, tz: f.cz };
 }
 
-/** A piece with no parts is one part filling its envelope. */
+/** A piece with no parts is one part filling its envelope, or its flight's steps. */
 export function partsOf(f: Furniture): Part[] {
 	if (f.parts && f.parts.length > 0) return f.parts;
 	const swap = f.front === '+x' || f.front === '-x';
-	return [{ id: 'body', size: swap ? [f.d, f.h, f.w] : [f.w, f.h, f.d], at: [0, f.h / 2, 0] }];
+	const [w, d] = swap ? [f.d, f.w] : [f.w, f.d];
+	const n = f.stairs;
+	if (n === undefined) return [{ id: 'body', size: [w, f.h, d], at: [0, f.h / 2, 0] }];
+	// Step k from the front: a block up to its tread, k steps high.
+	return Array.from({ length: n }, (_, i) => {
+		const top = (f.h * (i + 1)) / n;
+		return {
+			id: `step-${i + 1}`,
+			size: [w, top, d / n],
+			at: [0, top / 2, d / 2 - (i + 0.5) * (d / n)],
+		};
+	});
 }
 
 /** A piece's name in messages: its id, or for one without, where it stands,

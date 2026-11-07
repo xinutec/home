@@ -52,6 +52,11 @@ hand. The 3D house view (`frontend/.../features/house`) renders from these.
   outline (it's simply drawn by both), and a connecting doorway is an opening in
   each room's copy. There are no special "partition" or "between-rooms" objects —
   every room is the same kind of thing.
+- **storeys** — `floor` (optional, per room) is metres its floor stands above the
+  ground floor's: an upstairs room is drawn from there up, and its pieces' `y0` are
+  heights above the ground floor too. `holes` cuts outlines (`[[x, z], ...]`) from
+  its floor: a stairwell, whose room below has the same hole in its ceiling and the
+  floor's depth drawn round it. A doorway joins rooms of one storey only.
 - **furniture** — floor boxes centred at `(cx, cz)` (world coords), size
   `w`×`d`×`h`; `y0` = base height off the floor (>0 = elevated); `color` hex.
   `id` is a stable slug (`living-sideboard`), unique across the house, and `name`
@@ -78,8 +83,10 @@ hand. The 3D house view (`frontend/.../features/house`) renders from these.
   `"cushion"`, the box with its edges and corners rounded; `"roll"`, round about
   its left-to-right axis. An `arch` may give its `rise`, how far its top rises
   above its shoulders. The physics holds each to its box.
-  A piece without parts is one filling its box.
-- **estimate** — on a piece, an opening, a material or a light: the numbers are not
+  A piece without parts is one filling its box. `"stairs": n` (no parts) fills it
+  with a flight of `n` steps, the bottom one at its front and the top one its full
+  height, each a solid block from the floor; the floor above is one step more.
+- **estimate** — on a piece, a room, an opening, a material or a light: the numbers are not
   measured yet, and the text says where they came from and what would settle them
   (`tests/scene.test.ts` holds every estimate to naming its settling). `notes` holds
   what belongs to no one element (the bay's bearing, the dining windows). A

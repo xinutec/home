@@ -2,9 +2,10 @@ import * as THREE from 'three';
 
 import { MeshBVH } from 'three-mesh-bvh';
 
-/** The walker as a column: its radius, and the heights between which anything
- *  stops it (a rug does not; a coffee table, a curtain, a wall above a sill do). */
-export const BODY = { radius: 0.2, low: 0.12, high: 1.75 };
+/** The walker as a column: its radius, and the heights above its feet between which
+ *  anything stops it (a rug or a stair's riser does not, it steps up onto it; a
+ *  coffee table, a curtain, a wall above a sill do). */
+export const BODY = { radius: 0.2, low: 0.22, high: 1.75 };
 /** Eye height standing, metres. */
 export const EYE = 1.6;
 
@@ -52,11 +53,12 @@ export class Collider {
 			.map((mesh) => ({ mesh, bvh: new MeshBVH(triangles([mesh], false)) }));
 	}
 
-	/** Where a walker at [x, z] ends up, pushed clear of everything it overlaps. */
-	push(x: number, z: number, r = BODY.radius): [number, number] {
+	/** Where a walker at [x, z], its feet at `feet`, ends up, pushed clear of
+	 *  everything it overlaps. */
+	push(x: number, z: number, feet: number, r = BODY.radius): [number, number] {
 		const segment = new THREE.Line3(
-			new THREE.Vector3(x, BODY.low + r, z),
-			new THREE.Vector3(x, BODY.high - r, z),
+			new THREE.Vector3(x, feet + BODY.low + r, z),
+			new THREE.Vector3(x, feet + BODY.high - r, z),
 		);
 		const toLocal = new THREE.Matrix4();
 		const shift = new THREE.Vector3();
@@ -79,6 +81,13 @@ export class Collider {
 			if (!moved) break;
 		}
 		return [segment.start.x, segment.start.z];
+	}
+
+	/** The height of the highest surface of the fixed room under [x, z] below
+	 *  `below`: what a walker there stands on. None: nothing is under it. */
+	ground(x: number, z: number, below: number): number | undefined {
+		const down = new THREE.Ray(new THREE.Vector3(x, below, z), new THREE.Vector3(0, -1, 0));
+		return this.fixed.raycastFirst(down, THREE.DoubleSide)?.point.y;
 	}
 }
 
@@ -124,8 +133,9 @@ function shove(bvh: MeshBVH, segment: THREE.Line3, r: number): boolean {
  * to run; tap anything to touch it (`tapped`). With a mouse, a click captures it,
  * and it looks as it moves until Esc; a click or E touches what is in the middle of
  * the view (marked by `crosshair` while captured); W A S D or the arrows walk,
- * Shift runs. The walk eases in and out; the look never does. The walker keeps its
- * eye at standing height and is kept out of everything drawn (`Collider`).
+ * Shift runs. The walk eases in and out; the look never does. The walker stands on
+ * whatever is under it, stepping up a stair and down, its eye at standing height
+ * above it, and is kept out of everything drawn (`Collider`).
  */
 export class WalkControls {
 	private yaw = 0;
@@ -135,6 +145,10 @@ export class WalkControls {
 	private thumb?: { id: number; x: number; y: number; dx: number; dz: number };
 	/** Its velocity on the floor, metres a second, easing toward what is held. */
 	private readonly velocity = new THREE.Vector2();
+	/** The height its feet stand at, and the eye's that it eases to: standing height
+	 *  above them, once it walks. */
+	private feet: number;
+	private eye: number;
 	/** Each finger down, where and when it went down, and whether it has strayed. */
 	private readonly touches = new Map<number, { x: number; y: number; t: number; far: boolean }>();
 	private last?: number;
@@ -155,8 +169,11 @@ export class WalkControls {
 		const e = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
 		this.yaw = e.y;
 		this.pitch = standing ? 0 : e.x;
+		const p = camera.position;
+		this.feet = collider.ground(p.x, p.z, p.y) ?? 0;
+		this.eye = standing ? this.feet + EYE : p.y;
 		if (standing) {
-			camera.position.y = EYE;
+			p.y = this.eye;
 			// Wide enough on an upright phone to see a room, not a wall: about 45° across.
 			camera.fov = WALK_FOV;
 			camera.updateProjectionMatrix();
@@ -214,23 +231,30 @@ export class WalkControls {
 		const target = new THREE.Vector2(fx * iz + rx * ix, fz * iz + rz * ix).multiplyScalar(speed);
 		// Eased toward it, as feet are: no step starts or stops at once.
 		this.velocity.lerp(target, 1 - Math.exp(-dt / EASE_S));
-		if (speed === 0 && this.velocity.length() < STOPPED) {
+		const p = this.camera.position;
+		const settled = Math.abs(p.y - this.eye) < STOPPED * EYE_EASE_S;
+		if (speed === 0 && this.velocity.length() < STOPPED && settled) {
 			this.velocity.set(0, 0);
 			this.last = undefined;
 			return false;
 		}
 		this.last = now;
-		// In steps no longer than a wall is thin, so a run does not pass through one.
-		const p = this.camera.position;
+		// In steps no longer than a wall is thin, so a run does not pass through one,
+		// each onto what is underfoot there: up a step, or down.
 		const travel = this.velocity.length() * dt;
 		const steps = Math.max(1, Math.ceil(travel / STEP));
 		let [x, z] = [p.x, p.z];
-		for (let s = 0; s < steps; s++)
+		for (let s = 0; s < steps; s++) {
 			[x, z] = this.collider.push(
 				x + (this.velocity.x * dt) / steps,
 				z + (this.velocity.y * dt) / steps,
+				this.feet,
 			);
-		p.set(x, EYE, z);
+			this.feet = this.collider.ground(x, z, this.feet + BODY.low) ?? this.feet;
+		}
+		// The eye follows the feet smoothly, as a head does up a flight of stairs.
+		if (travel > 0) this.eye = this.feet + EYE;
+		p.set(x, p.y + (this.eye - p.y) * (1 - Math.exp(-dt / EYE_EASE_S)), z);
 		return true;
 	}
 
@@ -368,6 +392,8 @@ export const WALK_SPEED = 1.4;
 export const RUN_SPEED = 2.6;
 /** Seconds the walk takes to come most of the way (63%) to a new speed. */
 const EASE_S = 0.08;
+/** Seconds the eye takes to come most of the way (63%) to a new height. */
+const EYE_EASE_S = 0.12;
 /** Metres a second under which an eased walk has stopped. */
 const STOPPED = 0.01;
 /** The longest step, metres, the walker is kept clear at: under a wall's thickness. */

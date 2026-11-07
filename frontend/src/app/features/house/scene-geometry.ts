@@ -42,30 +42,62 @@ export function roomPerimeter(room: Room): Pt[] {
 	return perimeter(room.walls, { x: room.start[0], z: room.start[1] }, room.heading ?? 0);
 }
 
-/** The room whose outline holds the point (x, z), by its name: none in a wall's
- *  thickness or outside. */
-export function roomAt(rooms: Room[], x: number, z: number): string | undefined {
-	for (const room of rooms) {
-		const pts = roomPerimeter(room);
-		let inside = false;
-		for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
-			const [a, b] = [pts[i], pts[j]];
-			if (a.z > z !== b.z > z && x < ((b.x - a.x) * (z - a.z)) / (b.z - a.z) + a.x)
-				inside = !inside;
-		}
-		if (inside) return room.name;
-	}
-	return undefined;
+/** The rooms of the storey at height `y`: those whose floor is the highest at or
+ *  below it. */
+function storey(rooms: Room[], y: number): Room[] {
+	const floor = Math.max(...rooms.map((r) => r.floor ?? 0).filter((f) => f <= y + 1e-6));
+	return rooms.filter((r) => (r.floor ?? 0) === floor);
 }
 
-/** The room holding the point (x, z), else the one whose outline comes closest: for
- *  a piece standing in a wall's thickness or across a room's edge. */
-export function nearestRoom(rooms: Room[], x: number, z: number): string | undefined {
-	const holding = roomAt(rooms, x, z);
+/** The room on the storey at height `y` whose outline holds the point (x, z), by its
+ *  name: none in a wall's thickness or outside. */
+export function roomAt(rooms: Room[], x: number, z: number, y: number): string | undefined {
+	return storey(rooms, y).find((room) => holds(roomPerimeter(room), x, z))?.name;
+}
+
+/** Whether the outline `pts` holds the point (x, z). */
+function holds(pts: Pt[], x: number, z: number): boolean {
+	let inside = false;
+	for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+		const [a, b] = [pts[i], pts[j]];
+		if (a.z > z !== b.z > z && x < ((b.x - a.x) * (z - a.z)) / (b.z - a.z) + a.x) inside = !inside;
+	}
+	return inside;
+}
+
+/** A stairwell: a hole in `room`'s floor (`outline`), open to `under`, the room
+ *  below it, whose ceiling has the same hole. */
+export interface Well {
+	room: Room;
+	under: Room;
+	outline: Pt[];
+}
+
+/** Every room's stairwells, each with the room under it: the one on the storey
+ *  below whose outline holds the hole's middle. */
+export function wells(scene: HouseScene): Well[] {
+	return scene.rooms.flatMap((room) =>
+		(room.holes ?? []).map((hole) => {
+			const outline = hole.map(([x, z]) => ({ x, z }));
+			const b = bounds(outline);
+			const below = scene.rooms.filter((r) => (r.floor ?? 0) < (room.floor ?? 0));
+			const name = b && roomAt(below, b.cx, b.cz, (room.floor ?? 0) - 1e-3);
+			const under = below.find((r) => r.name === name);
+			if (!under) throw new Error(`${room.name ?? '?'}: a hole in its floor over no room`);
+			return { room, under, outline };
+		}),
+	);
+}
+
+/** The room on the storey at height `y` holding the point (x, z), else the one whose
+ *  outline comes closest: for a piece standing in a wall's thickness or across a
+ *  room's edge. */
+export function nearestRoom(rooms: Room[], x: number, z: number, y: number): string | undefined {
+	const holding = roomAt(rooms, x, z, y);
 	if (holding) return holding;
 	let best: string | undefined;
 	let bestD = Infinity;
-	for (const room of rooms)
+	for (const room of storey(rooms, y))
 		for (const s of segments(roomPerimeter(room))) {
 			const [dx, dz] = [s.bx - s.ax, s.bz - s.az];
 			const t = Math.max(
@@ -274,9 +306,14 @@ export function passages(scene: HouseScene): Passage[] {
 				const [qa, qb] =
 					d(here.a, there.a) <= d(here.a, there.b) ? [there.a, there.b] : [there.b, there.a];
 				if (d(here.a, qa) > WALL_THICKNESS_MAX || d(here.b, qb) > WALL_THICKNESS_MAX) continue;
+				if ((room.floor ?? 0) !== (other.floor ?? 0))
+					throw new Error(
+						`${room.name ?? '?'} and ${other.name ?? '?'}: a doorway between storeys`,
+					);
+				const y = room.floor ?? 0;
 				const yb = Math.max(o.sill ?? 0, o2.sill ?? 0);
 				const yt = Math.min((o.sill ?? 0) + o.height, (o2.sill ?? 0) + o2.height);
-				const at = (p: [number, number], y: number): P3 => [p[0], y, p[1]];
+				const at = (p: [number, number], up: number): P3 => [p[0], y + up, p[1]];
 				const len = d(here.a, here.b) || 1;
 				out.push({
 					room,

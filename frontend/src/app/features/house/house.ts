@@ -44,6 +44,8 @@ export class House implements AfterViewInit, OnDestroy {
 	private host = viewChild.required<ElementRef<HTMLDivElement>>('canvas');
 
 	private view?: ThreeView;
+	/** Metres what is added is raised: the floor of the room being drawn. */
+	private lift = 0;
 
 	ngAfterViewInit(): void {
 		this.initThree();
@@ -116,6 +118,7 @@ export class House implements AfterViewInit, OnDestroy {
 		let n = 0;
 		const allPts: Pt[] = [];
 		for (const room of scene.rooms ?? []) {
+			this.lift = room.floor ?? 0;
 			const pts = roomPerimeter(room);
 			allPts.push(...pts);
 			const ops = room.openings ?? [];
@@ -136,6 +139,7 @@ export class House implements AfterViewInit, OnDestroy {
 			});
 			this.addFloor(pts);
 		}
+		this.lift = 0;
 		this.empty.set(n === 0);
 		this.rooms.set((scene.rooms ?? []).flatMap((r) => (r.name ? [r.name] : [])));
 
@@ -251,7 +255,9 @@ export class House implements AfterViewInit, OnDestroy {
 		return this.view ? this.view.own(resource) : resource;
 	}
 
+	/** Adds `object`, raised onto the storey being drawn (`lift`). */
 	private add(object: THREE.Object3D): void {
+		object.position.y += this.lift;
 		this.view?.scene.add(object);
 	}
 

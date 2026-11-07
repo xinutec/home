@@ -51,6 +51,7 @@ describe("scenes/house.json", () => {
 		const all = JSON.parse(readFileSync("scenes/house.json", "utf8")) as {
 			furniture: { estimate?: string }[];
 			rooms: {
+				estimate?: string;
 				openings?: { estimate?: string }[];
 				coving?: { estimate?: string };
 				skirting?: { estimate?: string };
@@ -60,6 +61,7 @@ describe("scenes/house.json", () => {
 		};
 		const estimates = [
 			...all.furniture.map((f) => f.estimate),
+			...all.rooms.map((r) => r.estimate),
 			...all.rooms.flatMap((r) => (r.openings ?? []).map((o) => o.estimate)),
 			...all.rooms.map((r) => r.coving?.estimate),
 			...all.rooms.map((r) => r.skirting?.estimate),

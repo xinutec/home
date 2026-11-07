@@ -1,6 +1,12 @@
 {
   "height": 2.4,
   "materials": {
+    "hall-laminate": {"color": "#b48a5c", "roughness": 0.5, "texture": "wood", "textureScale": 0.6, "estimate": "a mid oak laminate as the 7 November walk shows the hall's floor; settle its colour with a daylight photo"},
+    "stair-pine": {"color": "#c9a479", "roughness": 0.8, "texture": "wood", "textureScale": 0.6, "estimate": "bare pine, its paint stripped, as the 7 November walk shows the treads"},
+    "landing-carpet": {"color": "#3b2337", "roughness": 1, "texture": "carpet", "textureScale": 0.5, "estimate": "the landing's plum carpet in the 7 November walk; settle its colour with a daylight photo"},
+    "metro-tile": {"color": "#f2f2ef", "roughness": 0.25, "texture": "metro", "textureScale": 0.6, "estimate": "white metro tiles, 15 by 7.5 cm, as the 7 November walk shows the bathroom; drawn floor to ceiling, where the walls are painted above about 1.2 m away from the bath; measure a tile and how high the tiling goes"},
+    "bathroom-checks": {"color": "#ffffff", "roughness": 0.3, "texture": "checks", "textureScale": 1.2, "estimate": "black and white tiles of 30 cm, as the 7 November walk shows the bathroom floor; measure a tile"},
+    "sanitary-white": {"color": "#f4f4f2", "roughness": 0.15, "estimate": "white ceramic and acrylic; settle its sheen with a daylight photo"},
     "oak": {"color": "#cca067", "roughness": 0.55, "texture": "wood", "textureScale": 0.6, "estimate": "its brightness fitted under the traced light to keyframe 1 (daylight, reflectance 0.39), which the night photo under the ceiling light agrees with (0.43); its hue as toned from keyframe 1, since a fit's hue follows the light's assumed colour and the phone's white balance; the phone's tone curve, taken as none, is the remaining unknown: a RAW photo would settle it"},
     "drawer-wood": {"color": "#d9bf94", "roughness": 0.7, "texture": "wood", "textureScale": 0.4, "estimate": "a drawer box's pale unfinished wood, as such boxes usually are, not seen in any photo; settle it with a photo of a drawer pulled out"},
     "oak-veneer": {"color": "#d2b48a", "roughness": 0.6, "texture": "wood", "textureScale": 0.6, "estimate": "a typical oak; settle by fitting to the photos under the traced light"},
@@ -55,7 +61,7 @@
       ],
       "openings": [
         {"wall": 4, "offset": 0, "width": 2.4, "height": 2.22, "sill": 0, "leads": "bay", "skirtingRound": true},
-        {"wall": 5, "offset": 1.165, "width": 0.75, "height": 1.97, "sill": 0, "estimate": "inside the glazed door's measured frame; this wall is 3.90 m in the model and 3.95 m by the tape across the door: measure the wall itself"},
+        {"wall": 5, "offset": 1.165, "width": 0.75, "height": 1.97, "sill": 0, "leads": "hall", "estimate": "inside the glazed door's measured frame; this wall is 3.90 m in the model and 3.95 m by the tape across the door: measure the wall itself"},
         {"wall": 6, "offset": 1.37, "width": 1.5, "height": 1.94, "sill": 0, "leads": "dining", "skirtingRound": true}
       ],
       "surfaces": {"walls": "wall-paint", "floor": "carpet", "ceiling": "ceiling-paint", "skirting": "pvc-white"}, "skirting": {"height": 0.17, "depth": 0.02, "estimate": "its top at 0.17 m as observe's lines read it along the dining wall (#2056), 2 cm thick; the furniture is not yet held 2 cm off the walls by it; measure its height and thickness"},
@@ -107,9 +113,57 @@
         {"wall": 3, "offset": 0, "width": 2.4, "height": 2.22, "sill": 0, "leads": "living", "skirtingRound": true}
       ],
       "surfaces": {"walls": "wall-paint", "floor": "carpet", "ceiling": "ceiling-paint", "skirting": "pvc-white"}, "skirting": {"height": 0.17, "depth": 0.02, "estimate": "its top at 0.17 m as observe's lines read it along the dining wall (#2056), 2 cm thick; the furniture is not yet held 2 cm off the walls by it; measure its height and thickness"}
+    },
+    {
+      "name": "hall",
+      "view": {"eye": [2.2, 1.6, 4.15], "look": [-1.0, 1.3, 4.4]},
+      "start": [-1.35, 3.75],
+      "heading": 0,
+      "walls": [[0, 3.93], [90, 1.73], [90, 3.93], [90, 1.73]],
+      "openings": [
+        {"wall": 0, "offset": 2.015, "width": 0.75, "height": 1.97, "sill": 0, "leads": "living", "estimate": "the living room's glazed door, where its own opening puts it; measure where it is from the hall's kitchen end"},
+        {"wall": 1, "offset": 0.9, "width": 0.8, "height": 2.0, "sill": 0, "leads": "outside", "glazing": {"frame": 0.15, "lower": "glass-frosted", "frameMaterial": "oak"}, "estimate": "the front door, straight ahead at the foot of the stairs as the 7 November walk looks down them; drawn as a frosted pane in a wooden frame; measure its width, its height and where it is along the wall"},
+        {"wall": 3, "offset": 1.02, "width": 0.73, "height": 1.97, "sill": 0, "leads": "kitchen", "estimate": "the kitchen's hall door, where the kitchen's opening puts it, cut 4 cm short where the hall's wall to the living room starts; measure where it is from the corner by the living room"}
+      ],
+      "surfaces": {"walls": "wall-paint", "floor": "hall-laminate", "ceiling": "ceiling-paint", "skirting": "pvc-white"}, "skirting": {"height": 0.17, "depth": 0.02, "estimate": "as the living room's; measure its height and thickness"},
+      "estimate": "between the living room and the side of the house: its south wall 10 cm past the living room's, its west wall 10 cm past the kitchen's, its front in line with the living room's, 1.73 m across (a passage 0.85 m beside a flight 0.88 m wide); measure its length, its width and both walls' thickness"
+    },
+    {
+      "name": "landing",
+      "view": {"eye": [-1.0, 4.2, 4.15], "look": [2.0, 3.4, 4.6]},
+      "floor": 2.6,
+      "start": [-1.35, 3.75],
+      "heading": 0,
+      "walls": [[0, 2.15], [90, 1.73], [90, 2.15], [90, 1.73]],
+      "holes": [[[-1.35, 4.6], [0.8, 4.6], [0.8, 5.48], [-1.35, 5.48]]],
+      "openings": [
+        {"wall": 1, "offset": 0.05, "width": 0.75, "height": 1.97, "sill": 0, "leads": "bathroom", "estimate": "the bathroom's door at the landing's front end, as the 7 November walk turns back to it from the top of the stairs; measure where it is"},
+        {"wall": 2, "offset": 0.5, "width": 0.9, "height": 1.0, "sill": 0.9, "leads": "outside", "glazing": {"frame": 0.06, "lower": "glass-clear", "frameMaterial": "pvc-white"}, "estimate": "the window over the stairs behind the patterned blind, from the 7 November walk; measure its width, its height, its sill and where it is along the wall"}
+      ],
+      "surfaces": {"walls": "wall-paint", "floor": "landing-carpet", "ceiling": "ceiling-paint", "skirting": "pvc-white"}, "skirting": {"height": 0.17, "depth": 0.02, "estimate": "as the living room's; measure its height and thickness"},
+      "estimate": "over the hall from its kitchen end to the bathroom; its floor 2.6 m up (12 steps of 20 cm to the top tread, and one more onto it; the 7 November walk's camera rose about 2.4 m); the stairwell over the flight from the top to the bathroom's wall, the flight's foot under the bathroom; measure the floor's height (count the steps and measure one), the landing's length and the well's length and width"
+    },
+    {
+      "name": "bathroom",
+      "view": {"eye": [1.1, 4.2, 4.1], "look": [2.4, 3.4, 5.2]},
+      "floor": 2.6,
+      "start": [0.9, 3.75],
+      "heading": 0,
+      "walls": [[0, 1.68], [90, 1.73], [90, 1.68], [90, 1.73]],
+      "openings": [
+        {"wall": 1, "offset": 0.4, "width": 0.9, "height": 0.9, "sill": 1.0, "leads": "outside", "glazing": {"frame": 0.06, "lower": "glass-frosted", "frameMaterial": "pvc-white"}, "estimate": "the window over the bath behind the orange blind, in the front wall, from the 7 November walk; measure its width, its height, its sill and where it is"},
+        {"wall": 3, "offset": 0.93, "width": 0.75, "height": 1.97, "sill": 0, "leads": "landing", "estimate": "the door from the landing; measure where it is"}
+      ],
+      "surfaces": {"walls": "metro-tile", "floor": "bathroom-checks", "ceiling": "ceiling-paint"},
+      "estimate": "over the entrance at the front of the hall (told 7 November), the hall's width and 1.68 m deep, over the lowest steps; measure its length and width"
     }
   ],
   "furniture": [
+    {"id": "hall-stairs", "name": "Stairs", "cx": -0.03, "cz": 5.04, "w": 2.64, "d": 0.88, "h": 2.4, "stairs": 12, "front": "+x", "builtIn": true, "material": "stair-pine", "color": "#c9a479", "estimate": "a straight flight along the hall's side wall, rising away from the front door to the hall's kitchen end, 12 steps of 20 by 22 cm to the top tread and one more onto the landing beside it, 88 cm wide, its foot 1.29 m from the front door under the bathroom; drawn solid to the floor where the cupboard under it is; count the steps, measure one, the flight's width and its foot's distance from the front door"},
+    {"id": "landing-banister", "name": "Banister round the stairwell", "cx": 0.165, "cz": 4.555, "w": 1.23, "d": 0.09, "h": 0.95, "y0": 2.6, "material": "stair-pine", "color": "#c9a479", "parts": [{"id": "newel", "size": [0.09, 0.95, 0.09], "at": [-0.57, 0.475, 0]}, {"id": "handrail", "size": [1.14, 0.06, 0.07], "at": [0.045, 0.92, 0]}, {"id": "base-rail", "size": [1.14, 0.05, 0.09], "at": [0.045, 0.025, 0]}], "estimate": "along the stairwell's edge on the landing, from a newel post a flight's width from the end wall, where the stairs come up, to the skirting at the bathroom's wall, a handrail and a rail on the floor, as the 7 November walk shows them; measure its height and where the newel stands"},
+    {"id": "bathroom-bath", "name": "Bath", "cx": 2.205, "cz": 4.615, "w": 0.75, "d": 1.7, "h": 0.55, "y0": 2.6, "material": "sanitary-white", "color": "#f4f4f2", "estimate": "along the front wall under the window, as the 7 November walk shows it; measure its length, width and height"},
+    {"id": "bathroom-basin", "name": "Basin on its cabinet", "cx": 1.3, "cz": 5.28, "w": 0.6, "d": 0.4, "h": 0.85, "y0": 2.6, "material": "sanitary-white", "color": "#f4f4f2", "estimate": "beside the toilet, as the 7 November walk shows it; measure it and where it stands"},
+    {"id": "bathroom-toilet", "name": "Toilet", "cx": 1.225, "cz": 4.84, "w": 0.65, "d": 0.38, "h": 0.78, "y0": 2.6, "material": "sanitary-white", "color": "#f4f4f2", "estimate": "beside the basin, as the 7 November walk shows it; measure where it stands"},
     {"id": "living-ikea-cupboard-fireplace-wall", "name": "IKEA cupboard, bay end, fireplace wall", "cx": 2.325, "cz": 0.08, "w": 0.47, "d": 0.82, "h": 0.9, "material": "oak-veneer", "color": "#d2a679", "front": "-x", "parts": [{"id": "top", "size": [0.82, 0.018, 0.45], "at": [0, 0.891, -0.01], "material": "oak-veneer"}, {"id": "side-a", "size": [0.018, 0.873, 0.45], "at": [-0.401, 0.4455, -0.01], "material": "oak-veneer"}, {"id": "side-b", "size": [0.018, 0.873, 0.45], "at": [0.401, 0.4455, -0.01], "material": "oak-veneer"}, {"id": "bottom", "size": [0.784, 0.018, 0.45], "at": [0, 0.009, -0.01], "material": "oak-veneer"}, {"id": "back", "size": [0.784, 0.864, 0.008], "at": [0, 0.45, -0.231], "material": "oak-veneer"}, {"id": "shelf", "size": [0.784, 0.018, 0.4], "at": [0, 0.45, -0.015], "material": "oak-veneer"}, {"id": "door-a", "size": [0.408, 0.88, 0.018], "at": [-0.205, 0.45, 0.224], "material": "oak-veneer", "joint": {"type": "hinge", "pivot": [-0.41, 0.45, 0.235], "range": [0, -90], "stop": -10}}, {"id": "door-b", "size": [0.408, 0.88, 0.018], "at": [0.205, 0.45, 0.224], "material": "oak-veneer", "joint": {"type": "hinge", "pivot": [0.41, 0.45, 0.235], "range": [0, 90], "stop": 8}}], "estimate": "its size measured; it stands in front of the skirting, 2 cm off the back wall and the side wall it was measured flush against; measure its gaps to both walls"},
     {"id": "living-hearth", "name": "Hearth", "cx": 0.69, "cz": 0.195, "w": 1.14, "d": 0.39, "h": 0.02, "builtIn": true, "y0": 0.03, "material": "slate", "color": "#181818"},
     {"id": "living-fire-surround", "name": "Fire surround (oak; cast-iron arched insert)", "cx": 0.69, "cz": 0.0925, "w": 1.05, "d": 0.185, "h": 0.95, "builtIn": true, "y0": 0.05, "material": "oak", "color": "#c8a878", "parts": [{"id": "leg-a", "size": [0.14, 0.95, 0.185], "at": [-0.455, 0.475, 0], "material": "oak"}, {"id": "leg-b", "size": [0.14, 0.95, 0.185], "at": [0.455, 0.475, 0], "material": "oak"}, {"id": "frieze", "size": [0.77, 0.14, 0.04], "at": [0, 0.88, 0.0725], "material": "oak"}, {"id": "back-panel", "size": [0.77, 0.81, 0.02], "at": [0, 0.405, -0.0825], "material": "cast-iron"}, {"id": "arch-rim", "size": [0.585, 0.82, 0.01], "at": [0, 0.41, -0.0675], "material": "black-lead", "shape": "arch"}, {"id": "arch-opening", "size": [0.525, 0.79, 0.01], "at": [0, 0.395, -0.0575], "material": "cast-iron", "shape": "arch"}, {"id": "fire-front", "size": [0.47, 0.65, 0.02], "at": [0, 0.325, -0.0425], "material": "black-lead"}], "front": "+z", "estimate": "the layout (legs, frieze, black back panel, polished arch with its opening, cast-iron fire front) from keyframe 769 straightened to the front's plane, in the measured size (1.05 x 0.95 x 0.185); measure a leg's width, the arch's width and height and the fire front's"},

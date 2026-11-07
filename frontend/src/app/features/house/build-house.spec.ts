@@ -27,6 +27,24 @@ describe('buildHouse', () => {
 		expect(tags.filter((t) => !t)).toEqual([]);
 	});
 
+	it('cuts a stairwell from a floor and a ceiling leaving no triangle without an area', () => {
+		const flat: string[] = [];
+		const [a, b, c] = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+		const kind = (m: THREE.Mesh) => solidTag(m)?.kind;
+		for (const m of meshes.filter((m) => kind(m) === 'floor' || kind(m) === 'ceiling')) {
+			const g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry;
+			const pos = g.getAttribute('position');
+			for (let i = 0; i < pos.count; i += 3) {
+				a.fromBufferAttribute(pos, i);
+				b.fromBufferAttribute(pos, i + 1);
+				c.fromBufferAttribute(pos, i + 2);
+				const area = new THREE.Triangle(a, b, c).getArea();
+				if (!(area > 1e-9)) flat.push(`${JSON.stringify(solidTag(m))} ${area}`);
+			}
+		}
+		expect(flat).toEqual([]);
+	});
+
 	it('draws every part of every piece, once', () => {
 		const drawn = tags
 			.filter((t) => t?.kind === 'part')
@@ -103,6 +121,11 @@ describe('buildHouse', () => {
 					.join(', '),
 			);
 		expect(twins).toEqual([]);
+		// And every corner of every chart is somewhere on the atlas.
+		const lost = merged.filter((m) =>
+			Array.from(m.geometry.getAttribute('uv1').array).some((v) => !Number.isFinite(v)),
+		);
+		expect(lost.map((m) => String(m.userData['room']))).toEqual([]);
 	});
 
 	it('runs the skirting round an open passage’s sides, as a moulding does', () => {

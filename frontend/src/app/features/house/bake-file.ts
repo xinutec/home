@@ -88,7 +88,11 @@ export function encodeLightmap(
 	layout: Layout = new Map(),
 ): Uint8Array {
 	let peak = 0;
-	for (const v of light) peak = Math.max(peak, v);
+	light.forEach((v, i) => {
+		// One would make the range, and every pixel scaled by it, the same.
+		if (!Number.isFinite(v)) throw new Error(`the light at texel ${Math.floor(i / 3)} is ${v}`);
+		peak = Math.max(peak, v);
+	});
 	const range = Math.max(peak, 1e-6);
 	const keys = joints.map((j) => new TextEncoder().encode(j.key));
 	const tail =

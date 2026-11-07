@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Everything in scenes/house.json that is not measured yet, and what would settle
-// it: each piece, opening, material and light carrying an `estimate`, then the
+// it: each piece, room, opening, material and light carrying an `estimate`, then the
 // scene's `notes`. A measurement replaces the numbers and deletes the estimate.
 //
 //   ./scripts/estimates.mjs
@@ -10,6 +10,7 @@ const scene = JSON.parse(readFileSync(new URL('../scenes/house.json', import.met
 const rows = [];
 for (const f of scene.furniture) if (f.estimate) rows.push([f.name ?? f.id ?? 'piece', f.estimate]);
 for (const r of scene.rooms) {
+	if (r.estimate) rows.push([r.name, r.estimate]);
 	for (const o of r.openings ?? []) if (o.estimate) rows.push([`${r.name} wall ${o.wall} opening`, o.estimate]);
 	if (r.coving?.estimate) rows.push([`${r.name} coving`, r.coving.estimate]);
 	if (r.skirting?.estimate) rows.push([`${r.name} skirting`, r.skirting.estimate]);

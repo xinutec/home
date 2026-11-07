@@ -28,6 +28,11 @@ describe('lightmap file', () => {
 			}
 	});
 
+	it('refuses light that is not a number, which would darken every pixel', () => {
+		const light = new Float32Array([0.2, 0.2, 0.2, NaN, 0.1, 0.1]);
+		expect(() => encodeLightmap(light, 2, 1, 1)).toThrow('the light at texel 1 is NaN');
+	});
+
 	it('refuses what is not a lightmap, or is cut short', async () => {
 		expect(await decodeLightmap(new ArrayBuffer(8), raw)).toBeUndefined();
 		const file = encodeLightmap(new Float32Array(12), 2, 2, 1);

@@ -4,7 +4,7 @@ import json from '../../../../../scenes/house.json';
 import type { HouseScene } from './house.model';
 import { MaterialLibrary } from './materials';
 import { buildHouse } from './room-builder';
-import { Collider, RUN_SPEED, WALK_SPEED, WalkControls, stickSpeed } from './walk';
+import { Collider, EYE, RUN_SPEED, WALK_SPEED, WalkControls, stickSpeed } from './walk';
 
 const house = json as unknown as HouseScene;
 
@@ -13,7 +13,7 @@ function walk(c: Collider, from: [number, number], to: [number, number]): [numbe
 	let [x, z] = from;
 	const steps = Math.ceil(Math.hypot(to[0] - from[0], to[1] - from[1]) / 0.05);
 	for (let k = 0; k < steps; k++)
-		[x, z] = c.push(x + (to[0] - from[0]) / steps, z + (to[1] - from[1]) / steps);
+		[x, z] = c.push(x + (to[0] - from[0]) / steps, z + (to[1] - from[1]) / steps, 0);
 	return [x, z];
 }
 
@@ -33,11 +33,16 @@ function box(
 	return m;
 }
 
-/** The real house, as drawn. */
-function drawn(): Collider {
+/** The real house's meshes, as drawn. */
+function drawnMeshes(): THREE.Mesh[] {
 	const stage = { scene: new THREE.Scene(), own: <T>(r: T) => r };
 	buildHouse(stage, house, new MaterialLibrary(stage.own, false), false, false);
-	return new Collider(stage.scene.children.filter((o): o is THREE.Mesh => o instanceof THREE.Mesh));
+	return stage.scene.children.filter((o): o is THREE.Mesh => o instanceof THREE.Mesh);
+}
+
+/** The real house, as drawn. */
+function drawn(): Collider {
+	return new Collider(drawnMeshes());
 }
 
 describe('walking', () => {
@@ -97,15 +102,17 @@ describe('walking', () => {
 	it('starts every room standing on clear floor, a first step ahead clear too', () => {
 		for (const room of house.rooms) {
 			expect(room.view, `${room.name} has no start`).toBeDefined();
-			const [ex, , ez] = room.view?.eye ?? [0, 0, 0];
+			const [ex, ey, ez] = room.view?.eye ?? [0, 0, 0];
 			const [lx, , lz] = room.view?.look ?? [0, 0, 0];
-			const [x, z] = house3d.push(ex, ez);
+			const feet = house3d.ground(ex, ez, ey) ?? NaN;
+			expect(feet, `${room.name}: its start stands on its floor`).toBeCloseTo(room.floor ?? 0, 3);
+			const [x, z] = house3d.push(ex, ez, feet);
 			expect(Math.hypot(x - ex, z - ez), `${room.name}: its start is in something`).toBeLessThan(
 				1e-3,
 			);
 			const d = Math.hypot(lx - ex, lz - ez);
 			const [sx, sz] = [ex + ((lx - ex) / d) * 0.3, ez + ((lz - ez) / d) * 0.3];
-			const [ax, az] = house3d.push(sx, sz);
+			const [ax, az] = house3d.push(sx, sz, feet);
 			expect(Math.hypot(ax - sx, az - sz), `${room.name}: its first step is blocked`).toBeLessThan(
 				1e-3,
 			);
@@ -194,21 +201,22 @@ describe('the controls, as a first-person game’s', () => {
 	const key = (type: 'keydown' | 'keyup', code: string) =>
 		window.dispatchEvent(Object.assign(new Event(type), { code }));
 
-	/** Controls on a `width` × 800 screen, far from anything to bump into. */
-	function controls(width = 400) {
+	/** Controls on a `width` × 800 screen, far from anything to bump into, or in `world`. */
+	function controls(width = 400, world = [box(1, 1, 1, 100, 0.5, 100)], at?: THREE.Vector3) {
 		const dom = document.createElement('div');
 		dom.getBoundingClientRect = () => new DOMRect(0, 0, width, 800);
 		dom.setPointerCapture = () => undefined;
 		dom.requestPointerLock = () => Promise.resolve();
 		const camera = new THREE.PerspectiveCamera();
+		if (at) camera.position.copy(at);
 		const taps: number[][] = [];
 		const walker = new WalkControls(
 			camera,
 			dom,
 			document.createElement('div'),
-			new Collider([box(1, 1, 1, 100, 0.5, 100)]),
+			new Collider(world),
 			() => undefined,
-			true,
+			!at,
 			(x, y) => taps.push([x, y]),
 		);
 		return { dom, camera, taps, walker };
@@ -242,6 +250,88 @@ describe('the controls, as a first-person game’s', () => {
 		expect(stickSpeed(1)).toBeCloseTo(RUN_SPEED, 6);
 		expect(stickSpeed(0.4)).toBeGreaterThan(0);
 		expect(stickSpeed(0.4)).toBeLessThan(WALK_SPEED);
+	});
+
+	it('walks up a flight of stairs and down again, its eye at standing height', () => {
+		let now = 0;
+		vi.spyOn(performance, 'now').mockImplementation(() => now);
+		// A floor, and six steps 20 cm up and 25 cm deep rising ahead (-z) to a landing.
+		const floor = box(4, 0.01, 8, 0, -0.005, 0);
+		const steps = Array.from({ length: 6 }, (_, i) =>
+			box(1, 0.2 * (i + 1), 0.25, 0, 0.1 * (i + 1), -1.125 - 0.25 * i),
+		);
+		const landing = box(1, 1.2, 2, 0, 0.6, -3.5);
+		const { camera, walker } = controls(400, [floor, ...steps, landing]);
+		const go = (code: string, ms: number) => {
+			key('keydown', code);
+			for (let t = 0; t < ms; t += 16) {
+				now += 16;
+				walker.update();
+			}
+			key('keyup', code);
+			for (let t = 0; t < 1000; t += 16) {
+				now += 16;
+				walker.update();
+			}
+		};
+		expect(camera.position.y).toBeCloseTo(EYE, 3);
+		go('KeyW', 2500);
+		expect(camera.position.z).toBeLessThan(-3);
+		expect(camera.position.y).toBeCloseTo(1.2 + EYE, 2);
+		go('KeyS', 3000);
+		expect(camera.position.z).toBeGreaterThan(0);
+		expect(camera.position.y).toBeCloseTo(EYE, 2);
+	});
+
+	it('climbs the stairs from the front door to the landing', () => {
+		let now = 0;
+		vi.spyOn(performance, 'now').mockImplementation(() => now);
+		// By the front door, at the foot of the flight, facing up it (-x).
+		const camera = new THREE.PerspectiveCamera();
+		camera.position.set(2.3, EYE, 5.04);
+		camera.rotation.set(0, Math.PI / 2, 0, 'YXZ');
+		const div = () => document.createElement('div');
+		const walker = new WalkControls(camera, div(), div(), drawn(), () => undefined, true);
+		const go = (code: string, ms: number) => {
+			key('keydown', code);
+			for (let t = 0; t < ms; t += 16) {
+				now += 16;
+				walker.update();
+			}
+			key('keyup', code);
+			for (let t = 0; t < 1000; t += 16) {
+				now += 16;
+				walker.update();
+			}
+		};
+		// Up the flight to its top, by the wall at the hall's end, then right onto the
+		// landing beside it.
+		go('KeyW', 3000);
+		go('KeyD', 1000);
+		const landing = house.rooms.find((r) => r.name === 'landing');
+		expect(camera.position.x).toBeLessThan(-0.9);
+		expect(camera.position.z).toBeLessThan(4.6);
+		expect(camera.position.y).toBeCloseTo((landing?.floor ?? NaN) + EYE, 2);
+	});
+
+	it('keeps a placed camera where it was put until it walks, then stands', () => {
+		let now = 0;
+		vi.spyOn(performance, 'now').mockImplementation(() => now);
+		// An upper floor 2.6 m up, the camera placed 1.2 m over it.
+		const floor = box(4, 0.01, 8, 0, 2.595, 0);
+		const { camera, walker } = controls(400, [floor], new THREE.Vector3(0, 3.8, 0));
+		for (let t = 0; t < 500; t += 16) {
+			now += 16;
+			walker.update();
+		}
+		expect(camera.position.y).toBe(3.8);
+		key('keydown', 'KeyW');
+		for (let t = 0; t < 1000; t += 16) {
+			now += 16;
+			walker.update();
+		}
+		key('keyup', 'KeyW');
+		expect(camera.position.y).toBeCloseTo(2.6 + EYE, 2);
 	});
 
 	it('eases into a walk and out of it, and runs with Shift', () => {

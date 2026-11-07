@@ -93,13 +93,20 @@ describe('roomAt', () => {
 	const rooms = [square('left', 0), square('right', 3)];
 
 	it('names the room whose outline holds the point', () => {
-		expect(roomAt(rooms, 1, 1)).toBe('left');
-		expect(roomAt(rooms, 4, 1.5)).toBe('right');
+		expect(roomAt(rooms, 1, 1, 0)).toBe('left');
+		expect(roomAt(rooms, 4, 1.5, 0)).toBe('right');
 	});
 
 	it('is undefined in the wall between them and outside', () => {
-		expect(roomAt(rooms, 2.5, 1)).toBeUndefined();
-		expect(roomAt(rooms, 1, -1)).toBeUndefined();
+		expect(roomAt(rooms, 2.5, 1, 0)).toBeUndefined();
+		expect(roomAt(rooms, 1, -1, 0)).toBeUndefined();
+	});
+
+	it('names the room of the storey the point is on', () => {
+		const upstairs = [...rooms, { ...square('above', 0), floor: 2.6 }];
+		expect(roomAt(upstairs, 1, 1, 0.5)).toBe('left');
+		expect(roomAt(upstairs, 1, 1, 2.6)).toBe('above');
+		expect(roomAt(upstairs, 4, 1, 3)).toBeUndefined();
 	});
 });
 
@@ -118,9 +125,15 @@ describe('nearestRoom', () => {
 	const rooms = [square('left', 0), square('right', 3)];
 
 	it('is the room holding the point, else the one whose wall is closest', () => {
-		expect(nearestRoom(rooms, 1, 1)).toBe('left');
-		expect(nearestRoom(rooms, 2.2, 1)).toBe('left');
-		expect(nearestRoom(rooms, 2.8, 1)).toBe('right');
+		expect(nearestRoom(rooms, 1, 1, 0)).toBe('left');
+		expect(nearestRoom(rooms, 2.2, 1, 0)).toBe('left');
+		expect(nearestRoom(rooms, 2.8, 1, 0)).toBe('right');
+	});
+
+	it('looks only on the storey the point is on', () => {
+		const upstairs = [...rooms, { ...square('above', 0), floor: 2.6 }];
+		expect(nearestRoom(upstairs, 2.8, 1, 0)).toBe('right');
+		expect(nearestRoom(upstairs, 2.8, 1, 3)).toBe('above');
 	});
 });
 

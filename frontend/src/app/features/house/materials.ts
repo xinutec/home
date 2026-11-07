@@ -108,6 +108,8 @@ export class MaterialLibrary {
 		else if (kind === 'tiles') drawTiles(ctx, 512);
 		else if (kind === 'quarry') drawQuarry(ctx, 512);
 		else if (kind === 'planks') drawPlanks(ctx, 512);
+		else if (kind === 'checks') drawChecks(ctx, 512);
+		else if (kind === 'metro') drawMetro(ctx, 512);
 		else drawCarpet(ctx, 512);
 		const tex = this.own(new THREE.CanvasTexture(canvas));
 		tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
@@ -208,6 +210,31 @@ function drawPlanks(ctx: CanvasRenderingContext2D, px: number): void {
 	const pitch = px / PLANKS_ACROSS;
 	ctx.fillStyle = 'rgb(175,175,175)';
 	for (let j = 0; j < PLANKS_ACROSS; j++) ctx.fillRect(0, j * pitch, px, 2);
+}
+
+/** Black and white squares, CHECKS_ACROSS to a side, alternating. */
+const CHECKS_ACROSS = 4;
+function drawChecks(ctx: CanvasRenderingContext2D, px: number): void {
+	const pitch = px / CHECKS_ACROSS;
+	for (let i = 0; i < CHECKS_ACROSS; i++)
+		for (let j = 0; j < CHECKS_ACROSS; j++) {
+			ctx.fillStyle = (i + j) % 2 ? 'rgb(30,30,30)' : 'rgb(245,245,245)';
+			ctx.fillRect(i * pitch, j * pitch, pitch, pitch);
+		}
+}
+
+/** Metro tiles: twice as wide as tall, METRO_ROWS rows to a repeat, each row offset
+ *  half a tile, in dark grout. */
+const METRO_ROWS = 8;
+function drawMetro(ctx: CanvasRenderingContext2D, px: number): void {
+	ctx.fillStyle = 'rgb(60,60,60)';
+	ctx.fillRect(0, 0, px, px);
+	const h = px / METRO_ROWS;
+	const grout = 3;
+	ctx.fillStyle = 'rgb(245,245,245)';
+	for (let j = 0; j < METRO_ROWS; j++)
+		for (let x = j % 2 ? -h : 0; x < px; x += 2 * h)
+			ctx.fillRect(x + grout / 2, j * h + grout / 2, 2 * h - grout, h - grout);
 }
 
 /** Fine speckle around mid-grey, the look of a short cut-pile carpet from standing height. */
