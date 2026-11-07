@@ -106,6 +106,12 @@ hand. The 3D house view (`frontend/.../features/house`) renders from these.
   what belongs to no one element (the bay's bearing, the dining windows). A
   measurement replaces the numbers and deletes the estimate.
   `./scripts/estimates.mjs` lists them all.
+- **images** — a material's `image` names a picture in `images/` (served at
+  `/api/house/images/<name>`, letters, digits and dashes, `.jpg` or `.png`): a part
+  of that material is a box with the picture on its front (+z), its other faces in
+  the material's `color`, which is the picture's mean, as the bake bounces it. A
+  painting, a postcard: crop the photo to the thing, straightened, at a few pixels
+  a millimetre.
 - **lights** — each lamp's bulb: `at` [x, y, z], `lumens`, colour temperature
   `kelvin`, and whether it is `on`.
 - **Physics** (`frontend/.../house/physics.ts`, run on this file by

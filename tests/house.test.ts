@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -63,5 +63,34 @@ describe("GET /house/bake", () => {
 	it("answers 404 until the scene is baked", async () => {
 		const res = await houseRoutes(join(dir, "house.json")).request("/house/bake");
 		expect(res.status).toBe(404);
+	});
+});
+
+describe("GET /house/images/:name", () => {
+	const file = join(dir, "pictured.json");
+	writeFileSync(file, "{}");
+	mkdirSync(join(dir, "images"), { recursive: true });
+	writeFileSync(join(dir, "images", "painting.jpg"), Buffer.from([0xff, 0xd8, 0xff]));
+
+	it("serves a picture from images/ beside the scene, by its kind", async () => {
+		const res = await houseRoutes(file).request("/house/images/painting.jpg");
+		expect(res.status).toBe(200);
+		expect(res.headers.get("content-type")).toBe("image/jpeg");
+		expect(Array.from(new Uint8Array(await res.arrayBuffer()))).toEqual([0xff, 0xd8, 0xff]);
+	});
+
+	it("answers 304 to the tag it gave, and 404 to a name it does not have", async () => {
+		const first = await houseRoutes(file).request("/house/images/painting.jpg");
+		const tag = first.headers.get("etag") ?? "";
+		const again = await houseRoutes(file).request("/house/images/painting.jpg", {
+			headers: { "if-none-match": tag },
+		});
+		expect(again.status).toBe(304);
+		expect((await houseRoutes(file).request("/house/images/absent.jpg")).status).toBe(404);
+	});
+
+	it("reaches nothing outside images/: a name of letters, digits and dashes only", async () => {
+		for (const name of ["..%2Fpictured.json", "painting.JPG", "painting.gif", ".jpg"])
+			expect((await houseRoutes(file).request(`/house/images/${name}`)).status).toBe(404);
 	});
 });

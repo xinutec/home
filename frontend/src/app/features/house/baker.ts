@@ -75,7 +75,7 @@ export async function bakeLightmap(
 		const transmission = material instanceof THREE.MeshPhysicalMaterial ? material.transmission : 0;
 		const glass = transmission > 0;
 		const frosted = glass && (std?.roughness ?? 1) > CLEAR_GLASS_ROUGHNESS;
-		const albedo = std ? std.color : new THREE.Color(0.5, 0.5, 0.5);
+		const albedo = std ? albedoOf(std) : new THREE.Color(0.5, 0.5, 0.5);
 		// Where it stands: a door baked open is drawn at rest and placed by its matrix.
 		mesh.updateMatrixWorld();
 		const p = mesh.geometry.getAttribute('position').clone().applyMatrix4(mesh.matrixWorld);
@@ -698,4 +698,11 @@ function finish(
 		}
 	}
 	return next;
+}
+
+/** What a surface of `material` bounces: the colour it is drawn in, or a picture's
+ *  mean (`MaterialLibrary` keeps it). */
+function albedoOf(material: THREE.MeshStandardMaterial): THREE.Color {
+	const albedo: unknown = material.userData['albedo'];
+	return albedo instanceof THREE.Color ? albedo : material.color;
 }

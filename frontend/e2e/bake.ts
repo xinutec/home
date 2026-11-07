@@ -75,6 +75,8 @@ const TYPES: Record<string, string> = {
 	'.webmanifest': 'application/manifest+json',
 	'.svg': 'image/svg+xml',
 	'.woff2': 'font/woff2',
+	'.jpg': 'image/jpeg',
+	'.png': 'image/png',
 	'.ico': 'image/x-icon',
 };
 
@@ -95,6 +97,17 @@ await ctx.route(new RegExp(`^${ORIGIN}/(?!api/|auth/|login)`), (route) => {
 	return type && existsSync(file)
 		? route.fulfill({ body: readFileSync(file), contentType: type })
 		: route.fulfill({ body: readFileSync(`${DIST}/index.html`), contentType: 'text/html' });
+});
+// The scene's pictures, from scenes/images/ as the server serves them.
+await ctx.route('**/api/house/images/*', (route) => {
+	const file = join(
+		ROOT,
+		'scenes/images',
+		new URL(route.request().url()).pathname.split('/').pop() ?? '',
+	);
+	return existsSync(file)
+		? route.fulfill({ body: readFileSync(file), contentType: TYPES[extname(file)] })
+		: route.fulfill({ status: 404, body: '' });
 });
 await ctx.route('**/api/house', (route) =>
 	route.fulfill({ body: readFileSync(SCENE), contentType: 'application/json' }),

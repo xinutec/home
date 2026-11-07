@@ -202,6 +202,10 @@ export interface MaterialSpec {
 	transmission?: number;
 	/** Metres one repeat of the texture covers. */
 	textureScale?: number;
+	/** A picture in scenes/images/ painted on the front of a part made of it (a
+	 *  painting, a postcard), its other faces in `color`, which is the picture's mean:
+	 *  what the bake bounces. */
+	image?: string;
 	/** Not measured yet: where the values came from and what to measure. */
 	estimate?: string;
 }

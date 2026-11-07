@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import type { CameraQuery } from './camera';
 import type { Furniture, Glazing, HouseScene, Part, Room, WallOpening } from './house.model';
-import { partsOf, solidsOf } from './assembly';
+import { partsOf, pieceId, solidsOf } from './assembly';
 import type { JointState } from './assembly';
 import { MaterialLibrary, named, partMaterial, surfaceMaterial } from './materials';
 import { mergeStatic } from './merge';
@@ -50,7 +50,11 @@ export function buildInterior(
 ): Lit | undefined {
 	const room = scene.rooms.find((r) => r.name === roomName);
 	if (!room) return undefined;
-	const mats = new MaterialLibrary(<T extends { dispose(): void }>(r: T) => view.own(r));
+	const mats = new MaterialLibrary(
+		<T extends { dispose(): void }>(r: T) => view.own(r),
+		true,
+		() => view.requestFrame(),
+	);
 	// Night, physically: no daylight; the ceiling lights' glass glows instead.
 	buildHouse(view, scene, mats, physical, physical && !!camera.night);
 
@@ -214,15 +218,26 @@ export function pieceMeshes(
 	return solidsOf(f, state).map((sol, k) => {
 		const part = parts[k];
 		const [hw, h, hd] = [sol.hw, sol.y1 - sol.y0, sol.hd];
-		const shape = partGeometry(part, hw, h, hd);
+		const spec = partMaterial(scene, f, part);
+		if (spec.image && (part.shape ?? part.split))
+			throw new Error(`${pieceId(f)}/${part.id}: a picture goes on a plain box's front`);
+		// A picture on its front (+z, the fifth of a box's faces), its other faces plain.
+		const shape = spec.image
+			? new THREE.BoxGeometry(hw * 2, h, hd * 2)
+			: partGeometry(part, hw, h, hd);
 		const geom = stage.own(part.split ? split(shape, part.split.plane, hw, h, hd) : shape);
 		// A sheet has two faces to see; a solid shows only its outside.
 		const sheet = part.shape === 'folds' || part.shape === 'fronds';
 		const side = sheet ? THREE.DoubleSide : THREE.FrontSide;
-		const material = mats.get(partMaterial(scene, f, part), side);
+		const material = mats.get(spec, side);
+		const plain = spec.image ? mats.get({ ...spec, image: undefined }, side) : material;
 		const mesh = new THREE.Mesh(
 			geom,
-			part.split ? [material, mats.get(named(scene, part.split.material), side)] : material,
+			spec.image
+				? [plain, plain, plain, plain, material, plain]
+				: part.split
+					? [material, mats.get(named(scene, part.split.material), side)]
+					: material,
 		);
 		mesh.position.set(sol.x, (sol.y0 + sol.y1) / 2, sol.z);
 		mesh.rotation.y = sol.yaw;

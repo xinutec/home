@@ -38,6 +38,8 @@ const TYPES: Record<string, string> = {
 	'.webmanifest': 'application/manifest+json',
 	'.svg': 'image/svg+xml',
 	'.woff2': 'font/woff2',
+	'.jpg': 'image/jpeg',
+	'.png': 'image/png',
 	'.ico': 'image/x-icon',
 };
 // As e2e/bake.ts: Metal on the Mac, EGL on Linux (horus: e2e/bake-horus.sh's setup).
@@ -65,6 +67,13 @@ await ctx.route('**/api/house/bake', (r) =>
 		contentType: 'application/octet-stream',
 	}),
 );
+// The scene's pictures, from scenes/images/ as the server serves them.
+await ctx.route('**/api/house/images/*', (r) => {
+	const f = join(ROOT, 'scenes/images', new URL(r.request().url()).pathname.split('/').pop() ?? '');
+	return existsSync(f)
+		? r.fulfill({ body: readFileSync(f), contentType: TYPES[extname(f)] })
+		: r.fulfill({ status: 404, body: '' });
+});
 await ctx.route('**/api/house', (r) =>
 	r.fulfill({
 		body: readFileSync(a.scene ?? join(ROOT, 'scenes/house.json')),

@@ -48,6 +48,8 @@ export class MaterialLibrary {
 		private readonly own: <T extends { dispose(): void }>(r: T) => T,
 		/** Off where nothing is drawn (the physics, in Node): no canvas to paint them on. */
 		private readonly textures = true,
+		/** Called as each picture (`MaterialSpec.image`) arrives, to draw it. */
+		private readonly loaded: () => void = () => undefined,
 	) {}
 
 	/** `side`: walls, floors and ceilings are planes seen from both sides. */
@@ -64,7 +66,17 @@ export class MaterialLibrary {
 				side,
 			}),
 		);
-		if (spec.texture && this.textures) {
+		// What the bake bounces: a picture's mean, though it is drawn untinted.
+		mat.userData['albedo'] = mat.color.clone();
+		if (spec.image && this.textures) {
+			const map = new THREE.TextureLoader().load(`/api/house/images/${spec.image}`, () =>
+				this.loaded(),
+			);
+			map.colorSpace = THREE.SRGBColorSpace;
+			map.anisotropy = 8;
+			mat.map = this.own(map);
+			mat.color.set(0xffffff);
+		} else if (spec.texture && this.textures) {
 			const map = this.pattern(spec.texture).clone();
 			// Box faces and the floor carry UVs in metres; a repeat of 1/scale tiles it.
 			const repeat = 1 / (spec.textureScale ?? 1);
@@ -93,6 +105,7 @@ export class MaterialLibrary {
 				side,
 			}),
 		);
+		mat.userData['albedo'] = mat.color.clone();
 		this.built.set(key, mat);
 		return mat;
 	}
