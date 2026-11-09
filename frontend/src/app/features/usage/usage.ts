@@ -56,6 +56,11 @@ export class UsagePage implements OnInit, OnDestroy {
 		return resetsAt > this.now() ? pct : null;
 	}
 
+	/** Whether a figure shows anything spent, as the card rounds it. */
+	protected spent(pct: number | null): boolean {
+		return pct !== null && Math.round(pct) > 0;
+	}
+
 	/** "resets in 2h 5m", or "window has reset" once it has; empty with no reset time. */
 	protected fmtReset(resetsAt: number | null): string {
 		if (resetsAt === null) {

@@ -113,4 +113,12 @@ describe('UsagePage', () => {
 		// Counted: "Weekly ·" also matches the all-models card.
 		expect((await rendered(reading([]))).querySelectorAll('.cu-card').length).toBe(2);
 	});
+
+	it('shows no five-hour card for an account without that limit', async () => {
+		for (const five_hour_pct of [null, 0.4]) {
+			const host = await rendered({ ...reading([]), five_hour_pct });
+			expect(host.textContent).not.toContain('5-hour window');
+			expect(host.querySelectorAll('.cu-card').length).toBe(1);
+		}
+	});
 });

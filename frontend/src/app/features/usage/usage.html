@@ -10,22 +10,25 @@
 			</span>
 		</div>
 		<div class="cu-grid">
-			<mat-card class="cu-card" appearance="outlined">
-				<div class="cu-top">
-					<span class="cu-name">5-hour window</span>
-					<span class="cu-pct">
-						{{ fiveHour != null ? (fiveHour | number: '1.0-0') + '%' : '—' }}
-					</span>
-				</div>
-				<app-usage-level
-					[pct]="fiveHour"
-					[resetsAt]="u.five_hour_resets_at"
-					[takenAt]="u.ts"
-					[span]="fiveHours"
-					label="5-hour window"
-				/>
-				<div class="cu-reset">{{ fmtReset(u.five_hour_resets_at) }}</div>
-			</mat-card>
+			<!-- No card for an account without the limit: it reports null, or nothing spent. -->
+			@if (spent(u.five_hour_pct)) {
+				<mat-card class="cu-card" appearance="outlined">
+					<div class="cu-top">
+						<span class="cu-name">5-hour window</span>
+						<span class="cu-pct">
+							{{ fiveHour != null ? (fiveHour | number: '1.0-0') + '%' : '—' }}
+						</span>
+					</div>
+					<app-usage-level
+						[pct]="fiveHour"
+						[resetsAt]="u.five_hour_resets_at"
+						[takenAt]="u.ts"
+						[span]="fiveHours"
+						label="5-hour window"
+					/>
+					<div class="cu-reset">{{ fmtReset(u.five_hour_resets_at) }}</div>
+				</mat-card>
+			}
 			<mat-card class="cu-card" appearance="outlined">
 				<div class="cu-top">
 					<span class="cu-name">Weekly · all models</span>
