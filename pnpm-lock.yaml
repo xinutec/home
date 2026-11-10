@@ -34,7 +34,7 @@ importers:
         specifier: ^2.4.15
         version: 2.5.15
       '@types/node':
-        specifier: ^24.19.0
+        specifier: ^24.19.2
         version: 24.19.2
       typescript:
         specifier: ~6.0.3
