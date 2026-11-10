@@ -7,20 +7,21 @@ import type { Layout } from './unwrap';
  * light runs from a dark corner to the window's glow, and RGBM keeps a pixel's
  * own range), the bytes gzipped.
  *
- * Header, little-endian, 36 bytes: the magic "HBK4", the room's checksum (its
+ * Header, little-endian, 40 bytes: the magic "HBK5", the room's checksum (its
  * vertices and lightmap coordinates, as `checksum` reads them), the atlas's width
  * and height, the FNV-1a of the scene file's bytes it was baked from (e2e/bake.ts
  * writes it; tests/scene.test.ts fails while it differs from scenes/house.json's,
  * so no edit ships unbaked), the RGBM range (f32), how many joints' changes follow
- * the pixels (u32), how many charts its layout has (u32), and how many lamps'
- * light follows the joints' (u32).
+ * the pixels (u32), how many charts its layout has (u32), how many lamps' light
+ * follows the joints' (u32), and how many pairs' changes follow the lamps' (u32).
  *
  * After the pixels, each joint's change of light (`LightChange`): its key's length
  * (u16) and UTF-8 bytes, the value it was baked open at (f64), how many texels it
  * changes (u32), their indices in order as the gaps between them (u32 each, the
  * first from 0), and their RGB changes as half floats, every low byte and then
  * every high one: so laid out they compress, the gaps small, the high bytes alike.
- * Then each lamp's light, as a change from none (`lampLight`), the same way.
+ * Then each lamp's light, as a change from none (`lampLight`), the same way; then
+ * each pair's change, the same way.
  *
  * Then the atlas's layout (`Layout`), chart by chart: its key's two hashes (u32
  * each) and twin number (u16), its corner in the atlas (u16 x, y), and its box in
@@ -37,6 +38,9 @@ export interface Lightmap {
 	/** Each lamp's light, keyed by its id, from none: baked white at LAMP_BAKED_LUMENS
 	 *  with no daylight, `at` 1. */
 	lamps: LightChange[];
+	/** What opening a joint does to a lamp's light (`pairKey`), as `joints` to the
+	 *  daylight's: baked with that joint alone open at `at`, near it. */
+	pairs: LightChange[];
 	/** Where each chart is in the atlas: the page lays its atlas out to it. */
 	layout: Layout;
 }
@@ -96,8 +100,7 @@ export function lampLight(key: string, light: Float32Array): LightChange {
 	const y = new Float32Array(n);
 	for (let i = 0; i < n; i++)
 		y[i] = 0.2126 * light[i * 3] + 0.7152 * light[i * 3 + 1] + 0.0722 * light[i * 3 + 2];
-	const lit = y.filter((v) => v > 0).sort();
-	const floor = lit.length > 0 ? LAMP_FLOOR * lit[Math.floor(0.99 * (lit.length - 1))] : 0;
+	const floor = LAMP_FLOOR * brightEnd(light);
 	const texels: number[] = [];
 	const delta: number[] = [];
 	for (let i = 0; i < n; i++) {
@@ -108,6 +111,33 @@ export function lampLight(key: string, light: Float32Array): LightChange {
 	return { key, at: 1, texels: Uint32Array.from(texels), delta: Float32Array.from(delta) };
 }
 
+/** What opening a joint does to a lamp's light (`pair`, from `lightChange`) as the
+ *  bake file keeps it: its texels changed by LAMP_FLOOR of the lamp's bright end
+ *  or more, to LAMP_BITS, as the lamp's own (`lamp`, from `lampLight`). The
+ *  same again changes nothing, so a kept pair can be trimmed again. */
+export function trimmedPair(pair: LightChange, lamp: LightChange): LightChange {
+	const floor = LAMP_FLOOR * brightEnd(lamp.delta);
+	const texels: number[] = [];
+	const delta: number[] = [];
+	pair.texels.forEach((t, i) => {
+		const [r, g, b] = pair.delta.subarray(i * 3, i * 3 + 3);
+		if (Math.abs(0.2126 * r + 0.7152 * g + 0.0722 * b) < floor) return;
+		texels.push(t);
+		delta.push(toBits(r, LAMP_BITS), toBits(g, LAMP_BITS), toBits(b, LAMP_BITS));
+	});
+	return { ...pair, texels: Uint32Array.from(texels), delta: Float32Array.from(delta) };
+}
+
+/** The 99th percentile of the luminance of `rgb`'s lit texels: a lamp's bright end. */
+function brightEnd(rgb: Float32Array): number {
+	const n = rgb.length / 3;
+	const y = new Float32Array(n);
+	for (let i = 0; i < n; i++)
+		y[i] = 0.2126 * rgb[i * 3] + 0.7152 * rgb[i * 3 + 1] + 0.0722 * rgb[i * 3 + 2];
+	const lit = y.filter((v) => v > 0).sort();
+	return lit.length > 0 ? lit[Math.floor(0.99 * (lit.length - 1))] : 0;
+}
+
 /** `v` rounded to `bits` bits of mantissa. */
 export function toBits(v: number, bits: number): number {
 	if (v === 0 || !Number.isFinite(v)) return v;
@@ -115,8 +145,20 @@ export function toBits(v: number, bits: number): number {
 	return Math.round(v / step) * step;
 }
 
-const MAGIC = 0x344b4248; // "HBK4"
-export const HEADER = 36;
+/** A joint and a lamp's pair: its key in `Lightmap.pairs`. */
+export function pairKey(joint: string, lamp: string): string {
+	return `${joint}|${lamp}`;
+}
+
+/** The joint and the lamp a pair's key names. */
+export function pairOf(key: string): { joint: string; lamp: string } {
+	const at = key.lastIndexOf('|');
+	if (at < 0) throw new Error(`${key} is no pair`);
+	return { joint: key.slice(0, at), lamp: key.slice(at + 1) };
+}
+
+const MAGIC = 0x354b4248; // "HBK5"
+export const HEADER = 40;
 
 /** The header and the uncompressed RGBM pixels of a lightmap. */
 export function encodeLightmap(
@@ -127,6 +169,7 @@ export function encodeLightmap(
 	joints: LightChange[] = [],
 	layout: Layout = new Map(),
 	lamps: LightChange[] = [],
+	pairs: LightChange[] = [],
 ): Uint8Array {
 	let peak = 0;
 	light.forEach((v, i) => {
@@ -135,7 +178,7 @@ export function encodeLightmap(
 		peak = Math.max(peak, v);
 	});
 	const range = Math.max(peak, 1e-6);
-	const changes = [...joints, ...lamps];
+	const changes = [...joints, ...lamps, ...pairs];
 	const keys = changes.map((j) => new TextEncoder().encode(j.key));
 	const tail =
 		changes.reduce((n, j, k) => n + 2 + keys[k].length + 8 + 4 + j.texels.length * 10, 0) +
@@ -150,6 +193,7 @@ export function encodeLightmap(
 	head.setUint32(24, joints.length, true);
 	head.setUint32(28, layout.size, true);
 	head.setUint32(32, lamps.length, true);
+	head.setUint32(36, pairs.length, true);
 	for (let i = 0; i < width * height; i++) {
 		const [r, g, b] = [light[i * 3], light[i * 3 + 1], light[i * 3 + 2]];
 		const m = Math.min(255, Math.ceil((Math.max(r, g, b) / range) * 255));
@@ -262,7 +306,9 @@ export async function decodeLightmap(
 	if (!joints) return undefined;
 	const lamps = readChanges(px, joints.at, head.getUint32(32, true));
 	if (!lamps) return undefined;
-	const layout = readLayout(px, lamps.at, head.getUint32(28, true));
+	const pairs = readChanges(px, lamps.at, head.getUint32(36, true));
+	if (!pairs) return undefined;
+	const layout = readLayout(px, pairs.at, head.getUint32(28, true));
 	if (!layout) return undefined;
 	return {
 		checksum: head.getUint32(4, true),
@@ -271,6 +317,7 @@ export async function decodeLightmap(
 		data,
 		joints: joints.changes,
 		lamps: lamps.changes,
+		pairs: pairs.changes,
 		layout,
 	};
 }

@@ -7,7 +7,9 @@ import {
 	lampLight,
 	lightChange,
 	mergedChange,
+	pairKey,
 	relaid,
+	trimmedPair,
 } from './bake-file';
 import { roomChecksum } from './baked-light';
 import { bakeLightmap } from './baker';
@@ -26,14 +28,16 @@ const LIGHT_REACH = 0.75;
  *  little way into the next room. Further on, it is left out. */
 const LAMP_REACH = 1;
 
-/** A lamp to bake: its light's id, and the region its light is traced in. */
+/** A lamp to bake: its light's id, the region its light is traced in, and its
+ *  room's box, whose joints make pairs with it. */
 export interface LampRegion {
 	key: string;
 	region: THREE.Box3;
+	room: THREE.Box3;
 }
 
 /** Each of the scene's lights, with its room (its piece's), from floor to ceiling,
- *  grown by LAMP_REACH: where its light is traced. */
+ *  and that grown by LAMP_REACH: where its light is traced. */
 export function lampRegions(scene: HouseScene): LampRegion[] {
 	return (scene.lights ?? []).map((l) => {
 		const f = scene.furniture.find((p) => p.id === l.piece);
@@ -47,7 +51,7 @@ export function lampRegions(scene: HouseScene): LampRegion[] {
 			box.expandByPoint(new Vector3(p.x, floor, p.z));
 			box.expandByPoint(new Vector3(p.x, floor + scene.height, p.z));
 		}
-		return { key: l.id, region: box.expandByScalar(LAMP_REACH) };
+		return { key: l.id, region: box.clone().expandByScalar(LAMP_REACH), room: box };
 	});
 }
 /** The bake the page is fed, and what e2e/bake.ts keeps beside it: its raw sums, and
@@ -96,8 +100,11 @@ export interface HouseBake {
  * the surfaces that changed since then and on charts no bake has lit, and bakes
  * again only the joints near them, in those places only: the rest is that bake's.
  * `shutOnly`, it bakes no joint: the shut house's light alone, to measure.
- * Then each lamp's light, alone, in its region (`lampRegions`), kept from the last
- * bake where no edit reached it, as a joint's is; `shutOnly` bakes none.
+ * Then each lamp's light, alone, in its region (`lampRegions`), and what opening
+ * each joint whose region meets it does to that light (a pair, `pairKey`), traced
+ * near the joint from the lamp's own sums. A lamp is kept from the last bake, with
+ * its pairs, where no edit reached it and its every joint was kept; else it is
+ * baked again, with all of them. `shutOnly` bakes none.
  */
 export async function bakeHouse(
 	renderer: THREE.WebGLRenderer,
@@ -118,7 +125,14 @@ export async function bakeHouse(
 	const fresh = new Uint8Array(width * height);
 	for (const [x, y, w, h] of lit.atlas.fresh)
 		for (let v = y; v < y + h; v++) fresh.fill(1, v * width + x, v * width + x + w);
-	const region = (key: string) => joints.reach(key).expandByScalar(LIGHT_REACH);
+	// Where each joint's parts pass, once: it is worked out pose by pose.
+	const reaches = new Map(joints.keys().map((k) => [k, joints.reach(k)]));
+	const reach = (key: string) => {
+		const r = reaches.get(key);
+		if (!r) throw new Error(`no joint ${key}`);
+		return r;
+	};
+	const region = (key: string) => reach(key).clone().expandByScalar(LIGHT_REACH);
 	const kept = keptChanges(
 		since?.map.joints ?? [],
 		joints.keys().map((key) => ({ key, at: joints.openAt(key), region: region(key) })),
@@ -130,10 +144,22 @@ export async function bakeHouse(
 		lamps.map((l) => ({ ...l, at: 1 })),
 		(r) => !!edited?.meets(r),
 	);
+	// The joints in a lamp's room, which make pairs with it: in another, its light
+	// barely reaches inside a cupboard.
+	const near = (l: LampRegion) =>
+		shutOnly
+			? []
+			: joints.keys().filter((j) => l.room.containsPoint(reach(j).getCenter(new Vector3())));
+	const lastPairs = new Map((since?.map.pairs ?? []).map((p) => [p.key, p]));
+	const keepsPairs = (l: LampRegion) =>
+		near(l).every((j) => kept.has(j) && lastPairs.get(pairKey(j, l.key))?.at === joints.openAt(j));
+	for (const l of lamps) if (!keepsPairs(l)) keptLamps.delete(l.key);
 	const lampKeys = shutOnly ? [] : lamps.filter((l) => !keptLamps.has(l.key));
-	// Progress over every bake: the shut one, then each joint's, then each lamp's.
+	const pairCount = lampKeys.reduce((n, l) => n + near(l).length, 0);
+	// Progress over every bake: the shut one, then each joint's, then each lamp's and
+	// its pairs'.
 	const report = (k: number) => (done: number) =>
-		progress(k * samples + done, (keys.length + lampKeys.length + 1) * samples);
+		progress(k * samples + done, (keys.length + lampKeys.length + pairCount + 1) * samples);
 	const { light, summed, raw, traced, ms } = await bakeLightmap(
 		renderer,
 		lit,
@@ -174,29 +200,71 @@ export async function bakeHouse(
 	// Each lamp from none: no light anywhere it is not traced.
 	const none = new Float32Array(width * height * 4);
 	const baked: LightChange[] = [];
+	const pairs: LightChange[] = [];
 	const lampMs = { build: 0, trace: 0, read: 0, finish: 0 };
-	for (const [k, { key, region }] of lampKeys.entries()) {
+	let done = keys.length + 1;
+	for (const l of lampKeys) {
 		const on = await bakeLightmap(
 			renderer,
 			lit,
 			samples,
 			4,
-			report(keys.length + k + 1),
-			{ traces: (_, p) => region.containsPoint(p), base: none },
-			key,
+			report(done++),
+			{ traces: (_, p) => l.region.containsPoint(p), base: none },
+			l.key,
 		);
-		baked.push(lampLight(key, on.light));
+		baked.push(lampLight(l.key, on.light));
 		for (const k of ['build', 'trace', 'read', 'finish'] as const) lampMs[k] += on.ms[k];
+		// Each joint near it opened alone: the lamp's light traced again around it.
+		for (const j of near(l)) {
+			const at = joints.openAt(j);
+			joints.set(j, at);
+			const inside = region(j);
+			const open = await bakeLightmap(
+				renderer,
+				lit,
+				samples,
+				4,
+				report(done++),
+				{ traces: (_, p) => inside.containsPoint(p) && l.region.containsPoint(p), base: on.raw },
+				l.key,
+			);
+			joints.set(j, joints.closedAt(j));
+			pairs.push(lightChange(pairKey(j, l.key), at, on.light, open.light));
+			for (const k of ['build', 'trace', 'read', 'finish'] as const) lampMs[k] += open.ms[k];
+		}
 	}
 	const lamped = (shutOnly ? [] : lamps)
 		.map(({ key }) => keptLamps.get(key) ?? baked.find((c) => c.key === key))
 		.filter((c) => c !== undefined);
+	// Every pair, a kept lamp's as they were, each trimmed by its lamp's light.
+	const paired = (shutOnly ? [] : lamps).flatMap((l) => {
+		const lamp = lamped.find((c) => c.key === l.key);
+		if (!lamp) throw new Error(`no light for the lamp ${l.key}`);
+		return near(l)
+			.map((j) =>
+				keptLamps.has(l.key)
+					? lastPairs.get(pairKey(j, l.key))
+					: pairs.find((p) => p.key === pairKey(j, l.key)),
+			)
+			.filter((c) => c !== undefined)
+			.map((p) => trimmedPair(p, lamp));
+	});
 	const seen = new Uint8Array(4 + surfaces.tris.byteLength + surfaces.salts.byteLength);
 	new DataView(seen.buffer).setUint32(0, surfaces.salts.length, true);
 	seen.set(new Uint8Array(surfaces.tris.buffer), 4);
 	seen.set(new Uint8Array(surfaces.salts.buffer), 4 + surfaces.tris.byteLength);
 	return {
-		file: encodeLightmap(light, width, height, roomChecksum(lit), all, lit.atlas.layout, lamped),
+		file: encodeLightmap(
+			light,
+			width,
+			height,
+			roomChecksum(lit),
+			all,
+			lit.atlas.layout,
+			lamped,
+			paired,
+		),
 		raw,
 		seen,
 		light,
@@ -216,6 +284,7 @@ export async function bakeHouse(
 			}),
 			joints: Object.fromEntries(changes.map((c) => [c.key, c.texels.length])),
 			lamps: Object.fromEntries(baked.map((c) => [c.key, c.texels.length])),
+			pairs: Object.fromEntries(pairs.map((c) => [c.key, c.texels.length])),
 			ms: { ...times, lamps: lampMs },
 			seconds: Math.round((performance.now() - started) / 100) / 10,
 		},

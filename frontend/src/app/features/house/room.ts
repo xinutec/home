@@ -323,7 +323,15 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		}
 		if (map && texture && (map.joints.length > 0 || map.lamps.length > 0))
 			this.liveLight = view.own(
-				new LiveLight(view.renderer, view.scene, texture, map.joints, map.lamps, lit.meshes),
+				new LiveLight(
+					view.renderer,
+					view.scene,
+					texture,
+					map.joints,
+					map.lamps,
+					map.pairs,
+					lit.meshes,
+				),
 			);
 		if (applied) {
 			const reflections = addReflections(view.renderer, view.scene, lit);

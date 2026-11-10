@@ -7,8 +7,11 @@ import {
 	encodeLightmap,
 	lampLight,
 	toBits,
+	trimmedPair,
 	lightChange,
 	mergedChange,
+	pairKey,
+	pairOf,
 	relaid,
 } from './bake-file';
 
@@ -105,7 +108,7 @@ describe('lightmap file', () => {
 		expect([...(got?.joints[0].delta ?? [])]).toEqual([1, 2, 3, -1, -2, -3]);
 	});
 
-	it('reads back each lamp’s light apart from the joints, before the layout', async () => {
+	it('reads back each lamp’s light and each pair apart from the joints, before the layout', async () => {
 		const none = new Float32Array(12);
 		const lit = none.slice().fill(0.5, 3, 6);
 		const joint = lightChange('cab/door', -90, none, lit);
@@ -116,9 +119,13 @@ describe('lightmap file', () => {
 				{ at: [0, 0] as [number, number], box: new Box3(new Vector3(), new Vector3(1, 1, 1)) },
 			],
 		]);
-		const file = encodeLightmap(none, 2, 2, 7, [joint], layout, [lamp]);
+		const pair = lightChange(pairKey('cab/door', 'ceiling-lamp'), -90, none, lit);
+		const file = encodeLightmap(none, 2, 2, 7, [joint], layout, [lamp], [pair]);
 		const got = await decodeLightmap(file.buffer as ArrayBuffer, raw);
 		expect(got?.joints.map((j) => j.key)).toEqual(['cab/door']);
+		expect(got?.pairs.map((p) => [pairOf(p.key), p.at])).toEqual([
+			[{ joint: 'cab/door', lamp: 'ceiling-lamp' }, -90],
+		]);
 		expect(got?.lamps.map((l) => [l.key, l.at, [...l.texels]])).toEqual([['ceiling-lamp', 1, [1]]]);
 		expect(got?.lamps[0].delta[0]).toBeCloseTo(0.5, 3);
 		expect([...(got?.layout.keys() ?? [])]).toEqual(['1.2']);
@@ -136,6 +143,21 @@ describe('lightmap file', () => {
 		expect(toBits(1 + 1 / 100, 6)).toBe(1 + 1 / 64);
 		expect(toBits(0.3, 6)).toBeCloseTo(0.3, 2);
 		expect(Math.abs(toBits(0.3, 6) - 0.3) / 0.3).toBeLessThan(1 / 128);
+	});
+
+	it('trims a pair to what is over its lamp’s floor, and again to the same', () => {
+		// The lamp: 200 texels lit 1. The pair changes three by 0.5, 0.02 and 0.005.
+		const lamp = lampLight('salt', new Float32Array(600).fill(1));
+		const pair = {
+			key: pairKey('cab/door', 'salt'),
+			at: -90,
+			texels: Uint32Array.from([3, 4, 5]),
+			delta: Float32Array.from([0.5, 0.5, 0.5, -0.02, -0.02, -0.02, 0.005, 0.005, 0.005]),
+		};
+		const trimmed = trimmedPair(pair, lamp);
+		expect([...trimmed.texels]).toEqual([3, 4]);
+		expect(trimmed.delta[3]).toBeCloseTo(-0.02, 3);
+		expect(trimmedPair(trimmed, lamp)).toEqual(trimmed);
 	});
 
 	it('refuses a joint whose texels are not in order', () => {

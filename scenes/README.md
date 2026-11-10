@@ -117,8 +117,9 @@ hand. The 3D house view (`frontend/.../features/house`) renders from these.
   a millimetre.
 - **lights** — each lamp: the `piece` it is, the part of it that `glows` (the
   glass, the flame), its `lumens` and colour temperature `kelvin`. The bake gives
-  each lamp a light of its own, traced in its room and a metre past its walls; in
-  the room view a tap on the lamp switches it, and while one is on it is evening.
+  each lamp a light of its own, traced in its room and a metre past its walls, and
+  for each door or drawer in its room, what opening it does to that light; in the
+  room view a tap on the lamp switches it, and while one is on it is evening.
   Lumens and colour are applied as the room is drawn, so changing them needs no
   new trace.
 - **Physics** (`frontend/.../house/physics.ts`, run on this file by

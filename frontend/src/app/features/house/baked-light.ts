@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 
-import type { LightChange, Lightmap } from './bake-file';
-import { checksum } from './bake-file';
+import { type LightChange, type Lightmap, checksum, pairOf } from './bake-file';
 import type { Lit } from './room-builder';
 import { SKY, windowRadiance } from './sky';
 import { GUTTER } from './unwrap';
@@ -195,12 +194,13 @@ const LIST_ROW = 2048;
  * scaled by the daylight; and on each change every texel a joint or lamp changes
  * is drawn again, as a point: the daylight times its light shut plus each joint's
  * change of light (`LightChange`, baked with it open) as far as that joint is open,
- * plus each lamp's light by its weight (`Lamps.weight`), never below none. What
- * the GPU holds never changes, only how far each joint is open, how bright each
- * lamp is and the daylight, so nothing is uploaded a frame.
+ * plus each lamp's light by its weight (`Lamps.weight`) and each pair's change of
+ * it (a joint opened under a lamp) by both, never below none. What the GPU holds
+ * never changes, only how far each joint is open, how bright each lamp is and the
+ * daylight, so nothing is uploaded a frame.
  *
- * A joint's change was baked in daylight, so it goes with the daylight; the
- * lamps' light is baked with every door shut, and stays so as one opens.
+ * A joint's change was baked in daylight, so it goes with the daylight; a lamp's
+ * light with every joint shut, and a pair's with its joint alone open.
  */
 export class LiveLight {
 	private readonly target: THREE.WebGLRenderTarget;
@@ -210,6 +210,10 @@ export class LiveLight {
 	private readonly lampKeys: string[];
 	private readonly open: { value: number[] };
 	private readonly lamps: { value: THREE.Vector3[] };
+	/** Each pair's joint and lamp, by index, and its weight: how far open the joint
+	 *  is times the lamp's weight. */
+	private readonly pairs: { joint: number; lamp: number }[];
+	private readonly pairWeights: { value: THREE.Vector3[] };
 	private readonly daylight: { value: number };
 	private readonly owned: { dispose(): void }[] = [];
 	/** The points, and how many of them, from the first, some joint changes. */
@@ -222,6 +226,7 @@ export class LiveLight {
 		base: THREE.DataTexture,
 		joints: LightChange[],
 		lamps: LightChange[],
+		pairs: LightChange[],
 		/** The room's meshes as laid out in the lightmap: which of them moves on what. */
 		meshes: THREE.Mesh[],
 	) {
@@ -262,12 +267,13 @@ export class LiveLight {
 		// where its list of changes is in a texture of them all, the joints' first.
 		const data: unknown = base.image.data;
 		if (!(data instanceof Uint16Array)) throw new Error('the lightmap is not half floats');
-		const lists = jointLists([...joints, ...lamps]);
+		// Indexed joints first, then pairs, then lamps.
+		const lists = jointLists([...joints, ...pairs, ...lamps]);
 		const n = lists.texels.length;
-		// The lists put the texels some joint changes first: as a door moves, only those
-		// are drawn again.
+		// The lists put the texels a joint or pair changes first: as a door moves, only
+		// those are drawn again.
 		const seen = new Set<number>();
-		for (const j of joints) for (const t of j.texels) seen.add(t);
+		for (const j of [...joints, ...pairs]) for (const t of j.texels) seen.add(t);
 		this.jointTexels = seen.size;
 		const shut = new Float32Array(n * 3);
 		lists.texels.forEach((t, u) => {
@@ -303,17 +309,29 @@ export class LiveLight {
 		this.lampKeys = lamps.map((l) => l.key);
 		this.open = { value: joints.map(() => 0) };
 		this.lamps = { value: lamps.map(() => new THREE.Vector3()) };
+		this.pairs = pairs.map((p) => {
+			const { joint, lamp } = pairOf(p.key);
+			const j = this.keys.indexOf(joint);
+			const l = this.lampKeys.indexOf(lamp);
+			if (j < 0 || l < 0) throw new Error(`the pair ${p.key} has no joint or lamp`);
+			return { joint: j, lamp: l };
+		});
+		this.pairWeights = { value: pairs.map(() => new THREE.Vector3()) };
 		const material = new THREE.ShaderMaterial({
 			glslVersion: THREE.GLSL3,
 			defines: {
 				JOINTS: joints.length,
+				PAIRS: pairs.length,
 				JOINT_SLOTS: Math.max(1, joints.length),
+				PAIR_SLOTS: Math.max(1, pairs.length),
 				LAMP_SLOTS: Math.max(1, lamps.length),
 				LIST_ROW,
 			},
 			uniforms: {
 				open: this.open,
 				lamps: this.lamps,
+				pairs: this.pairWeights,
+				pairJoint: { value: this.pairs.map((p) => p.joint) },
 				daylight: this.daylight,
 				list: { value: list },
 			},
@@ -321,6 +339,8 @@ export class LiveLight {
 			vertexShader: /* glsl */ `
 				uniform float open[JOINT_SLOTS];
 				uniform vec3 lamps[LAMP_SLOTS];
+				uniform vec3 pairs[PAIR_SLOTS];
+				uniform float pairJoint[PAIR_SLOTS];
 				uniform float daylight;
 				uniform highp sampler2D list;
 				in vec3 shut;
@@ -335,16 +355,18 @@ export class LiveLight {
 					for (int i = 0; i < int(count); i++, at++) {
 						vec4 e = texelFetch(list, ivec2(at % LIST_ROW, at / LIST_ROW), 0);
 						int k = int(e.x);
-						if (k >= JOINTS) {
-							lamp += lamps[k - JOINTS] * e.yzw;
+						if (k >= JOINTS + PAIRS) {
+							lamp += lamps[k - JOINTS - PAIRS] * e.yzw;
 							continue;
 						}
-						// Another joint's change, on a part this texel's joint moves, as far as
-						// that part is still shut: it was baked with it shut.
-						float shut = owner >= 0.0 && int(owner) != k ? 1.0 - open[int(owner)] : 1.0;
-						day += shut * open[k] * e.yzw;
+						// Its joint: another joint's change, on a part this texel's joint moves,
+						// counts as far as that part is still shut: it was baked with it shut.
+						int j = k < JOINTS ? k : int(pairJoint[k - JOINTS]);
+						float shut = owner >= 0.0 && int(owner) != j ? 1.0 - open[int(owner)] : 1.0;
+						if (k < JOINTS) day += shut * open[k] * e.yzw;
+						else lamp += shut * pairs[k - JOINTS] * e.yzw;
 					}
-					vec3 light = daylight * max(day, vec3(0.0)) + lamp;
+					vec3 light = daylight * max(day, vec3(0.0)) + max(lamp, vec3(0.0));
 					vLight = max(light, vec3(0.0));
 					gl_PointSize = 1.0;
 					gl_Position = vec4(position.xy, 0.0, 1.0);
@@ -393,6 +415,9 @@ export class LiveLight {
 		const lit = dark || lamps.some((v, k) => !v.equals(this.lamps.value[k]));
 		this.open.value = open;
 		this.lamps.value = lamps;
+		this.pairWeights.value = this.pairs.map((p) =>
+			lamps[p.lamp].clone().multiplyScalar(open[p.joint]),
+		);
 		this.daylight.value = daylight;
 		if (dark) this.draw(this.copy);
 		this.cloud.geometry.setDrawRange(0, lit ? Infinity : this.jointTexels);
