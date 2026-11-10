@@ -157,6 +157,13 @@ in  { name = "home"
         , timeout_s = 180
         }
       , G.Check::{
+        , name = "tracer tests"
+        , cwd = "tracer"
+        , argv = G.inDevShell [ "cargo", "test" ]
+        , env = G.clippyTarget
+        , timeout_s = 1800
+        }
+      , G.Check::{
         , name = "tracer clippy"
         , cwd = "tracer"
         , argv =

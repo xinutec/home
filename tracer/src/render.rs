@@ -3,6 +3,11 @@
 //! triangle, the OptiX pipeline from build.rs's PTX, and the summed radiance read
 //! back.
 
+#![expect(
+    unsafe_code,
+    reason = "the launch records cross to the GPU as raw memory: DeviceRepr and OptiX calls are FFI"
+)]
+
 use std::ffi::{CString, c_void};
 use std::sync::Arc;
 

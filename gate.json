@@ -309,6 +309,23 @@
         "--no-warn-dirty",
         "--command",
         "cargo",
+        "test"
+      ],
+      "artifacts": [],
+      "cwd": "tracer",
+      "env": {
+        "CARGO_TARGET_DIR": "target/clippy"
+      },
+      "name": "tracer tests",
+      "timeout_s": 1800
+    },
+    {
+      "argv": [
+        "nix",
+        "develop",
+        "--no-warn-dirty",
+        "--command",
+        "cargo",
         "clippy",
         "--all-targets",
         "--",

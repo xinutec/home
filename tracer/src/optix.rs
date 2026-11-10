@@ -2,6 +2,11 @@
 //! optix_stubs.h loads it, and a check of every call's result. The bindings are
 //! build.rs's, from the headers the dev shell fetches.
 
+#![expect(
+    unsafe_code,
+    reason = "OptiX is a C function table loaded at run time: every call is FFI"
+)]
+
 #[expect(
     non_camel_case_types,
     non_snake_case,
