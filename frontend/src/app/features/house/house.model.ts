@@ -20,6 +20,9 @@ export interface Furniture {
 	/** Soft (a bean bag): it settles onto whatever is under it, so resting on anything
 	 *  holds it, wherever its centre of mass is. */
 	soft?: boolean;
+	/** Picked up and put down in the room view (a cushion): it is lit as it moves,
+	 *  from the light probes, not baked. */
+	movable?: boolean;
 	color?: string | null;
 	/** A key into the scene's `materials`; wins over `color` in the room view. */
 	material?: string;

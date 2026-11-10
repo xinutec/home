@@ -28,8 +28,8 @@ import type { Layout } from './unwrap';
  * each) and twin number (u16), its corner in the atlas (u16 x, y), and its box in
  * the room (f32 min x, y, z, max x, y, z).
  *
- * Then each probe grid (`ProbeGrid`): its lamp's and its room's names (u16 length
- * and UTF-8 bytes each), its box's corner and size (f32 x, y, z each), how many
+ * Then each probe grid (`ProbeGrid`): its lamp's (none for the daylight's) and its
+ * room's names (u16 length and UTF-8 bytes each), its box's corner and size (f32 x, y, z each), how many
  * probes along each axis (u16 x, y, z), and its light as half floats, every low
  * byte and then every high one.
  */
@@ -176,11 +176,12 @@ export const FACES: [number, number, number][] = [
 	[0, 0, -1],
 ];
 
-/** One lamp's light in one room, as a grid of probes: `dims` across the room's
- *  box from `min`, `size` over, each at the middle of its cell; `light` RGB per
- *  face per probe, face by face, each face's probes x fastest, then y, then z. */
+/** One lamp's light in one room, or the daylight's (no `lamp`), as a grid of
+ *  probes: `dims` across the room's box from `min`, `size` over, each at the middle
+ *  of its cell; `light` RGB per face per probe, face by face, each face's probes x
+ *  fastest, then y, then z. */
 export interface ProbeGrid {
-	lamp: string;
+	lamp?: string;
 	room: string;
 	min: [number, number, number];
 	size: [number, number, number];
@@ -279,7 +280,7 @@ export function encodeLightmap(
 
 /** A probe grid's names, as bytes. */
 function gridNames(g: ProbeGrid): [Uint8Array, Uint8Array] {
-	return [new TextEncoder().encode(g.lamp), new TextEncoder().encode(g.room)];
+	return [new TextEncoder().encode(g.lamp ?? ''), new TextEncoder().encode(g.room)];
 }
 
 /** A probe grid's bytes in the file. */
@@ -336,7 +337,8 @@ function readGrids(px: Uint8Array, at: number, count: number): ProbeGrid[] | und
 		for (let i = 0; i < n; i++)
 			light[i] = DataUtils.fromHalfFloat(px[at + i] | (px[at + n + i] << 8));
 		at += n * 2;
-		out.push({ lamp: names[0], room: names[1], min, size, dims, light });
+		const lamp = names[0] === '' ? {} : { lamp: names[0] };
+		out.push({ ...lamp, room: names[1], min, size, dims, light });
 	}
 	return out;
 }

@@ -100,8 +100,9 @@ export interface HouseBake {
  * opening each joint in that room does to it (a pair, `pairKey`), traced near the
  * joint from the lamp's own sums. A lamp is kept from the last bake, with its
  * pairs, where no edit reached its room and its every joint was kept; else it is
- * baked again, with all of them. Its light in every other room is traced as probes
- * (`probePoints`) each bake: they are few. `shutOnly` bakes none.
+ * baked again, with all of them. Last, the daylight's and each lamp's light in
+ * every room as probes (`probePoints`), each bake: they are few. `shutOnly` bakes
+ * none.
  */
 export async function bakeHouse(
 	renderer: THREE.WebGLRenderer,
@@ -155,13 +156,14 @@ export async function bakeHouse(
 	for (const l of lamps) if (!keepsPairs(l)) keptLamps.delete(l.key);
 	const lampKeys = shutOnly ? [] : lamps.filter((l) => !keptLamps.has(l.key));
 	const pairCount = lampKeys.reduce((n, l) => n + near(l).length, 0);
-	const probing = shutOnly ? [] : lamps;
+	// The light probes' sources: the daylight (undefined), then each lamp.
+	const sources = shutOnly ? [] : [undefined, ...lamps.map((l) => l.key)];
 	// Progress over every bake: the shut one, then each joint's, then each lamp's and
-	// its pairs', then each lamp's probes.
+	// its pairs', then each source's probes.
 	const report = (k: number) => (done: number) =>
 		progress(
 			k * samples + done,
-			(keys.length + lampKeys.length + pairCount + probing.length + 1) * samples,
+			(keys.length + lampKeys.length + pairCount + sources.length + 1) * samples,
 		);
 	// Which room each texel is in, by its index in `rooms`: a lamp's light is traced
 	// on its own room's.
@@ -247,38 +249,30 @@ export async function bakeHouse(
 			for (const k of ['build', 'trace', 'read', 'finish'] as const) lampMs[k] += open.ms[k];
 		}
 	}
-	// Each lamp's light in every other room, as probes: all its rooms in one trace.
+	// The daylight and each lamp in every room, as probes, all a source's rooms in one
+	// trace: a lamp's own room's are for what moves in it (its surfaces have their
+	// layer), and the daylight's too (they have the lightmap).
+	const boxed = rooms.map((room) => {
+		const box = boxes.get(room);
+		if (!box) throw new Error(`no box for ${room}`);
+		return { room, box, ...probePoints(box) };
+	});
+	const at = new Float32Array(boxed.reduce((n, g) => n + g.at.length, 0));
+	const normal = new Float32Array(at.length);
+	let k = 0;
+	for (const g of boxed) {
+		at.set(g.at, k);
+		normal.set(g.normal, k);
+		k += g.at.length;
+	}
 	const probes: ProbeGrid[] = [];
-	for (const l of probing) {
-		const grids = rooms
-			.filter((r) => r !== l.room)
-			.map((r) => {
-				const box = boxes.get(r);
-				if (!box) throw new Error(`no box for ${r}`);
-				return { room: r, box, ...probePoints(box) };
-			});
-		const at = new Float32Array(grids.reduce((n, g) => n + g.at.length, 0));
-		const normal = new Float32Array(at.length);
-		let k = 0;
-		for (const g of grids) {
-			at.set(g.at, k);
-			normal.set(g.normal, k);
-			k += g.at.length;
-		}
-		const light = await bakeProbes(
-			renderer,
-			lit,
-			samples,
-			{ at, normal },
-			l.key,
-			4,
-			report(done++),
-		);
+	for (const lamp of sources) {
+		const light = await bakeProbes(renderer, lit, samples, { at, normal }, lamp, 4, report(done++));
 		k = 0;
-		for (const g of grids) {
+		for (const g of boxed) {
 			const size = g.box.getSize(new Vector3());
 			probes.push({
-				lamp: l.key,
+				...(lamp === undefined ? {} : { lamp }),
 				room: g.room,
 				min: [g.box.min.x, g.box.min.y, g.box.min.z],
 				size: [size.x, size.y, size.z],

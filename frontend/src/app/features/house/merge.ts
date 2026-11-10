@@ -28,7 +28,8 @@ export function mergeStatic(
 		{ mesh: THREE.Mesh; material: THREE.Material; range?: THREE.GeometryGroup }[]
 	>();
 	for (const o of [...scene.children]) {
-		if (!isMesh(o)) continue;
+		// What can be picked up stays as it is: it moves on its own.
+		if (!isMesh(o) || o.userData['movable'] !== undefined) continue;
 		const mesh = o;
 		// A mesh of several materials (a part split by a plane) is merged group by group.
 		const material = mesh.material;

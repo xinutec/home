@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 import { type LightChange, type Lightmap, checksum, pairOf } from './bake-file';
 import type { Lit } from './room-builder';
-import type { FarLight } from './probes';
+import type { ProbeLight } from './probes';
 import { SKY, windowRadiance } from './sky';
 import { GUTTER } from './unwrap';
 
@@ -477,7 +477,7 @@ export function addReflections(
 	scene: THREE.Scene,
 	lit: Lit,
 	/** The lamps' light in rooms they are not in: a room's copies read it too. */
-	far?: FarLight,
+	far?: ProbeLight,
 ): { owned: { dispose(): void }[]; recapture: () => void } {
 	const owned: { dispose(): void }[] = [];
 	const byRoom = new Map<string, THREE.Mesh[]>();
@@ -536,16 +536,16 @@ export function addReflections(
 			own.envMap = probes.get(room)?.texture ?? null;
 			reflecting.push([own, room]);
 			own.envMapIntensity = 1;
-			const lamps = far?.has(room) ? far : undefined;
+			const lampProbes = far?.has(room) ? far.uniforms(room) : undefined;
 			own.onBeforeCompile = (shader) => {
 				shader.fragmentShader = shader.fragmentShader.replace(
 					'#include <lights_fragment_maps>',
 					specularOnly,
 				);
-				lamps?.patch(shader, room);
+				if (far && lampProbes) far.patch(shader, lampProbes, 'lightmap');
 			};
 			// A room with far light draws with a program of its own.
-			own.customProgramCacheKey = () => (lamps ? 'far' : 'near');
+			own.customProgramCacheKey = () => (lampProbes ? 'far' : 'near');
 			own.needsUpdate = true;
 		}
 	return {

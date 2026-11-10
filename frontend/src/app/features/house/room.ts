@@ -28,10 +28,11 @@ import { cameraFromQuery } from './camera';
 import { AutoExposure } from './exposure';
 import type { CameraQuery } from './camera';
 import { buildInterior } from './room-builder';
-import { type LastBake, bakeHouse, fetchLastBake } from './house-bake';
+import { type LastBake, bakeHouse, fetchLastBake, lampRegions } from './house-bake';
 import type { Lit } from './room-builder';
 import { Lamps } from './lamps';
-import { FarLight } from './probes';
+import { Movables } from './movables';
+import { ProbeLight } from './probes';
 import { nightSkyImage, overcastSky, overcastSkyImage } from './sky';
 import { ThreeView } from './three-view';
 import { Joints } from './joints';
@@ -108,7 +109,9 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 	/** The lamps, once a lightmap with their light applies. */
 	private lamps?: Lamps;
 	/** The lamps' light in rooms they are not in, once a lightmap with it applies. */
-	private farLight?: FarLight;
+	private farLight?: ProbeLight;
+	/** All the light probes' light, for what moves. */
+	private movesLight?: ProbeLight;
 	/** The reflections, to capture again when the light changes. */
 	private recapture?: () => void;
 	private auto?: AutoExposure;
@@ -207,10 +210,31 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 	/** Hands the camera to a walker: from the room's own view, standing, unless the
 	 *  URL placed the camera (a comparison with a photo keeps its exact pose). A tap
 	 *  on a door or drawer opens it, or shuts it; on a lamp, switches it, and it is
-	 *  evening while one is on (`?night`: every one, from the start; `?lamps=a,b`: those). */
-	private walk(view: ThreeView, joints: Joints, lit: Lit): void {
+	 *  evening while one is on (`?night`: every one, from the start; `?lamps=a,b`:
+	 *  those); on a thing that can be picked up, picks it up, and a tap again lets it
+	 *  go. */
+	private walk(view: ThreeView, joints: Joints, lit: Lit, scene: HouseScene): void {
 		const standing = !this.query.eye;
 		const lamps = this.lamps;
+		const collider = new Collider(lit.meshes);
+		const movables = new Movables(
+			view.scene,
+			lit.movables,
+			(x, z, below) => collider.ground(x, z, below),
+			scene.rooms,
+			this.movesLight,
+			(r) => view.own(r),
+		);
+		// What moves takes the daylight by day, and every lamp at its weight.
+		const lightMoves = () =>
+			this.movesLight?.show((source) =>
+				source === undefined
+					? lamps?.evening
+						? [0, 0, 0]
+						: [1, 1, 1]
+					: (lamps?.weight(source) ?? [0, 0, 0]),
+			);
+		lightMoves();
 		const show = () =>
 			this.liveLight?.show(
 				(key) => joints.openness(key),
@@ -218,16 +242,18 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 				lamps?.evening ? 0 : 1,
 			);
 		view.beforeRender = (now) => {
-			const moving = joints.update(now);
+			const opening = joints.update(now);
+			const carried = movables.update(now, view.camera);
 			show();
-			return moving;
+			return opening || carried;
 		};
 		// The light all through: the lamps' glow, the windows, the lightmap, then what
 		// the reflections see of it, and the exposure's aim.
 		const switched = () => {
 			if (!lamps) return;
 			lamps.showGlow();
-			this.farLight?.show((key) => lamps.weight(key));
+			this.farLight?.show((source) => (source === undefined ? [0, 0, 0] : lamps.weight(source)));
+			lightMoves();
 			showDaylight(view.scene, lamps.evening ? 0 : 1);
 			show();
 			this.recapture?.();
@@ -246,6 +272,17 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 				-((y - box.top) / box.height) * 2 + 1,
 			);
 			caster.setFromCamera(ndc, view.camera);
+			if (movables.holding) {
+				movables.drop();
+				view.requestFrame();
+				return;
+			}
+			const thing = movables.pick(caster.ray, lit.meshes);
+			if (thing) {
+				movables.hold(thing, view.camera);
+				view.requestFrame();
+				return;
+			}
 			const lamp = lamps?.pick(caster.ray);
 			if (lamps && lamp) {
 				lamps.toggle(lamp);
@@ -261,7 +298,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			view.camera,
 			view.renderer.domElement,
 			this.stick().nativeElement,
-			new Collider(lit.meshes),
+			collider,
 			() => {
 				if (!this.moved()) this.zone.run(() => this.moved.set(true));
 				view.requestFrame();
@@ -302,7 +339,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		} else {
 			const joints = new Joints(scene, lit.meshes);
 			this.light(view, scene, lit, map);
-			this.walk(view, joints, lit);
+			this.walk(view, joints, lit, scene);
 		}
 		view.requestFrame();
 	}
@@ -330,7 +367,15 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 					lit.meshes,
 				),
 			);
-		if (map && texture && map.probes.length > 0) this.farLight = view.own(new FarLight(map.probes));
+		if (map && texture && map.probes.length > 0) {
+			// A room's surfaces take only the lamps of other rooms: the rest is their
+			// lightmap's.
+			const lampRoom = new Map(lampRegions(scene).map((l) => [l.key, l.room]));
+			this.farLight = view.own(
+				new ProbeLight(map.probes, (g) => g.lamp !== undefined && lampRoom.get(g.lamp) !== g.room),
+			);
+			this.movesLight = view.own(new ProbeLight(map.probes, () => true));
+		}
 		if (applied) {
 			const reflections = addReflections(view.renderer, view.scene, lit, this.farLight);
 			for (const t of reflections.owned) view.own(t);

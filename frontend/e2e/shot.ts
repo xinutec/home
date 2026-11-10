@@ -7,8 +7,11 @@
 // else baked, every lamp on; --lamps a,b turns those lamps on (?lamps);
 // --exposure auto meters it as the page does when walked (no ?exposure); --tap
 // x,y;x,y clicks the canvas at those pixels first (a door or drawer opens, a lamp
-// switches), and lets the page's clock run --after ms (1500) after each for it to
-// move: its clock is held, so a short --after catches one exactly partway.
+// switches, a cushion is picked up or let go), and lets the page's clock run
+// --after ms (1500) after each for it to move: its clock is held, so a short
+// --after catches one exactly partway. Held, the clock leaves --exposure auto
+// metering wrongly (a carried cushion's frames came out far too bright): give an
+// exposure.
 import { chromium } from '@playwright/test';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { extname, join } from 'node:path';

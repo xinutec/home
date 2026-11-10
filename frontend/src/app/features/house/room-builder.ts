@@ -66,6 +66,9 @@ export function buildInterior(
 		const meshes = mergeStatic(view.scene, (g) => view.own(g));
 		lit = {
 			meshes,
+			movables: view.scene.children.filter(
+				(o): o is THREE.Mesh => o instanceof THREE.Mesh && o.userData['movable'] !== undefined,
+			),
 			centres: roomCentres(scene),
 			atlas: unwrap(
 				meshes.map((m) => m.geometry),
@@ -80,6 +83,7 @@ export function buildInterior(
 	return (
 		lit ?? {
 			meshes: [],
+			movables: [],
 			centres: new Map(),
 			atlas: {
 				width: 0,
@@ -194,6 +198,7 @@ export function buildHouse(
 			if (night && materialOf(f, mesh) === LAMP_MATERIAL) addLampLight(stage, mesh);
 			const part = solids.get(mesh);
 			if (part?.kind !== 'part') throw new Error('`pieceMeshes` made a mesh without its part');
+			if (f.movable) mesh.userData['movable'] = pieceId(f);
 			if (lamp) {
 				mesh.userData['lamp'] = lamp.id;
 				mesh.userData['glows'] = part.part === lamp.glows;
@@ -1181,6 +1186,8 @@ export interface Lit {
 	/** Each room's middle, by name: its meshes carry `userData.room`. */
 	centres: Map<string, Pt>;
 	atlas: Atlas;
+	/** What can be picked up, as drawn, apart from `meshes`: no lightmap, no bake. */
+	movables: THREE.Mesh[];
 }
 
 /** Glass this smooth transmits without scattering: a window to see the sky through. */

@@ -62,6 +62,9 @@ hand. The 3D house view (`frontend/.../features/house`) renders from these.
   `id` is a stable slug (`living-sideboard`), unique across the house, and `name`
   says what it is; every box in the living room carries both
   (`tests/scene.test.ts`). Name a side by its wall, never "left"/"right".
+- **movable** (optional, on a piece) — it can be picked up in the room view (a
+  tap carries it, a tap again lets it fall onto what is under it). It is not baked:
+  it is lit from the light probes where it is, with a soft shadow under it.
 - **parts** (optional) — what a piece is made of, inside its box (the box stays
   its envelope, which the overview and observe read). Each part is a box `size`
   [w, h, d] centred at `at`, in the piece's frame: origin at the envelope's floor

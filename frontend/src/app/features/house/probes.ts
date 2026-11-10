@@ -121,20 +121,33 @@ export function fillGaps(light: Float32Array, dims: [number, number, number]): F
 	return out;
 }
 
+/** The uniforms a material reads its room's probes by: re-pointed (`ProbeLight.aim`)
+ *  as what it is on moves from room to room. */
+export interface ProbeUniforms {
+	probeMin: { value: THREE.Vector3 };
+	probeSize: { value: THREE.Vector3 };
+	probeFaces: { value: THREE.Data3DTexture[] };
+}
+
+/** The probe textures' names in the shader, a face each (`FACES`' order). */
+const FACE_NAMES = ['probePX', 'probeNX', 'probePY', 'probeNY', 'probePZ', 'probeNZ'];
+
 /**
- * The lamps' light in the rooms they are not in, on the phone: each room's probe
- * grids, summed by how bright each lamp is (`show`), as six small 3D textures (one
- * a face), which every surface of that room reads where it is and as it faces
- * (`patch`). A lamp's light in its own room is its baked layer's.
+ * Light from the probes, on the phone: of each room, the grids `include` takes,
+ * summed by how bright each source is (`show`: the daylight, undefined, and each
+ * lamp), as six small 3D textures (one a face), which a material of that room
+ * reads where each fragment is and as it faces (`patch`). The room's surfaces take
+ * the lamps of other rooms (their own lamps' light and the daylight are in their
+ * lightmap); what moves takes everything.
  */
-export class FarLight {
+export class ProbeLight {
 	private readonly rooms = new Map<
 		string,
 		{ grids: ProbeGrid[]; min: THREE.Vector3; size: THREE.Vector3; faces: THREE.Data3DTexture[] }
 	>();
 
-	constructor(grids: ProbeGrid[]) {
-		for (const g of grids) {
+	constructor(grids: ProbeGrid[], include: (grid: ProbeGrid) => boolean) {
+		for (const g of grids.filter(include)) {
 			const room = this.rooms.get(g.room);
 			if (room) {
 				const first = room.grids[0];
@@ -163,8 +176,9 @@ export class FarLight {
 		}
 	}
 
-	/** Each room's light from the lamps at their `weight` (RGB, 0 off). */
-	show(weight: (lamp: string) => [number, number, number]): void {
+	/** Each room's light from its sources at their `weight` (RGB, 0 off; the
+	 *  daylight's source is undefined). */
+	show(weight: (source: string | undefined) => [number, number, number]): void {
 		for (const room of this.rooms.values()) {
 			const n = room.grids[0].dims[0] * room.grids[0].dims[1] * room.grids[0].dims[2];
 			const sum = new Float32Array(FACES.length * n * 3);
@@ -186,53 +200,92 @@ export class FarLight {
 		}
 	}
 
-	/** Whether `room` has light from a lamp elsewhere to show. */
+	/** Whether `room` has probes here. */
 	has(room: string): boolean {
 		return this.rooms.has(room);
 	}
 
-	/** Makes a lightmapped material of `room` add that room's far light to its
-	 *  lightmap's, read where each fragment is and as it faces: in its shader, from
-	 *  three's (`onBeforeCompile`'s `shader`). */
-	patch(shader: THREE.WebGLProgramParametersWithUniforms, room: string): void {
+	/** Uniforms reading `room`'s probes. */
+	uniforms(room: string): ProbeUniforms {
+		const u = {
+			probeMin: { value: new THREE.Vector3() },
+			probeSize: { value: new THREE.Vector3(1, 1, 1) },
+			probeFaces: { value: [] as THREE.Data3DTexture[] },
+		};
+		this.aim(u, room);
+		return u;
+	}
+
+	/** Points `u` at `room`'s probes. */
+	aim(u: ProbeUniforms, room: string): void {
 		const r = this.rooms.get(room);
-		if (!r) throw new Error(`no far light for ${room}`);
-		const names = ['farPX', 'farNX', 'farPY', 'farNY', 'farPZ', 'farNZ'];
-		shader.uniforms['farMin'] = { value: r.min };
-		shader.uniforms['farSize'] = { value: r.size };
-		names.forEach((name, f) => (shader.uniforms[name] = { value: r.faces[f] }));
+		if (!r) throw new Error(`no light probes in ${room}`);
+		u.probeMin.value = r.min;
+		u.probeSize.value = r.size;
+		u.probeFaces.value = r.faces;
+	}
+
+	/**
+	 * Makes a material add the light its probes give (`u`) to what it receives, read
+	 * where each fragment is and as it faces: in its shader, from three's
+	 * (`onBeforeCompile`'s `shader`). `into` the lightmap's light (a room's surface),
+	 * or into the light it receives from nothing else (what moves, which has none).
+	 */
+	patch(
+		shader: THREE.WebGLProgramParametersWithUniforms,
+		u: ProbeUniforms,
+		into: 'lightmap' | 'all',
+	): void {
+		shader.uniforms['probeMin'] = u.probeMin;
+		shader.uniforms['probeSize'] = u.probeSize;
+		FACE_NAMES.forEach((name, f) => {
+			// Each face's own uniform, reading the shared list as it is re-pointed.
+			shader.uniforms[name] = {
+				get value() {
+					return u.probeFaces.value[f];
+				},
+			};
+		});
 		shader.vertexShader = swap(
 			shader.vertexShader,
 			'#include <project_vertex>',
-			'#include <project_vertex>\nvFarAt = (modelMatrix * vec4(transformed, 1.0)).xyz;',
+			'#include <project_vertex>\nvProbeAt = (modelMatrix * vec4(transformed, 1.0)).xyz;',
 		);
 		shader.vertexShader = swap(
 			shader.vertexShader,
 			'#include <common>',
-			'#include <common>\nvarying vec3 vFarAt;',
+			'#include <common>\nvarying vec3 vProbeAt;',
 		);
 		shader.fragmentShader = swap(
 			shader.fragmentShader,
 			'#include <common>',
 			`#include <common>
-			varying vec3 vFarAt;
-			uniform vec3 farMin;
-			uniform vec3 farSize;
-			${names.map((n) => `uniform highp sampler3D ${n};`).join('\n')}
-			// The far light on a surface here facing n (world), from its room's probes.
-			vec3 farLight(vec3 n) {
-				vec3 at = (vFarAt - farMin) / farSize;
-				vec3 x = n.x >= 0.0 ? texture(farPX, at).rgb : texture(farNX, at).rgb;
-				vec3 y = n.y >= 0.0 ? texture(farPY, at).rgb : texture(farNY, at).rgb;
-				vec3 z = n.z >= 0.0 ? texture(farPZ, at).rgb : texture(farNZ, at).rgb;
+			varying vec3 vProbeAt;
+			uniform vec3 probeMin;
+			uniform vec3 probeSize;
+			${FACE_NAMES.map((n) => `uniform highp sampler3D ${n};`).join('\n')}
+			// The probes' light on a surface here facing n (world).
+			vec3 probeLight(vec3 n) {
+				vec3 at = (vProbeAt - probeMin) / probeSize;
+				vec3 x = n.x >= 0.0 ? texture(probePX, at).rgb : texture(probeNX, at).rgb;
+				vec3 y = n.y >= 0.0 ? texture(probePY, at).rgb : texture(probeNY, at).rgb;
+				vec3 z = n.z >= 0.0 ? texture(probePZ, at).rgb : texture(probeNZ, at).rgb;
 				return n.x * n.x * x + n.y * n.y * y + n.z * n.z * z;
 			}`,
 		);
-		shader.fragmentShader = swap(
-			shader.fragmentShader,
-			'vec3 lightMapIrradiance = lightMapTexel.rgb * lightMapIntensity;',
-			'vec3 lightMapIrradiance = lightMapTexel.rgb * lightMapIntensity + farLight(inverseTransformDirection(normal, viewMatrix));',
-		);
+		const world = 'probeLight(inverseTransformDirection(normal, viewMatrix))';
+		shader.fragmentShader =
+			into === 'lightmap'
+				? swap(
+						shader.fragmentShader,
+						'vec3 lightMapIrradiance = lightMapTexel.rgb * lightMapIntensity;',
+						`vec3 lightMapIrradiance = lightMapTexel.rgb * lightMapIntensity + ${world};`,
+					)
+				: swap(
+						shader.fragmentShader,
+						'#include <lights_fragment_maps>',
+						`#include <lights_fragment_maps>\nirradiance += ${world};`,
+					);
 	}
 
 	dispose(): void {
