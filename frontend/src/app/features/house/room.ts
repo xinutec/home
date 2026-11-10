@@ -31,6 +31,7 @@ import { buildInterior } from './room-builder';
 import { type LastBake, bakeHouse, fetchLastBake, lampRegions } from './house-bake';
 import type { Lit } from './room-builder';
 import { Lamps } from './lamps';
+import { Dynamics, loadRapier } from './dynamics';
 import { Movables } from './movables';
 import { ProbeLight } from './probes';
 import { nightSkyImage, overcastSky, overcastSkyImage } from './sky';
@@ -224,6 +225,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			scene.rooms,
 			this.movesLight,
 			(r) => view.own(r),
+			async () => view.own(new Dynamics(await loadRapier(), lit.meshes)),
 		);
 		// What moves takes the daylight by day, and every lamp at its weight.
 		const lightMoves = () =>
@@ -279,8 +281,8 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			}
 			const thing = movables.pick(caster.ray, lit.meshes);
 			if (thing) {
-				movables.hold(thing, view.camera);
-				view.requestFrame();
+				// The first pick-up loads the physics: the frames follow once it has.
+				void movables.hold(thing, view.camera).then(() => view.requestFrame());
 				return;
 			}
 			const lamp = lamps?.pick(caster.ray);

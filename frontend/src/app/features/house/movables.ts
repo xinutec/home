@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Room } from './house.model';
+import type { Dynamics } from './dynamics';
 import type { ProbeLight, ProbeUniforms } from './probes';
 import { roomTag } from './probes';
 import { roomAt } from './scene-geometry';
@@ -7,8 +8,6 @@ import { roomAt } from './scene-geometry';
 /** Metres ahead of the eye, and below it, that a held thing is carried. */
 const HOLD_AHEAD = 0.55;
 const HOLD_BELOW = 0.35;
-/** m/s²: what is let go falls. */
-const GRAVITY = 9.81;
 /** How dark a thing's shadow is right under it, as a share of the light there, and
  *  how high above what is under it the shadow is gone. */
 const SHADOW = 0.55;
@@ -33,24 +32,27 @@ interface Movable {
 	half: [number, number];
 	height: number;
 	shadow: THREE.Mesh;
+	/** Its parts' points, in its own frame: its hull, as a body. */
+	points: Float32Array;
 	/** Which room's probes it reads, and the uniforms it reads them by. */
 	room?: string;
 	probes?: ProbeUniforms;
-	/** Falling: its speed down. */
-	falling?: number;
 }
 
 /**
  * The things in the room that can be picked up (`Furniture.movable`), as the room
  * view walks it. A tap on one picks it up: it is carried before the eye. A tap
- * again lets it go: it falls straight down and lands upright on the highest surface
- * under its footprint. It is lit where it is from the light probes (`ProbeLight`,
- * every source), not baked, and has a soft shadow under it.
+ * again lets it go: it falls, tumbles and comes to rest among the room and the
+ * others (`Dynamics`, made at the first pick-up). It is lit where it is from the
+ * light probes (`ProbeLight`, every source), not baked, and has a soft shadow
+ * under it.
  */
 export class Movables {
 	private readonly things = new Map<string, Movable>();
 	private held?: { key: string; yaw: number };
 	private last?: number;
+	private dynamics?: Dynamics;
+	private starting?: Promise<Dynamics>;
 
 	constructor(
 		scene: THREE.Scene,
@@ -61,6 +63,8 @@ export class Movables {
 		/** Their light, if the bake has probes; else the room's approximate light. */
 		private readonly light: ProbeLight | undefined,
 		own: Own,
+		/** The physics they move by, made when first needed. */
+		private readonly makeDynamics: () => Promise<Dynamics>,
 	) {
 		const shadowMap = own(blobTexture());
 		const byKey = new Map<string, THREE.Mesh[]>();
@@ -79,9 +83,17 @@ export class Movables {
 			const group = new THREE.Group();
 			group.position.copy(foot);
 			scene.add(group);
+			const points: number[] = [];
+			const p = new THREE.Vector3();
 			for (const m of parts) {
 				m.position.sub(foot);
 				group.add(m);
+				m.updateMatrix();
+				const pos = m.geometry.getAttribute('position');
+				for (let i = 0; i < pos.count; i++) {
+					p.fromBufferAttribute(pos, i).applyMatrix4(m.matrix);
+					points.push(p.x, p.y, p.z);
+				}
 			}
 			const size = box.getSize(new THREE.Vector3());
 			const shadowMaterial = own(
@@ -98,7 +110,13 @@ export class Movables {
 			shadow.rotation.x = -Math.PI / 2;
 			shadow.scale.set(size.x * SHADOW_SPREAD, size.z * SHADOW_SPREAD, 1);
 			scene.add(shadow);
-			const thing: Movable = { group, half: [size.x / 2, size.z / 2], height: size.y, shadow };
+			const thing: Movable = {
+				group,
+				half: [size.x / 2, size.z / 2],
+				height: size.y,
+				shadow,
+				points: Float32Array.from(points),
+			};
 			if (light) this.lightFromProbes(thing, parts, own);
 			this.things.set(key, thing);
 			this.place(thing);
@@ -126,56 +144,65 @@ export class Movables {
 		return undefined;
 	}
 
-	/** Picks up `key`, keeping how it is turned to the eye. */
-	hold(key: string, eye: THREE.Camera): void {
+	/** Picks up `key`, keeping how it is turned to the eye about the vertical; it is
+	 *  carried upright. */
+	async hold(key: string, eye: THREE.Camera): Promise<void> {
 		const t = this.thing(key);
-		t.falling = undefined;
-		this.held = { key, yaw: t.group.rotation.y - yawOf(eye) };
+		const dynamics = await this.start();
+		dynamics.hold(key);
+		const turned = new THREE.Euler().setFromQuaternion(t.group.quaternion, 'YXZ');
+		this.held = { key, yaw: turned.y - yawOf(eye) };
 	}
 
-	/** Lets what is carried go: it falls. */
+	/** Lets what is carried go, moving as the hand moved it. */
 	drop(): void {
 		if (!this.held) return;
-		this.thing(this.held.key).falling = 0;
+		this.dynamics?.release(this.held.key);
 		this.held = undefined;
 	}
 
-	/** Moves what is carried or falling, at `now` (ms); true while anything still
-	 *  moves, so another frame should follow. */
+	/** The physics, made once, with every thing in it as it stands. */
+	private start(): Promise<Dynamics> {
+		this.starting ??= this.makeDynamics().then((d) => {
+			for (const [key, t] of this.things) d.add(key, t.group, t.points);
+			this.dynamics = d;
+			return d;
+		});
+		return this.starting;
+	}
+
+	/** Moves what is carried, and runs the physics, at `now` (ms); true while
+	 *  anything still moves, so another frame should follow. */
 	update(now: number, eye: THREE.Camera): boolean {
-		const dt = this.last === undefined ? 0 : Math.min(0.05, (now - this.last) / 1000);
-		let moving = false;
+		const dynamics = this.dynamics;
+		if (!dynamics) return false;
+		const dt = this.last === undefined ? 0 : (now - this.last) / 1000;
 		if (this.held) {
 			const t = this.thing(this.held.key);
 			const ahead = new THREE.Vector3(0, 0, -1).applyQuaternion(eye.quaternion).setY(0).normalize();
 			const at = eye.position.clone().addScaledVector(ahead, HOLD_AHEAD);
-			t.group.position.set(at.x, eye.position.y - HOLD_BELOW - t.height / 2, at.z);
-			t.group.rotation.y = yawOf(eye) + this.held.yaw;
-			this.place(t);
-			moving = true;
+			at.y = eye.position.y - HOLD_BELOW - t.height / 2;
+			const turn = new THREE.Quaternion().setFromAxisAngle(
+				new THREE.Vector3(0, 1, 0),
+				yawOf(eye) + this.held.yaw,
+			);
+			dynamics.follow(this.held.key, at, turn);
 		}
-		for (const t of this.things.values()) {
-			if (t.falling === undefined) continue;
-			const floor = this.under(t);
-			t.falling += GRAVITY * dt;
-			const y = t.group.position.y - t.falling * dt;
-			if (floor === undefined || y > floor) {
-				t.group.position.y = floor === undefined ? y : Math.max(y, floor);
-				moving = true;
-			} else {
-				t.group.position.y = floor;
-				t.falling = undefined;
-			}
+		const moving = dynamics.step(dt) || this.held !== undefined;
+		for (const [key, t] of this.things) {
+			dynamics.pose(key, t.group);
 			this.place(t);
 		}
 		this.last = moving ? now : undefined;
 		return moving;
 	}
 
-	/** The highest surface under a thing's footprint, below its foot. */
+	/** The highest surface of the fixed room under a thing's footprint, below its
+	 *  foot: where its shadow falls. */
 	private under(t: Movable): number | undefined {
 		const { x, y, z } = t.group.position;
-		const [c, s] = [Math.cos(t.group.rotation.y), Math.sin(t.group.rotation.y)];
+		const yaw = new THREE.Euler().setFromQuaternion(t.group.quaternion, 'YXZ').y;
+		const [c, s] = [Math.cos(yaw), Math.sin(yaw)];
 		let top: number | undefined;
 		for (const [u, v] of [
 			[0, 0],
@@ -199,7 +226,7 @@ export class Movables {
 		t.shadow.visible = floor !== undefined;
 		if (floor !== undefined) {
 			t.shadow.position.set(x, floor + SHADOW_LIFT, z);
-			t.shadow.rotation.z = t.group.rotation.y;
+			t.shadow.rotation.z = new THREE.Euler().setFromQuaternion(t.group.quaternion, 'YXZ').y;
 			const material = t.shadow.material;
 			if (material instanceof THREE.MeshBasicMaterial)
 				material.opacity = SHADOW * Math.max(0, 1 - (y - floor) / SHADOW_FADE);

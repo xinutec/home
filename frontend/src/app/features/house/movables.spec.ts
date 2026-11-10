@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
+import { Dynamics, loadRapier } from './dynamics';
 import { mergeStatic } from './merge';
 import { Movables } from './movables';
 
-/** A 40 cm cushion standing on the floor at the origin, and a table 70 cm high
- *  over x > 1. */
-function room(): { scene: THREE.Scene; cushion: THREE.Mesh; movables: Movables } {
+/** A 40 cm cushion standing on a floor at the origin, and a table 70 cm high over
+ *  x 1 to 2. */
+function room(): { cushion: THREE.Mesh; movables: Movables; fixed: THREE.Mesh[] } {
 	const scene = new THREE.Scene();
 	const cushion = new THREE.Mesh(
 		new THREE.BoxGeometry(0.4, 0.4, 0.15),
@@ -14,16 +15,29 @@ function room(): { scene: THREE.Scene; cushion: THREE.Mesh; movables: Movables }
 	cushion.position.set(0, 0.2, 0);
 	cushion.userData['movable'] = 'cushion';
 	scene.add(cushion);
+	const floor = new THREE.Mesh(new THREE.BoxGeometry(10, 0.1, 10));
+	floor.position.set(0, -0.05, 0);
+	const table = new THREE.Mesh(new THREE.BoxGeometry(1, 0.7, 1));
+	table.position.set(1.5, 0.35, 0);
+	const fixed = [floor, table];
 	const ground = (x: number, _z: number, below: number) => {
-		const top = x > 1 ? 0.7 : 0;
+		const top = x > 1 && x < 2 ? 0.7 : 0;
 		return below >= top ? top : undefined;
 	};
-	const movables = new Movables(scene, [cushion], ground, [], undefined, (r) => r);
-	return { scene, cushion, movables };
+	const movables = new Movables(
+		scene,
+		[cushion],
+		ground,
+		[],
+		undefined,
+		(r) => r,
+		async () => new Dynamics(await loadRapier(), fixed),
+	);
+	return { cushion, movables, fixed };
 }
 
-/** Frames of 16 ms until nothing moves, at most `max`. */
-function settle(movables: Movables, eye: THREE.Camera, max = 200): number {
+/** Frames of 16 ms until nothing moves, at most `max`; the frames it took. */
+function settle(movables: Movables, eye: THREE.Camera, max = 600): number {
 	let t = 0;
 	for (let i = 0; i < max; i++) if (!movables.update((t += 16), eye)) return i;
 	return max;
@@ -49,23 +63,24 @@ describe('Movables', () => {
 		expect(movables.pick(at, [wall])).toBeUndefined();
 	});
 
-	it('is carried before the eye, and let go falls onto what is under it, upright', () => {
+	it('is carried before the eye, and let go falls under gravity and comes to rest on what is under it', async () => {
 		const { cushion, movables } = room();
 		const camera = eye(0);
-		movables.hold('cushion', camera);
-		movables.update(0, camera);
+		await movables.hold('cushion', camera);
+		for (let t = 16; t < 400; t += 16) movables.update(t, camera);
 		const held = cushion.getWorldPosition(new THREE.Vector3());
-		expect(held.z).toBeCloseTo(1 - 0.55);
+		expect(held.z).toBeCloseTo(1 - 0.55, 1);
 		expect(held.y).toBeGreaterThan(1);
 		// Carried over the table, and let go there.
 		camera.position.x = 1.5;
 		camera.updateMatrixWorld();
-		movables.update(16, camera);
+		for (let t = 400; t < 1000; t += 16) movables.update(t, camera);
 		movables.drop();
-		expect(settle(movables, camera)).toBeLessThan(200);
+		expect(settle(movables, camera)).toBeLessThan(600);
 		const down = new THREE.Box3().setFromObject(cushion);
-		expect(down.min.y).toBeCloseTo(0.7, 3);
-		expect(down.max.y - down.min.y).toBeCloseTo(0.4, 3);
+		// Resting on the table, however it landed: its lowest point on the top.
+		expect(down.min.y).toBeGreaterThan(0.69);
+		expect(down.min.y).toBeLessThan(0.72);
 		expect(movables.holding).toBe(false);
 	});
 
