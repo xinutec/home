@@ -9,7 +9,7 @@ import {
 
 import { NO_AREA } from './room-builder';
 import type { Lit } from './room-builder';
-import { GROUND, GROUND_ALBEDO, SKY, windowRadiance } from './sky';
+import { GROUND, GROUND_ALBEDO, LAMP_BAKED_LUMENS, SKY, lampRadiance, windowRadiance } from './sky';
 
 /** Glass this smooth passes light straight through; rougher glass diffuses it. */
 const CLEAR_GLASS_ROUGHNESS = 0.1;
@@ -27,6 +27,10 @@ const ROW = 1024;
  *
  * At every bounce the light is sampled where it is, on a pane picked by its area
  * (next-event estimation), not left for a random ray to find.
+ *
+ * With `lamp` (a light's id), the light is that lamp's alone, lit white at
+ * LAMP_BAKED_LUMENS, and no daylight: its glowing part's surfaces are the
+ * sources in the panes' place, glowing evenly from its outside.
  */
 export async function bakeLightmap(
 	renderer: THREE.WebGLRenderer,
@@ -40,6 +44,7 @@ export async function bakeLightmap(
 	 *  the house's after an edit, as what either changes is near it, which comes out
 	 *  as a whole bake would wherever its samples are the same. */
 	local?: { traces: (pixel: number, at: THREE.Vector3) => boolean; base: Float32Array },
+	lamp?: string,
 ): Promise<{
 	light: Float32Array;
 	summed: number;
@@ -59,7 +64,9 @@ export async function bakeLightmap(
 	const positions: number[] = [];
 	const index: number[] = [];
 	const surface: number[] = [];
-	// The panes, triangle by triangle: corner, two edges, light let through, area.
+	// The panes, triangle by triangle: corner, two edges, light let through, area;
+	// or the lamp's glowing surfaces (`sides` 1: a part is closed, so a ray meets
+	// only its near side; its far side is hidden behind it).
 	const lights: {
 		a: THREE.Vector3;
 		e1: THREE.Vector3;
@@ -67,7 +74,9 @@ export async function bakeLightmap(
 		area: number;
 		le: number[];
 		t: number;
+		sides: number;
 	}[] = [];
+	const glowing: { a: THREE.Vector3; e1: THREE.Vector3; e2: THREE.Vector3; area: number }[] = [];
 	for (const mesh of meshes) {
 		const material = mesh.material;
 		if (Array.isArray(material)) continue;
@@ -75,7 +84,16 @@ export async function bakeLightmap(
 		const transmission = material instanceof THREE.MeshPhysicalMaterial ? material.transmission : 0;
 		const glass = transmission > 0;
 		const frosted = glass && (std?.roughness ?? 1) > CLEAR_GLASS_ROUGHNESS;
-		const albedo = std ? albedoOf(std) : new THREE.Color(0.5, 0.5, 0.5);
+		const glows =
+			lamp !== undefined && mesh.userData['lamp'] === lamp && mesh.userData['glows'] === true;
+		// The lamp's own glowing surface sends out its light and reflects none: a path
+		// that meets it ends there, as its light was counted where the path left from.
+		// Lit by itself from millimetres away, it would make rare, huge samples.
+		const albedo = glows
+			? new THREE.Color(0, 0, 0)
+			: std
+				? albedoOf(std)
+				: new THREE.Color(0.5, 0.5, 0.5);
 		// Where it stands: a door baked open is drawn at rest and placed by its matrix.
 		mesh.updateMatrixWorld();
 		const p = mesh.geometry.getAttribute('position').clone().applyMatrix4(mesh.matrixWorld);
@@ -105,7 +123,14 @@ export async function bakeLightmap(
 				glass ? 1 : material.side === THREE.DoubleSide ? 2 : 0,
 			);
 		}
-		if (!glass) continue;
+		if (glows)
+			for (let k = 0; k < tri.length; k += 3) {
+				const a = v(tri[k]);
+				const [e1, e2] = [v(tri[k + 1]).sub(a), v(tri[k + 2]).sub(a)];
+				const area = e1.clone().cross(e2).length() / 2;
+				if (area >= NO_AREA) glowing.push({ a, e1, e2, area });
+			}
+		if (!glass || lamp !== undefined) continue;
 		const glow = frosted ? windowRadiance(transmission) : 0;
 		for (let k = 0; k < tri.length; k += 3) {
 			const a = v(tri[k]);
@@ -122,6 +147,7 @@ export async function bakeLightmap(
 				area,
 				le: [SKY[0] * glow, SKY[1] * glow, SKY[2] * glow],
 				t: frosted ? 0 : transmission,
+				sides: 2,
 			});
 		}
 	}
@@ -153,6 +179,14 @@ export async function bakeLightmap(
 		);
 	});
 	lights.splice(0, lights.length, ...outdoor);
+	if (lamp !== undefined) {
+		if (glowing.length === 0) throw new Error(`the lamp ${lamp} has no glowing surface`);
+		const le = lampRadiance(
+			LAMP_BAKED_LUMENS,
+			glowing.reduce((n, g) => n + g.area, 0),
+		);
+		for (const g of glowing) lights.push({ ...g, le: [le, le, le], t: 0, sides: 1 });
+	}
 	const bvhUniform = new MeshBVHUniformStruct();
 	bvhUniform.updateFrom(bvh);
 	const surfaceTex = new FloatVertexAttributeTexture();
@@ -166,7 +200,7 @@ export async function bakeLightmap(
 	lights.forEach((l, i) => {
 		la.set([l.a.x, l.a.y, l.a.z, l.area], i * 4);
 		lb.set([l.e1.x, l.e1.y, l.e1.z, l.t], i * 4);
-		lc.set([l.e2.x, l.e2.y, l.e2.z, 0], i * 4);
+		lc.set([l.e2.x, l.e2.y, l.e2.z, l.sides], i * 4);
 		ld.set([...l.le, 0], i * 4);
 	});
 	const asTexture = (data: Float32Array, rows: number) => {
@@ -422,8 +456,9 @@ export async function bakeLightmap(
 					w = d / dist;
 					weight = abs(dot(ln, w)) * a.w / (dist * dist) / pick;
 				}
-				// A pane is a slab: from the room, its two faces are one window.
-				weight *= 0.5;
+				// A pane is a slab: from the room, its two faces are one window. A lamp's
+				// surface is seen from its one side; its far side is behind it.
+				weight /= c.w;
 				float cy = dot(n, w);
 				if (cy <= 0.0 || dist <= 0.0) return vec3(0.0);
 				vec3 q = y + w * dist;

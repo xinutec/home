@@ -41,7 +41,12 @@ const md5 = (b: Buffer) => createHash('md5').update(b).digest('hex');
 // What the light is baked by, besides the charts an edit shows: changed, every
 // texel's light may have, and only a whole bake will do.
 const SRC = new URL('../src/app/features/house/', import.meta.url).pathname;
-const lights = (JSON.parse(readFileSync(SCENE, 'utf8')) as { lights?: unknown }).lights;
+// A lamp's lumens and colour are applied as the room is drawn: only what glows is baked.
+const lights = (
+	JSON.parse(readFileSync(SCENE, 'utf8')) as {
+		lights?: { id: string; piece: string; glows: string }[];
+	}
+).lights?.map(({ id, piece, glows }) => ({ id, piece, glows }));
 const inputs = md5(
 	Buffer.concat([
 		readFileSync(join(SRC, 'baker.ts')),

@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import json from '../../../../../scenes/house.json';
 import { corners, solidsOf, withModels } from './assembly';
 import type { HouseScene } from './house.model';
-import { Joints, keptJointLights } from './joints';
+import { Joints, keptChanges } from './joints';
 import { MaterialLibrary } from './materials';
 import { mergeStatic } from './merge';
 import { buildHouse } from './room-builder';
@@ -129,7 +129,7 @@ describe('joints', () => {
 	});
 });
 
-describe('keptJointLights', () => {
+describe('keptChanges', () => {
 	const light = (key: string, at = 1) => ({
 		key,
 		at,
@@ -147,7 +147,7 @@ describe('keptJointLights', () => {
 			{ key: 'new', at: 1, region: box(30) },
 		];
 		const last = [light('far'), light('near'), light('turned'), light('gone')];
-		const kept = keptJointLights(last, now, (r) => r.intersectsBox(box(0.5)));
+		const kept = keptChanges(last, now, (r) => r.intersectsBox(box(0.5)));
 		expect([...kept.keys()]).toEqual(['far']);
 	});
 });

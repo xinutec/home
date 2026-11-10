@@ -79,3 +79,41 @@ export function windowRadiance(t: number): number {
 	const ground = overcastRadiance(-1) * (Math.PI / 2);
 	return (t * (sky + ground)) / Math.PI;
 }
+
+/** The overcast sky's zenith luminance, cd/m², which the trace's unit stands for: a
+ *  bright overcast day. It sets how a lamp's lumens compare with the daylight. */
+export const ZENITH_NITS = 4000;
+
+/** Lumens a lamp's light is baked at, white: shown, its layer is scaled to its own
+ *  lumens and tinted its colour, as light adds and each channel goes its own way. */
+export const LAMP_BAKED_LUMENS = 1000;
+
+/** The radiance, in the trace's units, of an even glowing surface of `area` m²
+ *  giving off `lumens` from its outside (Φ = πLA). */
+export function lampRadiance(lumens: number, area: number): number {
+	return lumens / (Math.PI * area) / ZENITH_NITS;
+}
+
+/** A black body's colour at `kelvin` (1667 K to 25000 K) as linear sRGB of
+ *  luminance 1: its chromaticity on the Planckian locus by Kim et al.'s cubic
+ *  fit (2002), made XYZ and then sRGB (D65), so 6500 K comes out near white. */
+export function kelvinColour(kelvin: number): [number, number, number] {
+	if (kelvin < 1667 || kelvin > 25000) throw new Error(`${kelvin} K is off the fit's range`);
+	const t = 1e3 / kelvin;
+	const x =
+		kelvin <= 4000
+			? -0.2661239 * t ** 3 - 0.234358 * t ** 2 + 0.8776956 * t + 0.17991
+			: -3.0258469 * t ** 3 + 2.1070379 * t ** 2 + 0.2226347 * t + 0.24039;
+	const y =
+		kelvin <= 2222
+			? -1.1063814 * x ** 3 - 1.3481102 * x ** 2 + 2.18555832 * x - 0.20219683
+			: kelvin <= 4000
+				? -0.9549476 * x ** 3 - 1.37418593 * x ** 2 + 2.09137015 * x - 0.16748867
+				: 3.081758 * x ** 3 - 5.8733867 * x ** 2 + 3.75112997 * x - 0.37001483;
+	const [X, Y, Z] = [x / y, 1, (1 - x - y) / y];
+	return [
+		Math.max(0, 3.2404542 * X - 1.5371385 * Y - 0.4985314 * Z),
+		Math.max(0, -0.969266 * X + 1.8760108 * Y + 0.041556 * Z),
+		Math.max(0, 0.0556434 * X - 0.2040259 * Y + 1.0572252 * Z),
+	];
+}

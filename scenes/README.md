@@ -115,8 +115,12 @@ hand. The 3D house view (`frontend/.../features/house`) renders from these.
   down: along its profile by length, its last point at the top). A
   painting, a postcard: crop the photo to the thing, straightened, at a few pixels
   a millimetre.
-- **lights** — each lamp's bulb: `at` [x, y, z], `lumens`, colour temperature
-  `kelvin`, and whether it is `on`.
+- **lights** — each lamp: the `piece` it is, the part of it that `glows` (the
+  glass, the flame), its `lumens` and colour temperature `kelvin`. The bake gives
+  each lamp a light of its own, traced in its room and a metre past its walls; in
+  the room view a tap on the lamp switches it, and while one is on it is evening.
+  Lumens and colour are applied as the room is drawn, so changing them needs no
+  new trace.
 - **Physics** (`frontend/.../house/physics.ts`, run on this file by
   `scene-physics.spec.ts`): no two solids in one place, nothing through a wall, no
   part outside its box when closed, nothing hit anywhere along a joint's travel,

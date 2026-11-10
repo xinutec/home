@@ -24,7 +24,8 @@ export interface CameraQuery {
 	shut?: boolean;
 	/** Write the physical scene `trace` would draw as glTF, for the tracer crate. */
 	export?: boolean;
-	/** The physical scene at night: no daylight, the ceiling lights lit. */
+	/** The physical scene at night: no daylight, the ceiling lights lit; in the
+	 *  everyday view, every lamp on. */
 	night?: boolean;
 }
 

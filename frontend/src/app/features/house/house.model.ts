@@ -239,14 +239,17 @@ export interface HouseScene {
 	question?: string;
 }
 
-/** A lamp: where its bulb is, how much light and of what colour. */
+/** A lamp: the piece it is, which of its parts glows, how much light it gives and
+ *  of what colour. A tap on the piece switches it. */
 export interface Light {
 	id: string;
 	name?: string;
-	at: Vec3;
+	/** The furniture piece, by its id. */
+	piece: string;
+	/** Its part the light comes out of: the glass, the shade, the flame. */
+	glows: string;
 	lumens: number;
 	/** Colour temperature: 2700 is warm white, 6500 daylight. */
 	kelvin: number;
-	on?: boolean;
 	estimate?: string;
 }

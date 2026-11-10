@@ -45,7 +45,7 @@ export class AutoExposure {
 		private readonly renderer: THREE.WebGLRenderer,
 		private readonly scene: THREE.Scene,
 		private readonly camera: THREE.PerspectiveCamera,
-		private readonly key: number,
+		private key: number,
 		private readonly base: number,
 	) {
 		const h = Math.max(1, Math.round(METER_WIDTH / camera.aspect));
@@ -73,6 +73,12 @@ export class AutoExposure {
 		const easing = Math.abs(Math.log(this.wanted / r.toneMappingExposure)) > 0.01;
 		if (!easing) this.last = undefined;
 		return easing;
+	}
+
+	/** Aims at `key` from now on, metering again at once. */
+	aim(key: number): void {
+		this.key = key;
+		this.metered = -Infinity;
 	}
 
 	/** The log-average linear light of the last metering. */

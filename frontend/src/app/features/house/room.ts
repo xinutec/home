@@ -21,15 +21,22 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { WebGLPathTracer } from 'three-gpu-pathtracer';
 
 import { type Lightmap, decodeLightmap } from './bake-file';
-import { JointLights, addReflections, applyLightmap } from './baked-light';
+import { LiveLight, addReflections, applyLightmap, showDaylight } from './baked-light';
 import { withModels } from './assembly';
 import type { HouseScene } from './house.model';
 import { cameraFromQuery } from './camera';
 import { AutoExposure } from './exposure';
 import type { CameraQuery } from './camera';
 import { buildInterior } from './room-builder';
-import { type LastBake, bakeHouse, fetchLastBake } from './house-bake';
+import {
+	type LampRegion,
+	type LastBake,
+	bakeHouse,
+	fetchLastBake,
+	lampRegions,
+} from './house-bake';
 import type { Lit } from './room-builder';
+import { Lamps } from './lamps';
 import { nightSkyImage, overcastSky, overcastSkyImage } from './sky';
 import { ThreeView } from './three-view';
 import { Joints } from './joints';
@@ -56,6 +63,9 @@ const BAKED_EXPOSURE = 150;
  *  1's view meters 0.00136 (`data-meter`), so the living room keeps about its fitted
  *  exposure, and the kitchen, metering ten times brighter, gets a tenth of it. */
 const AUTO_KEY = 0.2;
+/** AUTO_KEY in the evening: a lamp-lit room is darker than a daylit one, and a
+ *  camera keeps it so. */
+const EVENING_KEY = 0.1;
 /** Milliseconds between frame-rate readouts. */
 const FPS_READ_MS = 500;
 /** Milliseconds of path tracing a frame under `?trace`: the page stays responsive. */
@@ -98,8 +108,13 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 	private crosshair = viewChild.required<ElementRef<HTMLDivElement>>('crosshair');
 	private view?: ThreeView;
 	private tracer?: WebGLPathTracer;
-	/** The light of the doors and drawers as they open, once a lightmap applies. */
-	private jointLights?: JointLights;
+	/** The light as doors open and lamps switch, once a lightmap applies. */
+	private liveLight?: LiveLight;
+	/** The lamps, once a lightmap with their light applies. */
+	private lamps?: Lamps;
+	/** The reflections, to capture again when the light changes. */
+	private recapture?: () => void;
+	private auto?: AutoExposure;
 	private readonly query: CameraQuery = cameraFromQuery(window.location.search);
 	private fpsTimer = 0;
 
@@ -194,14 +209,37 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 
 	/** Hands the camera to a walker: from the room's own view, standing, unless the
 	 *  URL placed the camera (a comparison with a photo keeps its exact pose). A tap
-	 *  on a door or drawer opens it, or shuts it. */
+	 *  on a door or drawer opens it, or shuts it; on a lamp, switches it, and it is
+	 *  evening while one is on (`?night`: every one, from the start). */
 	private walk(view: ThreeView, joints: Joints, lit: Lit): void {
 		const standing = !this.query.eye;
+		const lamps = this.lamps;
+		const show = () =>
+			this.liveLight?.show(
+				(key) => joints.openness(key),
+				(key) => lamps?.weight(key) ?? [0, 0, 0],
+				lamps?.evening ? 0 : 1,
+			);
 		view.beforeRender = (now) => {
 			const moving = joints.update(now);
-			this.jointLights?.show((key) => joints.openness(key));
+			show();
 			return moving;
 		};
+		// The light all through: the lamps' glow, the windows, the lightmap, then what
+		// the reflections see of it, and the exposure's aim.
+		const switched = () => {
+			if (!lamps) return;
+			lamps.showGlow();
+			showDaylight(view.scene, lamps.evening ? 0 : 1);
+			show();
+			this.recapture?.();
+			this.auto?.aim(lamps.evening ? EVENING_KEY : AUTO_KEY);
+			view.requestFrame();
+		};
+		if (lamps && this.query.night) {
+			lamps.allOn();
+			switched();
+		}
 		const caster = new THREE.Raycaster();
 		const canvas = view.renderer.domElement;
 		const tapped = (x: number, y: number) => {
@@ -211,6 +249,12 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 				-((y - box.top) / box.height) * 2 + 1,
 			);
 			caster.setFromCamera(ndc, view.camera);
+			const lamp = lamps?.pick(caster.ray);
+			if (lamps && lamp) {
+				lamps.toggle(lamp);
+				switched();
+				return;
+			}
 			const joint = joints.pick(caster.ray);
 			if (!joint) return;
 			joints.toggle(joint, performance.now());
@@ -257,10 +301,10 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		else if (this.query.bake) {
 			const since = this.query.since && map ? await fetchLastBake(map) : undefined;
 			const joints = new Joints(scene, lit.meshes);
-			this.bake(view, joints, lit, this.query.bake, since, this.query.shut);
+			this.bake(view, joints, lit, this.query.bake, since, !!this.query.shut, lampRegions(scene));
 		} else {
 			const joints = new Joints(scene, lit.meshes);
-			this.light(view, lit, map);
+			this.light(view, scene, lit, map);
 			this.walk(view, joints, lit);
 		}
 		view.requestFrame();
@@ -268,19 +312,30 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 
 	/** Lights the room from its lightmap, if one came and it is for this room as built;
 	 *  else it keeps the approximate light. */
-	private light(view: ThreeView, lit: Lit, map: Lightmap | undefined): void {
+	private light(view: ThreeView, scene: HouseScene, lit: Lit, map: Lightmap | undefined): void {
 		const texture = map && applyLightmap(view.scene, lit, map);
 		const applied = !!texture;
-		if (map && texture && map.joints.length > 0)
-			this.jointLights = view.own(
-				new JointLights(view.renderer, view.scene, texture, map.joints, lit.meshes),
+		// The lamps can light the room only from a bake that has their light.
+		if (map && texture && map.lamps.length > 0) {
+			this.lamps = new Lamps(scene, lit.meshes);
+			// Before the reflections copy the materials: each glowing part glows alone.
+			for (const m of this.lamps.ownMaterials()) view.own(m);
+		}
+		if (map && texture && (map.joints.length > 0 || map.lamps.length > 0))
+			this.liveLight = view.own(
+				new LiveLight(view.renderer, view.scene, texture, map.joints, map.lamps, lit.meshes),
 			);
-		if (applied) for (const t of addReflections(view.renderer, view.scene, lit)) view.own(t);
+		if (applied) {
+			const reflections = addReflections(view.renderer, view.scene, lit);
+			for (const t of reflections.owned) view.own(t);
+			this.recapture = reflections.recapture;
+		}
 		view.renderer.toneMappingExposure = this.query.exposure ?? (applied ? BAKED_EXPOSURE : 1);
 		if (applied && this.query.exposure === undefined && AutoExposure.supported(view.renderer)) {
 			const auto = view.own(
 				new AutoExposure(view.renderer, view.scene, view.camera, AUTO_KEY, BAKED_EXPOSURE),
 			);
+			this.auto = auto;
 			const canvas = view.renderer.domElement;
 			view.afterRender = (now) => {
 				const easing = auto.update(now);
@@ -362,8 +417,9 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		joints: Joints,
 		lit: Lit,
 		samples: number,
-		since?: LastBake,
-		shutOnly = false,
+		since: LastBake | undefined,
+		shutOnly: boolean,
+		lamps: LampRegion[],
 	): void {
 		const host = this.host().nativeElement;
 		const run = async () => {
@@ -375,6 +431,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 				(done, of) => (host.dataset['baking'] = `${done} of ${of}`),
 				since,
 				shutOnly,
+				lamps,
 			);
 			// The room it is for, beside it, for e2e scripts that inspect the light.
 			Object.assign(window, {

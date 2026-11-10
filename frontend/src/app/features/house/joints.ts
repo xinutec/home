@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { partsOf, pieceId, solidsOf } from './assembly';
 import type { JointState, Solid } from './assembly';
-import type { JointLight } from './bake-file';
+import type { LightChange } from './bake-file';
 import type { Furniture, HouseScene, Joint } from './house.model';
 
 /** Milliseconds a joint takes over its whole travel: a door swung, a drawer pulled. */
@@ -158,17 +158,17 @@ export class Joints {
 }
 
 /**
- * The joints' changes of light a bake since the `last` can keep as they were: of a
- * joint still there (`now`, each with how far it opens and the region its light is
- * baked in), opening as far as it did, and whose region no edit reaches (`edited`
- * says if one does). Every other joint is baked again.
+ * The changes of light, joints' or lamps', a bake since the `last` can keep as they
+ * were: of one still there (`now`, each with how far it opens, or 1 for a lamp, and
+ * the region its light is baked in), at the same value, and whose region no edit
+ * reaches (`edited` says if one does). Every other one is baked again.
  */
-export function keptJointLights(
-	last: JointLight[],
+export function keptChanges(
+	last: LightChange[],
 	now: { key: string; at: number; region: THREE.Box3 }[],
 	edited: (region: THREE.Box3) => boolean,
-): Map<string, JointLight> {
-	const out = new Map<string, JointLight>();
+): Map<string, LightChange> {
+	const out = new Map<string, LightChange>();
 	for (const j of last) {
 		const n = now.find((m) => m.key === j.key);
 		if (!n) continue;

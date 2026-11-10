@@ -180,18 +180,31 @@ export function buildHouse(
 		addPassage(stage, mats, scene, p);
 		tag(from, p.room.name, () => ({ kind: 'passage', room: p.room.name }));
 	}
-	// Each piece as its parts, closed; a piece without parts is its box.
+	// Each piece as its parts, closed; a piece without parts is its box. A lamp's
+	// meshes say which it is (`userData.lamp`), and its glowing part's that they glow.
+	const lamps = new Map((scene.lights ?? []).map((l) => [l.piece, l]));
 	for (const f of scene.furniture) {
 		const room = nearestRoom(scene.rooms, f.cx, f.cz, f.y0 ?? 0);
+		const lamp = lamps.get(pieceId(f));
+		lamps.delete(pieceId(f));
+		let glows = false;
 		for (const mesh of pieceMeshes(stage, scene, f, mats)) {
 			const from = stage.scene.children.length;
 			stage.scene.add(mesh);
 			if (night && materialOf(f, mesh) === LAMP_MATERIAL) addLampLight(stage, mesh);
 			const part = solids.get(mesh);
 			if (part?.kind !== 'part') throw new Error('`pieceMeshes` made a mesh without its part');
+			if (lamp) {
+				mesh.userData['lamp'] = lamp.id;
+				mesh.userData['glows'] = part.part === lamp.glows;
+				glows ||= part.part === lamp.glows;
+			}
 			tag(from, room, () => ({ ...part, room }));
 		}
+		if (lamp && !glows)
+			throw new Error(`the light ${lamp.id}: ${pieceId(f)} has no part ${lamp.glows}`);
 	}
+	for (const l of lamps.values()) throw new Error(`the light ${l.id}: no piece ${l.piece}`);
 }
 
 /** What a piece's part mesh is made of, by its scene key (`pieceMeshes` keeps it). */

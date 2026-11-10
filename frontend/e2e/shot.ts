@@ -3,11 +3,12 @@
 //   node e2e/shot.ts --eye=x,y,z --look=x,y,z --fov 50 --out file.png [--trace 1024] [--tone linear]
 // --trace N path-traces it to N samples a pixel instead (room.ts's ?trace), and
 // says how long that took; --tone linear drops the tone curve (?tone=linear);
-// --night traces it lit by its ceiling lights alone (?night); --exposure auto
-// meters it as the page does when walked (no ?exposure); --tap x,y;x,y clicks the
-// canvas at those pixels first (a door or drawer opens), and lets the page's clock
-// run --after ms (1500) after each for it to move: its clock is held, so a short
-// --after catches one exactly partway.
+// --night is the evening (?night): traced, lit by its ceiling lights alone;
+// else baked, every lamp on; --exposure auto meters it as the page does when
+// walked (no ?exposure); --tap x,y;x,y clicks the canvas at those pixels first (a
+// door or drawer opens, a lamp switches), and lets the page's clock run --after ms
+// (1500) after each for it to move: its clock is held, so a short --after catches
+// one exactly partway.
 import { chromium } from '@playwright/test';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { extname, join } from 'node:path';

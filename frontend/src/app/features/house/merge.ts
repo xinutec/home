@@ -14,7 +14,8 @@ function isMesh(o: THREE.Object3D): o is THREE.Mesh {
  * more than for its triangles, and the room is hundreds of parts in a few dozen
  * materials. What moves on a joint (`userData.moves`, `piece/part`) is merged only
  * with what moves on the same joint, at rest where it is drawn, so it can be moved
- * as one. Returns the merged meshes, in a fixed order: the order the lightmap is
+ * as one; a lamp's meshes (`userData.lamp`) only with its own, its glowing part's
+ * (`userData.glows`) apart from the rest, so it can be lit and tapped. Returns the merged meshes, in a fixed order: the order the lightmap is
  * laid out in.
  */
 export function mergeStatic(
@@ -43,8 +44,10 @@ export function mergeStatic(
 		const layout = Object.keys(mesh.geometry.attributes).sort().join(',');
 		const room: unknown = mesh.userData['room'];
 		const moves: unknown = mesh.userData['moves'];
+		const lamp: unknown = mesh.userData['lamp'];
+		const glows: unknown = mesh.userData['glows'];
 		for (const { material, range } of pieces) {
-			const key = `${String(room)}|${String(moves)}|${material.uuid}|${mesh.castShadow}|${mesh.receiveShadow}|${layout}`;
+			const key = `${String(room)}|${String(moves)}|${String(lamp)}|${String(glows)}|${material.uuid}|${mesh.castShadow}|${mesh.receiveShadow}|${layout}`;
 			groups.set(key, [...(groups.get(key) ?? []), { mesh, material, range }]);
 		}
 	}
@@ -66,8 +69,10 @@ export function mergeStatic(
 		mesh.receiveShadow = first.mesh.receiveShadow;
 		const room: unknown = first.mesh.userData['room'];
 		mesh.userData['room'] = room;
-		const moves: unknown = first.mesh.userData['moves'];
-		if (moves !== undefined) mesh.userData['moves'] = moves;
+		for (const k of ['moves', 'lamp', 'glows']) {
+			const v: unknown = first.mesh.userData[k];
+			if (v !== undefined) mesh.userData[k] = v;
+		}
 		for (const m of meshes) scene.remove(m.mesh);
 		scene.add(mesh);
 		out.push(mesh);

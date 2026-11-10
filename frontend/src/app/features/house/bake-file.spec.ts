@@ -5,6 +5,8 @@ import {
 	checksum,
 	decodeLightmap,
 	encodeLightmap,
+	lampLight,
+	toBits,
 	lightChange,
 	mergedChange,
 	relaid,
@@ -101,6 +103,39 @@ describe('lightmap file', () => {
 		const got = await decodeLightmap(file.buffer as ArrayBuffer, raw);
 		expect([...(got?.joints[0].texels ?? [])]).toEqual([5, 9]);
 		expect([...(got?.joints[0].delta ?? [])]).toEqual([1, 2, 3, -1, -2, -3]);
+	});
+
+	it('reads back each lamp’s light apart from the joints, before the layout', async () => {
+		const none = new Float32Array(12);
+		const lit = none.slice().fill(0.5, 3, 6);
+		const joint = lightChange('cab/door', -90, none, lit);
+		const lamp = lightChange('ceiling-lamp', 1, none, lit);
+		const layout = new Map([
+			[
+				'1.2',
+				{ at: [0, 0] as [number, number], box: new Box3(new Vector3(), new Vector3(1, 1, 1)) },
+			],
+		]);
+		const file = encodeLightmap(none, 2, 2, 7, [joint], layout, [lamp]);
+		const got = await decodeLightmap(file.buffer as ArrayBuffer, raw);
+		expect(got?.joints.map((j) => j.key)).toEqual(['cab/door']);
+		expect(got?.lamps.map((l) => [l.key, l.at, [...l.texels]])).toEqual([['ceiling-lamp', 1, [1]]]);
+		expect(got?.lamps[0].delta[0]).toBeCloseTo(0.5, 3);
+		expect([...(got?.layout.keys() ?? [])]).toEqual(['1.2']);
+	});
+
+	it('keeps a lamp’s light over a hundredth of its bright end, to six bits', () => {
+		// 200 texels lit 1, one at 0.02, one at 0.005, one dark.
+		const light = new Float32Array(203 * 3);
+		light.fill(1, 0, 600);
+		light.fill(0.02, 600, 603);
+		light.fill(0.005, 603, 606);
+		const lamp = lampLight('salt', light);
+		expect(lamp.texels).toHaveLength(201);
+		expect(lamp.texels.at(-1)).toBe(200);
+		expect(toBits(1 + 1 / 100, 6)).toBe(1 + 1 / 64);
+		expect(toBits(0.3, 6)).toBeCloseTo(0.3, 2);
+		expect(Math.abs(toBits(0.3, 6) - 0.3) / 0.3).toBeLessThan(1 / 128);
 	});
 
 	it('refuses a joint whose texels are not in order', () => {

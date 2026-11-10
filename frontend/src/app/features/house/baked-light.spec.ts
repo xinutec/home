@@ -44,6 +44,15 @@ describe('jointLists', () => {
 		expect([...l.entries]).toEqual([0, 1, 2, 3, 0, 4, 5, 6, 1, -1, -2, -3]);
 	});
 
+	it('lists the texels the first changes touch before those only later ones do', () => {
+		// A joint's texels first, then a lamp's: a moving door redraws only the first.
+		const l = jointLists([
+			joint('door', [7, 2], [0, 0, 0, 0, 0, 0]),
+			joint('lamp', [1, 2, 8], [0, 0, 0, 0, 0, 0, 0, 0, 0]),
+		]);
+		expect([...l.texels]).toEqual([7, 2, 1, 8]);
+	});
+
 	it('takes as many joints on one texel as there are', () => {
 		const many = Array.from({ length: 11 }, (_, k) => joint(`j${k}`, [3], [k, 0, 0]));
 		const l = jointLists(many);

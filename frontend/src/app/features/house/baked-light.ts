@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import type { JointLight, Lightmap } from './bake-file';
+import type { LightChange, Lightmap } from './bake-file';
 import { checksum } from './bake-file';
 import type { Lit } from './room-builder';
 import { SKY, windowRadiance } from './sky';
@@ -60,6 +60,8 @@ export function applyLightmap(
 			material.transparent = !frosted;
 			material.opacity = frosted ? 1 : 0.12;
 			material.emissive.setRGB(SKY[0] * glow, SKY[1] * glow, SKY[2] * glow);
+			// The daylight it lets in, for the evening to take away (`showDaylight`).
+			material.userData['daylight'] = material.emissive.clone();
 			material.color.setRGB(0, 0, 0);
 			material.needsUpdate = true;
 			continue;
@@ -98,12 +100,13 @@ export function texelPoints(
 }
 
 /**
- * Every texel any joint changes, once, with its list of changes: `first` and
- * `count` say where in `entries` its list is, an entry four numbers (the joint, by
- * its index in `joints`, then the change of light, RGB). A texel takes a change
- * from as many joints as there are, as a kitchen's do from a dozen.
+ * Every texel any change (a joint's, a lamp's) touches, once, in the order the
+ * changes first meet them, with its list of changes: `first` and `count` say where
+ * in `entries` its list is, an entry four numbers (the change, by its index in
+ * `joints`, then the change of light, RGB). A texel takes a change from as many
+ * joints as there are, as a kitchen's do from a dozen.
  */
-export function jointLists(joints: JointLight[]): {
+export function jointLists(joints: LightChange[]): {
 	texels: Uint32Array;
 	first: Float32Array;
 	count: Float32Array;
@@ -163,29 +166,62 @@ export function jointOwners(
 	return own;
 }
 
-/** Entries a row of the joint lights' list texture. */
+/** Daylight on the room's windows: a frosted pane glows with it (`applyLightmap`
+ *  keeps its glow), and the sky behind the clear ones is the day's, or the night's. */
+export function showDaylight(scene: THREE.Scene, daylight: number): void {
+	const done = new Set<THREE.Material>();
+	scene.traverse((o) => {
+		if (!(o instanceof THREE.Mesh)) return;
+		const m: unknown = o.material;
+		if (!(m instanceof THREE.MeshStandardMaterial) || done.has(m)) return;
+		done.add(m);
+		const day: unknown = m.userData['daylight'];
+		if (day instanceof THREE.Color) m.emissive.copy(day).multiplyScalar(daylight);
+	});
+	const sky = new THREE.Color(SKY[0], SKY[1], SKY[2]).multiplyScalar(daylight);
+	scene.background = sky.lerp(NIGHT, 1 - daylight);
+}
+
+/** The sky outside after dark, linear: a deep blue, barely lit. */
+const NIGHT = new THREE.Color(0.002, 0.003, 0.008);
+
+/** Entries a row of the changes' list texture. */
 const LIST_ROW = 2048;
 
 /**
- * The light of the doors and drawers as they open, worked out on the GPU: the
- * lightmap is drawn into a texture of its own, which the room's materials read in
- * its place, and on each change every texel a joint changes is drawn again, as a
- * point: its light shut plus each joint's change of light (`JointLight`, baked with
- * it open) as far as that joint is open, never below none. What the GPU holds never
- * changes, only how far each joint is open, so nothing is uploaded a frame.
+ * The light as it changes, worked out on the GPU: the doors and drawers as they
+ * open, the lamps as they are switched, the daylight as it goes. The lightmap is
+ * drawn into a texture of its own, which the room's materials read in its place,
+ * scaled by the daylight; and on each change every texel a joint or lamp changes
+ * is drawn again, as a point: the daylight times its light shut plus each joint's
+ * change of light (`LightChange`, baked with it open) as far as that joint is open,
+ * plus each lamp's light by its weight (`Lamps.weight`), never below none. What
+ * the GPU holds never changes, only how far each joint is open, how bright each
+ * lamp is and the daylight, so nothing is uploaded a frame.
+ *
+ * A joint's change was baked in daylight, so it goes with the daylight; the
+ * lamps' light is baked with every door shut, and stays so as one opens.
  */
-export class JointLights {
+export class LiveLight {
 	private readonly target: THREE.WebGLRenderTarget;
 	private readonly points = new THREE.Scene();
+	private readonly copy = new THREE.Scene();
 	private readonly keys: string[];
+	private readonly lampKeys: string[];
 	private readonly open: { value: number[] };
+	private readonly lamps: { value: THREE.Vector3[] };
+	private readonly daylight: { value: number };
 	private readonly owned: { dispose(): void }[] = [];
+	/** The points, and how many of them, from the first, some joint changes. */
+	private readonly cloud: THREE.Points;
+	private readonly jointTexels: number;
 
 	constructor(
 		private readonly renderer: THREE.WebGLRenderer,
 		scene: THREE.Scene,
 		base: THREE.DataTexture,
-		joints: JointLight[],
+		joints: LightChange[],
+		lamps: LightChange[],
 		/** The room's meshes as laid out in the lightmap: which of them moves on what. */
 		meshes: THREE.Mesh[],
 	) {
@@ -199,31 +235,40 @@ export class JointLights {
 			depthBuffer: false,
 		});
 		this.target.texture.channel = 1;
-		// The lightmap as baked, copied in texel for texel.
+		// The lightmap as baked, copied in texel for texel, times the daylight: drawn
+		// again only when the daylight changes.
+		this.daylight = { value: 1 };
 		const copy = new THREE.ShaderMaterial({
 			glslVersion: THREE.GLSL3,
-			uniforms: { base: { value: base } },
+			uniforms: { base: { value: base }, daylight: this.daylight },
 			vertexShader: /* glsl */ `void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }`,
 			fragmentShader: /* glsl */ `
 				uniform sampler2D base;
+				uniform float daylight;
 				out vec4 outColor;
-				void main() { outColor = texelFetch(base, ivec2(gl_FragCoord.xy), 0); }
+				void main() {
+					vec4 shut = texelFetch(base, ivec2(gl_FragCoord.xy), 0);
+					outColor = vec4(shut.rgb * daylight, shut.a);
+				}
 			`,
 		});
 		const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), copy);
 		quad.frustumCulled = false;
-		const once = new THREE.Scene();
-		once.add(quad);
-		this.draw(once);
-		copy.dispose();
-		quad.geometry.dispose();
+		this.copy.add(quad);
+		this.owned.push(copy, quad.geometry);
+		this.draw(this.copy);
 
-		// Every texel any joint changes, once, as a point: its light shut, and where its
-		// list of changes is in a texture of them all.
+		// Every texel any joint or lamp changes, once, as a point: its light shut, and
+		// where its list of changes is in a texture of them all, the joints' first.
 		const data: unknown = base.image.data;
 		if (!(data instanceof Uint16Array)) throw new Error('the lightmap is not half floats');
-		const lists = jointLists(joints);
+		const lists = jointLists([...joints, ...lamps]);
 		const n = lists.texels.length;
+		// The lists put the texels some joint changes first: as a door moves, only those
+		// are drawn again.
+		const seen = new Set<number>();
+		for (const j of joints) for (const t of j.texels) seen.add(t);
+		this.jointTexels = seen.size;
 		const shut = new Float32Array(n * 3);
 		lists.texels.forEach((t, u) => {
 			for (let c = 0; c < 3; c++) shut[u * 3 + c] = THREE.DataUtils.fromHalfFloat(data[t * 4 + c]);
@@ -255,14 +300,28 @@ export class JointLights {
 			),
 		);
 		this.keys = joints.map((j) => j.key);
+		this.lampKeys = lamps.map((l) => l.key);
 		this.open = { value: joints.map(() => 0) };
+		this.lamps = { value: lamps.map(() => new THREE.Vector3()) };
 		const material = new THREE.ShaderMaterial({
 			glslVersion: THREE.GLSL3,
-			defines: { JOINTS: Math.max(1, joints.length), LIST_ROW },
-			uniforms: { open: this.open, list: { value: list } },
+			defines: {
+				JOINTS: joints.length,
+				JOINT_SLOTS: Math.max(1, joints.length),
+				LAMP_SLOTS: Math.max(1, lamps.length),
+				LIST_ROW,
+			},
+			uniforms: {
+				open: this.open,
+				lamps: this.lamps,
+				daylight: this.daylight,
+				list: { value: list },
+			},
 			blending: THREE.NoBlending,
 			vertexShader: /* glsl */ `
-				uniform float open[JOINTS];
+				uniform float open[JOINT_SLOTS];
+				uniform vec3 lamps[LAMP_SLOTS];
+				uniform float daylight;
 				uniform highp sampler2D list;
 				in vec3 shut;
 				in float first;
@@ -270,15 +329,22 @@ export class JointLights {
 				in float owner;
 				out vec3 vLight;
 				void main() {
-					vec3 light = shut;
+					vec3 day = shut;
+					vec3 lamp = vec3(0.0);
 					int at = int(first);
 					for (int i = 0; i < int(count); i++, at++) {
 						vec4 e = texelFetch(list, ivec2(at % LIST_ROW, at / LIST_ROW), 0);
+						int k = int(e.x);
+						if (k >= JOINTS) {
+							lamp += lamps[k - JOINTS] * e.yzw;
+							continue;
+						}
 						// Another joint's change, on a part this texel's joint moves, as far as
 						// that part is still shut: it was baked with it shut.
-						float shut = owner >= 0.0 && int(owner) != int(e.x) ? 1.0 - open[int(owner)] : 1.0;
-						light += shut * open[int(e.x)] * e.yzw;
+						float shut = owner >= 0.0 && int(owner) != k ? 1.0 - open[int(owner)] : 1.0;
+						day += shut * open[k] * e.yzw;
 					}
+					vec3 light = daylight * max(day, vec3(0.0)) + lamp;
 					vLight = max(light, vec3(0.0));
 					gl_PointSize = 1.0;
 					gl_Position = vec4(position.xy, 0.0, 1.0);
@@ -293,6 +359,7 @@ export class JointLights {
 		const mesh = new THREE.Points(g, material);
 		mesh.frustumCulled = false;
 		this.points.add(mesh);
+		this.cloud = mesh;
 		this.owned.push(g, material, list);
 		// Drawn once now, everything shut (what is there already), so its program is
 		// compiled at load and not on the first frame a door moves.
@@ -306,12 +373,29 @@ export class JointLights {
 		});
 	}
 
-	/** Shows each joint `openness(key)` of the way open (0 shut, 1 as baked); true if
-	 *  the light changed. */
-	show(openness: (key: string) => number): boolean {
-		const now = this.keys.map((k) => openness(k));
-		if (now.every((v, k) => v - this.open.value[k] === 0)) return false;
-		this.open.value = now;
+	/** Shows each joint `openness(key)` of the way open (0 shut, 1 as baked), each
+	 *  lamp at its `weight(key)` (RGB, 0 off) and the daylight (1 day, 0 night);
+	 *  true if the light changed. */
+	show(
+		openness: (key: string) => number,
+		weight: (key: string) => [number, number, number],
+		daylight: number,
+	): boolean {
+		const open = this.keys.map((k) => openness(k));
+		const lamps = this.lampKeys.map((k) => new THREE.Vector3(...weight(k)));
+		const dark = daylight !== this.daylight.value;
+		if (
+			!dark &&
+			open.every((v, k) => v === this.open.value[k]) &&
+			lamps.every((v, k) => v.equals(this.lamps.value[k]))
+		)
+			return false;
+		const lit = dark || lamps.some((v, k) => !v.equals(this.lamps.value[k]));
+		this.open.value = open;
+		this.lamps.value = lamps;
+		this.daylight.value = daylight;
+		if (dark) this.draw(this.copy);
+		this.cloud.geometry.setDrawRange(0, lit ? Infinity : this.jointTexels);
 		this.draw(this.points);
 		return true;
 	}
@@ -348,13 +432,14 @@ const PROBE_SIZE = 256;
  * used in several rooms is copied, one per room, each with its room's probe. The
  * light on a surface stays the lightmap's alone: three would add the probe as
  * diffuse light too, which the lightmap already holds, so that one line goes from
- * the shader. Returns the probes and copies, for disposal.
+ * the shader. Returns what to dispose of, and `recapture`, which captures every
+ * probe again: after the light changes (a lamp, the evening).
  */
 export function addReflections(
 	renderer: THREE.WebGLRenderer,
 	scene: THREE.Scene,
 	lit: Lit,
-): { dispose(): void }[] {
+): { owned: { dispose(): void }[]; recapture: () => void } {
 	const owned: { dispose(): void }[] = [];
 	const byRoom = new Map<string, THREE.Mesh[]>();
 	for (const mesh of lit.meshes) {
@@ -362,8 +447,7 @@ export function addReflections(
 		byRoom.set(room, [...(byRoom.get(room) ?? []), mesh]);
 	}
 	// Every probe is captured before any surface reflects: none sees another's reflections.
-	const pmrem = new THREE.PMREMGenerator(renderer);
-	const probes = new Map<string, THREE.Texture>();
+	const cameras = new Map<string, THREE.CubeCamera>();
 	for (const [room, meshes] of byRoom) {
 		const at = lit.centres.get(room);
 		const centre = at
@@ -374,18 +458,27 @@ export function addReflections(
 		const cube = new THREE.WebGLCubeRenderTarget(PROBE_SIZE, { type: THREE.HalfFloatType });
 		const camera = new THREE.CubeCamera(0.05, 50, cube);
 		camera.position.copy(centre);
-		camera.update(renderer, scene);
-		const probe = pmrem.fromCubemap(cube.texture);
-		owned.push(cube, probe);
-		probes.set(room, probe.texture);
+		owned.push(cube);
+		cameras.set(room, camera);
 	}
-	pmrem.dispose();
+	const probes = new Map<string, THREE.WebGLRenderTarget>();
+	const capture = () => {
+		const pmrem = new THREE.PMREMGenerator(renderer);
+		for (const [room, camera] of cameras) {
+			camera.update(renderer, scene);
+			probes.get(room)?.dispose();
+			probes.set(room, pmrem.fromCubemap(camera.renderTarget.texture));
+		}
+		pmrem.dispose();
+	};
+	capture();
 
 	const specularOnly = specularOnlyChunk();
 	// The first room to use a material keeps it; each other room gets a copy.
 	const firstRoom = new Map<THREE.Material, string>();
 	const copies = new Map<string, THREE.MeshStandardMaterial>();
 	const done = new Set<THREE.Material>();
+	const reflecting: [THREE.MeshStandardMaterial, string][] = [];
 	for (const [room, meshes] of byRoom)
 		for (const mesh of meshes) {
 			const material = mesh.material;
@@ -401,7 +494,8 @@ export function addReflections(
 			mesh.material = own;
 			if (done.has(own)) continue;
 			done.add(own);
-			own.envMap = probes.get(room) ?? null;
+			own.envMap = probes.get(room)?.texture ?? null;
+			reflecting.push([own, room]);
 			own.envMapIntensity = 1;
 			own.onBeforeCompile = (shader) => {
 				shader.fragmentShader = shader.fragmentShader.replace(
@@ -411,7 +505,13 @@ export function addReflections(
 			};
 			own.needsUpdate = true;
 		}
-	return owned;
+	return {
+		owned: [...owned, { dispose: () => probes.forEach((p) => p.dispose()) }],
+		recapture: () => {
+			capture();
+			for (const [m, room] of reflecting) m.envMap = probes.get(room)?.texture ?? null;
+		},
+	};
 }
 
 /** three's indirect-light chunk without the environment's diffuse light: the
