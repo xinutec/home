@@ -108,7 +108,7 @@ describe('lightmap file', () => {
 		expect([...(got?.joints[0].delta ?? [])]).toEqual([1, 2, 3, -1, -2, -3]);
 	});
 
-	it('reads back each lamp’s light and each pair apart from the joints, before the layout', async () => {
+	it('reads back each lamp’s light, each pair and each probe grid apart from the joints', async () => {
 		const none = new Float32Array(12);
 		const lit = none.slice().fill(0.5, 3, 6);
 		const joint = lightChange('cab/door', -90, none, lit);
@@ -120,7 +120,15 @@ describe('lightmap file', () => {
 			],
 		]);
 		const pair = lightChange(pairKey('cab/door', 'ceiling-lamp'), -90, none, lit);
-		const file = encodeLightmap(none, 2, 2, 7, [joint], layout, [lamp], [pair]);
+		const probe = {
+			lamp: 'ceiling-lamp',
+			room: 'dining',
+			min: [1, 0, -2] as [number, number, number],
+			size: [3, 2.5, 3] as [number, number, number],
+			dims: [2, 1, 1] as [number, number, number],
+			light: Float32Array.from({ length: 2 * 6 * 3 }, (_, i) => i / 8),
+		};
+		const file = encodeLightmap(none, 2, 2, 7, [joint], layout, [lamp], [pair], [probe]);
 		const got = await decodeLightmap(file.buffer as ArrayBuffer, raw);
 		expect(got?.joints.map((j) => j.key)).toEqual(['cab/door']);
 		expect(got?.pairs.map((p) => [pairOf(p.key), p.at])).toEqual([
@@ -129,6 +137,7 @@ describe('lightmap file', () => {
 		expect(got?.lamps.map((l) => [l.key, l.at, [...l.texels]])).toEqual([['ceiling-lamp', 1, [1]]]);
 		expect(got?.lamps[0].delta[0]).toBeCloseTo(0.5, 3);
 		expect([...(got?.layout.keys() ?? [])]).toEqual(['1.2']);
+		expect(got?.probes).toEqual([probe]);
 	});
 
 	it('keeps a lamp’s light over a hundredth of its bright end, to six bits', () => {

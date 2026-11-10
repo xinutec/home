@@ -27,6 +27,20 @@ describe('buildHouse', () => {
 		expect(tags.filter((t) => !t)).toEqual([]);
 	});
 
+	it('gives every vertex a facing: light read by it (the far light) is NaN without one', () => {
+		const faceless = meshes.flatMap((m) => {
+			const n = m.geometry.getAttribute('normal');
+			let bad = 0;
+			for (let i = 0; i < n.count; i++)
+				if (!(Math.hypot(n.getX(i), n.getY(i), n.getZ(i)) > 1e-6)) bad++;
+			const tag = solidTag(m);
+			return bad > 0
+				? [`${tag?.kind === 'part' ? `${tag.piece}/${tag.part}` : String(tag?.kind)}: ${bad}`]
+				: [];
+		});
+		expect(faceless).toEqual([]);
+	});
+
 	it('cuts a stairwell from a floor and a ceiling leaving no triangle without an area', () => {
 		const flat: string[] = [];
 		const [a, b, c] = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];

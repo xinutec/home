@@ -7,13 +7,14 @@ import type { Layout } from './unwrap';
  * light runs from a dark corner to the window's glow, and RGBM keeps a pixel's
  * own range), the bytes gzipped.
  *
- * Header, little-endian, 40 bytes: the magic "HBK5", the room's checksum (its
+ * Header, little-endian, 44 bytes: the magic "HBK6", the room's checksum (its
  * vertices and lightmap coordinates, as `checksum` reads them), the atlas's width
  * and height, the FNV-1a of the scene file's bytes it was baked from (e2e/bake.ts
  * writes it; tests/scene.test.ts fails while it differs from scenes/house.json's,
  * so no edit ships unbaked), the RGBM range (f32), how many joints' changes follow
  * the pixels (u32), how many charts its layout has (u32), how many lamps' light
- * follows the joints' (u32), and how many pairs' changes follow the lamps' (u32).
+ * follows the joints' (u32), how many pairs' changes follow the lamps' (u32), and
+ * how many probe grids follow the layout (u32).
  *
  * After the pixels, each joint's change of light (`LightChange`): its key's length
  * (u16) and UTF-8 bytes, the value it was baked open at (f64), how many texels it
@@ -26,6 +27,11 @@ import type { Layout } from './unwrap';
  * Then the atlas's layout (`Layout`), chart by chart: its key's two hashes (u32
  * each) and twin number (u16), its corner in the atlas (u16 x, y), and its box in
  * the room (f32 min x, y, z, max x, y, z).
+ *
+ * Then each probe grid (`ProbeGrid`): its lamp's and its room's names (u16 length
+ * and UTF-8 bytes each), its box's corner and size (f32 x, y, z each), how many
+ * probes along each axis (u16 x, y, z), and its light as half floats, every low
+ * byte and then every high one.
  */
 export interface Lightmap {
 	checksum: number;
@@ -41,6 +47,8 @@ export interface Lightmap {
 	/** What opening a joint does to a lamp's light (`pairKey`), as `joints` to the
 	 *  daylight's: baked with that joint alone open at `at`, near it. */
 	pairs: LightChange[];
+	/** Each lamp's light in the rooms it is not in, as probes. */
+	probes: ProbeGrid[];
 	/** Where each chart is in the atlas: the page lays its atlas out to it. */
 	layout: Layout;
 }
@@ -157,8 +165,31 @@ export function pairOf(key: string): { joint: string; lamp: string } {
 	return { joint: key.slice(0, at), lamp: key.slice(at + 1) };
 }
 
-const MAGIC = 0x354b4248; // "HBK5"
-export const HEADER = 40;
+/** The ways a probe's light is taken: +x, -x, +y, -y, +z, -z. A surface facing n
+ *  takes n.x² of the x one it faces, and so on (an ambient cube). */
+export const FACES: [number, number, number][] = [
+	[1, 0, 0],
+	[-1, 0, 0],
+	[0, 1, 0],
+	[0, -1, 0],
+	[0, 0, 1],
+	[0, 0, -1],
+];
+
+/** One lamp's light in one room, as a grid of probes: `dims` across the room's
+ *  box from `min`, `size` over, each at the middle of its cell; `light` RGB per
+ *  face per probe, face by face, each face's probes x fastest, then y, then z. */
+export interface ProbeGrid {
+	lamp: string;
+	room: string;
+	min: [number, number, number];
+	size: [number, number, number];
+	dims: [number, number, number];
+	light: Float32Array;
+}
+
+const MAGIC = 0x364b4248; // "HBK6"
+export const HEADER = 44;
 
 /** The header and the uncompressed RGBM pixels of a lightmap. */
 export function encodeLightmap(
@@ -170,6 +201,7 @@ export function encodeLightmap(
 	layout: Layout = new Map(),
 	lamps: LightChange[] = [],
 	pairs: LightChange[] = [],
+	probes: ProbeGrid[] = [],
 ): Uint8Array {
 	let peak = 0;
 	light.forEach((v, i) => {
@@ -182,7 +214,8 @@ export function encodeLightmap(
 	const keys = changes.map((j) => new TextEncoder().encode(j.key));
 	const tail =
 		changes.reduce((n, j, k) => n + 2 + keys[k].length + 8 + 4 + j.texels.length * 10, 0) +
-		layout.size * CHART_BYTES;
+		layout.size * CHART_BYTES +
+		probes.reduce((n, g) => n + gridBytes(g), 0);
 	const out = new Uint8Array(HEADER + width * height * 4 + tail);
 	const head = new DataView(out.buffer);
 	head.setUint32(0, MAGIC, true);
@@ -194,6 +227,7 @@ export function encodeLightmap(
 	head.setUint32(28, layout.size, true);
 	head.setUint32(32, lamps.length, true);
 	head.setUint32(36, pairs.length, true);
+	head.setUint32(40, probes.length, true);
 	for (let i = 0; i < width * height; i++) {
 		const [r, g, b] = [light[i * 3], light[i * 3 + 1], light[i * 3 + 2]];
 		const m = Math.min(255, Math.ceil((Math.max(r, g, b) / range) * 255));
@@ -238,6 +272,71 @@ export function encodeLightmap(
 			head.setFloat32(at + 14 + i * 4, v, true),
 		);
 		at += CHART_BYTES;
+	}
+	for (const g of probes) at = writeGrid(out, head, at, g);
+	return out;
+}
+
+/** A probe grid's names, as bytes. */
+function gridNames(g: ProbeGrid): [Uint8Array, Uint8Array] {
+	return [new TextEncoder().encode(g.lamp), new TextEncoder().encode(g.room)];
+}
+
+/** A probe grid's bytes in the file. */
+function gridBytes(g: ProbeGrid): number {
+	const [lamp, room] = gridNames(g);
+	return 2 + lamp.length + 2 + room.length + 24 + 6 + g.light.length * 2;
+}
+
+/** Writes `g` at `at`; returns where it ends. */
+function writeGrid(out: Uint8Array, head: DataView, at: number, g: ProbeGrid): number {
+	const n = g.dims[0] * g.dims[1] * g.dims[2] * FACES.length * 3;
+	if (g.light.length !== n)
+		throw new Error(`${g.lamp} in ${g.room}: ${g.light.length} values, not ${n}`);
+	for (const name of gridNames(g)) {
+		head.setUint16(at, name.length, true);
+		out.set(name, at + 2);
+		at += 2 + name.length;
+	}
+	[...g.min, ...g.size].forEach((v, i) => head.setFloat32(at + i * 4, v, true));
+	g.dims.forEach((d, i) => head.setUint16(at + 24 + i * 2, d, true));
+	at += 30;
+	g.light.forEach((v, i) => {
+		if (!Number.isFinite(v)) throw new Error(`${g.lamp} in ${g.room}: a probe's light is ${v}`);
+		const h = DataUtils.toHalfFloat(v);
+		out[at + i] = h & 0xff;
+		out[at + g.light.length + i] = h >> 8;
+	});
+	return at + g.light.length * 2;
+}
+
+/** The `count` probe grids in `px` from `at` on; undefined if cut short. */
+function readGrids(px: Uint8Array, at: number, count: number): ProbeGrid[] | undefined {
+	const view = new DataView(px.buffer, px.byteOffset, px.byteLength);
+	const out: ProbeGrid[] = [];
+	for (let k = 0; k < count; k++) {
+		const names: string[] = [];
+		for (let i = 0; i < 2; i++) {
+			if (at + 2 > px.length) return undefined;
+			const len = view.getUint16(at, true);
+			if (at + 2 + len > px.length) return undefined;
+			names.push(new TextDecoder().decode(px.subarray(at + 2, at + 2 + len)));
+			at += 2 + len;
+		}
+		if (at + 30 > px.length) return undefined;
+		const f = (i: number) => view.getFloat32(at + i * 4, true);
+		const u = (i: number) => view.getUint16(at + 24 + i * 2, true);
+		const dims: [number, number, number] = [u(0), u(1), u(2)];
+		const min: [number, number, number] = [f(0), f(1), f(2)];
+		const size: [number, number, number] = [f(3), f(4), f(5)];
+		at += 30;
+		const n = dims[0] * dims[1] * dims[2] * FACES.length * 3;
+		if (at + n * 2 > px.length) return undefined;
+		const light = new Float32Array(n);
+		for (let i = 0; i < n; i++)
+			light[i] = DataUtils.fromHalfFloat(px[at + i] | (px[at + n + i] << 8));
+		at += n * 2;
+		out.push({ lamp: names[0], room: names[1], min, size, dims, light });
 	}
 	return out;
 }
@@ -310,6 +409,8 @@ export async function decodeLightmap(
 	if (!pairs) return undefined;
 	const layout = readLayout(px, pairs.at, head.getUint32(28, true));
 	if (!layout) return undefined;
+	const probes = readGrids(px, pairs.at + layout.size * CHART_BYTES, head.getUint32(40, true));
+	if (!probes) return undefined;
 	return {
 		checksum: head.getUint32(4, true),
 		width,
@@ -318,6 +419,7 @@ export async function decodeLightmap(
 		joints: joints.changes,
 		lamps: lamps.changes,
 		pairs: pairs.changes,
+		probes,
 		layout,
 	};
 }

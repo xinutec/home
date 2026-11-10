@@ -2,6 +2,7 @@ import type * as THREE from 'three';
 import { Box3, Vector3 } from 'three';
 import {
 	type LightChange,
+	type ProbeGrid,
 	type Lightmap,
 	encodeLightmap,
 	lampLight,
@@ -11,47 +12,42 @@ import {
 	relaid,
 	trimmedPair,
 } from './bake-file';
-import { roomChecksum } from './baked-light';
-import { bakeLightmap } from './baker';
+import { roomChecksum, texelOwners } from './baked-light';
+import { bakeLightmap, bakeProbes } from './baker';
 import { type Surfaces, editedCells } from './edits';
 import type { HouseScene } from './house.model';
 import { type Joints, keptChanges } from './joints';
 import { type Lit, surfacesOf } from './room-builder';
-import { nearestRoom, roomPerimeter } from './scene-geometry';
+import { fillGaps, probePoints, roomBoxes, roomTag } from './probes';
+import { nearestRoom } from './scene-geometry';
 
 /** Metres around where a door or drawer passes, or around what an edit added or
  *  took away, that it can change the light by more than lightChange's floor: the
  *  bake traces only there. */
 const LIGHT_REACH = 0.75;
 
-/** Metres past its room's walls a lamp's light is baked to: through a doorway, a
- *  little way into the next room. Further on, it is left out. */
-const LAMP_REACH = 1;
-
-/** A lamp to bake: its light's id, the region its light is traced in, and its
- *  room's box, whose joints make pairs with it. */
+/** A lamp to bake: its light's id, and its room (as its meshes are tagged,
+ *  `roomBoxes`): its light is traced on that room's surfaces, and as probes in
+ *  every other; the doors and drawers in it make pairs with it. */
 export interface LampRegion {
 	key: string;
-	region: THREE.Box3;
-	room: THREE.Box3;
+	room: string;
+	box: THREE.Box3;
 }
 
-/** Each of the scene's lights, with its room (its piece's), from floor to ceiling,
- *  and that grown by LAMP_REACH: where its light is traced. */
+/** Each of the scene's lights, with its room (its piece's). */
 export function lampRegions(scene: HouseScene): LampRegion[] {
+	const boxes = roomBoxes(scene);
 	return (scene.lights ?? []).map((l) => {
 		const f = scene.furniture.find((p) => p.id === l.piece);
 		if (!f) throw new Error(`the light ${l.id}: no piece ${l.piece}`);
 		const name = nearestRoom(scene.rooms, f.cx, f.cz, f.y0 ?? 0);
 		const room = scene.rooms.find((r) => r.name === name);
 		if (!room) throw new Error(`the light ${l.id} is in no room`);
-		const floor = room.floor ?? 0;
-		const box = new Box3();
-		for (const p of roomPerimeter(room)) {
-			box.expandByPoint(new Vector3(p.x, floor, p.z));
-			box.expandByPoint(new Vector3(p.x, floor + scene.height, p.z));
-		}
-		return { key: l.id, region: box.clone().expandByScalar(LAMP_REACH), room: box };
+		const tag = roomTag(room);
+		const box = boxes.get(tag);
+		if (!box) throw new Error(`no box for ${tag}`);
+		return { key: l.id, room: tag, box };
 	});
 }
 /** The bake the page is fed, and what e2e/bake.ts keeps beside it: its raw sums, and
@@ -100,11 +96,12 @@ export interface HouseBake {
  * the surfaces that changed since then and on charts no bake has lit, and bakes
  * again only the joints near them, in those places only: the rest is that bake's.
  * `shutOnly`, it bakes no joint: the shut house's light alone, to measure.
- * Then each lamp's light, alone, in its region (`lampRegions`), and what opening
- * each joint whose region meets it does to that light (a pair, `pairKey`), traced
- * near the joint from the lamp's own sums. A lamp is kept from the last bake, with
- * its pairs, where no edit reached it and its every joint was kept; else it is
- * baked again, with all of them. `shutOnly` bakes none.
+ * Then each lamp's light, alone, on its room's surfaces (`lampRegions`), and what
+ * opening each joint in that room does to it (a pair, `pairKey`), traced near the
+ * joint from the lamp's own sums. A lamp is kept from the last bake, with its
+ * pairs, where no edit reached its room and its every joint was kept; else it is
+ * baked again, with all of them. Its light in every other room is traced as probes
+ * (`probePoints`) each bake: they are few. `shutOnly` bakes none.
  */
 export async function bakeHouse(
 	renderer: THREE.WebGLRenderer,
@@ -114,8 +111,10 @@ export async function bakeHouse(
 	progress: (done: number, of: number) => void,
 	since?: LastBake,
 	shutOnly = false,
-	lamps: LampRegion[] = [],
+	/** The scene, for its lamps and rooms: without, no lamp is baked. */
+	scene?: HouseScene,
 ): Promise<HouseBake> {
+	const lamps = scene ? lampRegions(scene) : [];
 	const started = performance.now();
 	const { width, height } = lit.atlas;
 	// Where an edit can have changed the light: near the surfaces it changed, and on
@@ -141,7 +140,7 @@ export async function bakeHouse(
 	const keys = shutOnly ? [] : joints.keys().filter((k) => !kept.has(k));
 	const keptLamps = keptChanges(
 		since?.map.lamps ?? [],
-		lamps.map((l) => ({ ...l, at: 1 })),
+		lamps.map((l) => ({ key: l.key, at: 1, region: l.box })),
 		(r) => !!edited?.meets(r),
 	);
 	// The joints in a lamp's room, which make pairs with it: in another, its light
@@ -149,17 +148,31 @@ export async function bakeHouse(
 	const near = (l: LampRegion) =>
 		shutOnly
 			? []
-			: joints.keys().filter((j) => l.room.containsPoint(reach(j).getCenter(new Vector3())));
+			: joints.keys().filter((j) => l.box.containsPoint(reach(j).getCenter(new Vector3())));
 	const lastPairs = new Map((since?.map.pairs ?? []).map((p) => [p.key, p]));
 	const keepsPairs = (l: LampRegion) =>
 		near(l).every((j) => kept.has(j) && lastPairs.get(pairKey(j, l.key))?.at === joints.openAt(j));
 	for (const l of lamps) if (!keepsPairs(l)) keptLamps.delete(l.key);
 	const lampKeys = shutOnly ? [] : lamps.filter((l) => !keptLamps.has(l.key));
 	const pairCount = lampKeys.reduce((n, l) => n + near(l).length, 0);
+	const probing = shutOnly ? [] : lamps;
 	// Progress over every bake: the shut one, then each joint's, then each lamp's and
-	// its pairs'.
+	// its pairs', then each lamp's probes.
 	const report = (k: number) => (done: number) =>
-		progress(k * samples + done, (keys.length + lampKeys.length + pairCount + 1) * samples);
+		progress(
+			k * samples + done,
+			(keys.length + lampKeys.length + pairCount + probing.length + 1) * samples,
+		);
+	// Which room each texel is in, by its index in `rooms`: a lamp's light is traced
+	// on its own room's.
+	const boxes = scene ? roomBoxes(scene) : new Map<string, Box3>();
+	const rooms = [...boxes.keys()];
+	const roomOf = texelOwners(
+		lit.meshes,
+		(m) => rooms.indexOf(String(m.userData['room'])),
+		width,
+		height,
+	);
 	const { light, summed, raw, traced, ms } = await bakeLightmap(
 		renderer,
 		lit,
@@ -210,7 +223,7 @@ export async function bakeHouse(
 			samples,
 			4,
 			report(done++),
-			{ traces: (_, p) => l.region.containsPoint(p), base: none },
+			{ traces: (i) => rooms[roomOf[i]] === l.room, base: none },
 			l.key,
 		);
 		baked.push(lampLight(l.key, on.light));
@@ -226,12 +239,53 @@ export async function bakeHouse(
 				samples,
 				4,
 				report(done++),
-				{ traces: (_, p) => inside.containsPoint(p) && l.region.containsPoint(p), base: on.raw },
+				{ traces: (i, p) => inside.containsPoint(p) && rooms[roomOf[i]] === l.room, base: on.raw },
 				l.key,
 			);
 			joints.set(j, joints.closedAt(j));
 			pairs.push(lightChange(pairKey(j, l.key), at, on.light, open.light));
 			for (const k of ['build', 'trace', 'read', 'finish'] as const) lampMs[k] += open.ms[k];
+		}
+	}
+	// Each lamp's light in every other room, as probes: all its rooms in one trace.
+	const probes: ProbeGrid[] = [];
+	for (const l of probing) {
+		const grids = rooms
+			.filter((r) => r !== l.room)
+			.map((r) => {
+				const box = boxes.get(r);
+				if (!box) throw new Error(`no box for ${r}`);
+				return { room: r, box, ...probePoints(box) };
+			});
+		const at = new Float32Array(grids.reduce((n, g) => n + g.at.length, 0));
+		const normal = new Float32Array(at.length);
+		let k = 0;
+		for (const g of grids) {
+			at.set(g.at, k);
+			normal.set(g.normal, k);
+			k += g.at.length;
+		}
+		const light = await bakeProbes(
+			renderer,
+			lit,
+			samples,
+			{ at, normal },
+			l.key,
+			4,
+			report(done++),
+		);
+		k = 0;
+		for (const g of grids) {
+			const size = g.box.getSize(new Vector3());
+			probes.push({
+				lamp: l.key,
+				room: g.room,
+				min: [g.box.min.x, g.box.min.y, g.box.min.z],
+				size: [size.x, size.y, size.z],
+				dims: g.dims,
+				light: fillGaps(light.subarray(k, k + g.at.length), g.dims),
+			});
+			k += g.at.length;
 		}
 	}
 	const lamped = (shutOnly ? [] : lamps)
@@ -264,6 +318,7 @@ export async function bakeHouse(
 			lit.atlas.layout,
 			lamped,
 			paired,
+			probes,
 		),
 		raw,
 		seen,

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 
 import { type LightChange, type Lightmap, checksum, pairOf } from './bake-file';
 import type { Lit } from './room-builder';
+import type { FarLight } from './probes';
 import { SKY, windowRadiance } from './sky';
 import { GUTTER } from './unwrap';
 
@@ -147,9 +148,20 @@ export function jointOwners(
 	width: number,
 	height: number,
 ): Int16Array {
+	return texelOwners(meshes, (m) => keys.indexOf(String(m.userData['moves'] ?? '')), width, height);
+}
+
+/** Each texel of a `width` x `height` atlas as `of` its mesh says (-1 for none),
+ *  with its chart's gutter; -1 where no mesh is. */
+export function texelOwners(
+	meshes: THREE.Mesh[],
+	of: (mesh: THREE.Mesh) => number,
+	width: number,
+	height: number,
+): Int16Array {
 	const own = new Int16Array(width * height).fill(-1);
 	for (const m of meshes) {
-		const j = keys.indexOf(String(m.userData['moves'] ?? ''));
+		const j = of(m);
 		if (j < 0) continue;
 		const uv = m.geometry.getAttribute('uv1');
 		for (let t = 0; t < uv.count; t += 3) {
@@ -464,6 +476,8 @@ export function addReflections(
 	renderer: THREE.WebGLRenderer,
 	scene: THREE.Scene,
 	lit: Lit,
+	/** The lamps' light in rooms they are not in: a room's copies read it too. */
+	far?: FarLight,
 ): { owned: { dispose(): void }[]; recapture: () => void } {
 	const owned: { dispose(): void }[] = [];
 	const byRoom = new Map<string, THREE.Mesh[]>();
@@ -522,12 +536,16 @@ export function addReflections(
 			own.envMap = probes.get(room)?.texture ?? null;
 			reflecting.push([own, room]);
 			own.envMapIntensity = 1;
+			const lamps = far?.has(room) ? far : undefined;
 			own.onBeforeCompile = (shader) => {
 				shader.fragmentShader = shader.fragmentShader.replace(
 					'#include <lights_fragment_maps>',
 					specularOnly,
 				);
+				lamps?.patch(shader, room);
 			};
+			// A room with far light draws with a program of its own.
+			own.customProgramCacheKey = () => (lamps ? 'far' : 'near');
 			own.needsUpdate = true;
 		}
 	return {

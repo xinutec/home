@@ -942,6 +942,15 @@ function loft(
 	geom.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
 	geom.setIndex(index);
 	geom.computeVertexNormals();
+	// A tip's ring is one point, in triangles of no area: it faces along the loft.
+	const normal = geom.getAttribute('normal');
+	for (const [i, out] of [
+		[0, -1],
+		[rings.length - 1, 1],
+	] as const) {
+		if (Math.max(rings[i].ry, rings[i].rz) >= 1e-9) continue;
+		for (let k = 0; k <= sides; k++) normal.setXYZ(at(i, k), out, 0, 0);
+	}
 	return geom;
 }
 
@@ -1011,13 +1020,15 @@ function fronds(w: number, h: number, d: number): THREE.BufferGeometry {
 		const length = 0.6 + 0.4 * f;
 		const droop = 0.25 + 0.6 * f;
 		const [dx, dz] = [Math.cos(phi), Math.sin(phi)];
+		// A point at its foot and at its tip, where it has no width: two edges there
+		// would meet in triangles of no area, which have no facing.
 		for (let i = 0; i <= FROND_STEPS; i++) {
 			const t = i / FROND_STEPS;
 			const out = length * t * Math.cos(rise);
 			const y = length * t * Math.sin(rise) - droop * length * t * t;
 			const half = 0.07 * length * Math.pow(Math.sin(Math.PI * t), 0.8);
 			pos.push(out * dx + half * dz, y, out * dz - half * dx);
-			pos.push(out * dx - half * dz, y, out * dz + half * dx);
+			if (i > 0 && i < FROND_STEPS) pos.push(out * dx - half * dz, y, out * dz + half * dx);
 		}
 	}
 	const xs = pos.filter((_, i) => i % 3 === 0);
@@ -1031,12 +1042,20 @@ function fronds(w: number, h: number, d: number): THREE.BufferGeometry {
 		pos[i + 2] = (pos[i + 2] / sz) * (d / 2);
 	}
 	const index: number[] = [];
-	const row = 2 * (FROND_STEPS + 1);
-	for (let k = 0; k < FROND_LEAVES; k++)
-		for (let i = 0; i < FROND_STEPS; i++) {
-			const a = k * row + 2 * i;
+	// A leaf's vertices: its foot, then a left and a right at each step between, then
+	// its tip.
+	const row = 2 * FROND_STEPS;
+	for (let k = 0; k < FROND_LEAVES; k++) {
+		const foot = k * row;
+		const tip = foot + row - 1;
+		const left = (i: number) => foot + 2 * i - 1;
+		index.push(foot, left(1), left(1) + 1);
+		for (let i = 1; i < FROND_STEPS - 1; i++) {
+			const a = left(i);
 			index.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
 		}
+		index.push(left(FROND_STEPS - 1), tip, left(FROND_STEPS - 1) + 1);
+	}
 	// The stem: two crossed strips up to where the leaves spread.
 	const top = (-y0 / (y1 - y0) - 0.5) * h;
 	const r = FROND_STEM / 2;

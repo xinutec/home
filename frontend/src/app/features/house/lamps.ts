@@ -57,6 +57,7 @@ export class Lamps {
 
 	/** Switches a lamp on, or off. */
 	toggle(key: string): void {
+		if (!this.glowing.has(key)) throw new Error(`no lamp ${key}`);
 		if (!this.on.delete(key)) this.on.add(key);
 	}
 

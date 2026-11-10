@@ -28,15 +28,10 @@ import { cameraFromQuery } from './camera';
 import { AutoExposure } from './exposure';
 import type { CameraQuery } from './camera';
 import { buildInterior } from './room-builder';
-import {
-	type LampRegion,
-	type LastBake,
-	bakeHouse,
-	fetchLastBake,
-	lampRegions,
-} from './house-bake';
+import { type LastBake, bakeHouse, fetchLastBake } from './house-bake';
 import type { Lit } from './room-builder';
 import { Lamps } from './lamps';
+import { FarLight } from './probes';
 import { nightSkyImage, overcastSky, overcastSkyImage } from './sky';
 import { ThreeView } from './three-view';
 import { Joints } from './joints';
@@ -112,6 +107,8 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 	private liveLight?: LiveLight;
 	/** The lamps, once a lightmap with their light applies. */
 	private lamps?: Lamps;
+	/** The lamps' light in rooms they are not in, once a lightmap with it applies. */
+	private farLight?: FarLight;
 	/** The reflections, to capture again when the light changes. */
 	private recapture?: () => void;
 	private auto?: AutoExposure;
@@ -210,7 +207,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 	/** Hands the camera to a walker: from the room's own view, standing, unless the
 	 *  URL placed the camera (a comparison with a photo keeps its exact pose). A tap
 	 *  on a door or drawer opens it, or shuts it; on a lamp, switches it, and it is
-	 *  evening while one is on (`?night`: every one, from the start). */
+	 *  evening while one is on (`?night`: every one, from the start; `?lamps=a,b`: those). */
 	private walk(view: ThreeView, joints: Joints, lit: Lit): void {
 		const standing = !this.query.eye;
 		const lamps = this.lamps;
@@ -230,16 +227,16 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		const switched = () => {
 			if (!lamps) return;
 			lamps.showGlow();
+			this.farLight?.show((key) => lamps.weight(key));
 			showDaylight(view.scene, lamps.evening ? 0 : 1);
 			show();
 			this.recapture?.();
 			this.auto?.aim(lamps.evening ? EVENING_KEY : AUTO_KEY);
 			view.requestFrame();
 		};
-		if (lamps && this.query.night) {
-			lamps.allOn();
-			switched();
-		}
+		if (lamps && this.query.night) lamps.allOn();
+		for (const key of this.query.lamps ?? []) lamps?.toggle(key);
+		if (lamps && (this.query.night || this.query.lamps)) switched();
 		const caster = new THREE.Raycaster();
 		const canvas = view.renderer.domElement;
 		const tapped = (x: number, y: number) => {
@@ -301,7 +298,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		else if (this.query.bake) {
 			const since = this.query.since && map ? await fetchLastBake(map) : undefined;
 			const joints = new Joints(scene, lit.meshes);
-			this.bake(view, joints, lit, this.query.bake, since, !!this.query.shut, lampRegions(scene));
+			this.bake(view, joints, lit, this.query.bake, since, !!this.query.shut, scene);
 		} else {
 			const joints = new Joints(scene, lit.meshes);
 			this.light(view, scene, lit, map);
@@ -333,8 +330,9 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 					lit.meshes,
 				),
 			);
+		if (map && texture && map.probes.length > 0) this.farLight = view.own(new FarLight(map.probes));
 		if (applied) {
-			const reflections = addReflections(view.renderer, view.scene, lit);
+			const reflections = addReflections(view.renderer, view.scene, lit, this.farLight);
 			for (const t of reflections.owned) view.own(t);
 			this.recapture = reflections.recapture;
 		}
@@ -427,7 +425,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		samples: number,
 		since: LastBake | undefined,
 		shutOnly: boolean,
-		lamps: LampRegion[],
+		scene: HouseScene,
 	): void {
 		const host = this.host().nativeElement;
 		const run = async () => {
@@ -439,7 +437,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 				(done, of) => (host.dataset['baking'] = `${done} of ${of}`),
 				since,
 				shutOnly,
-				lamps,
+				scene,
 			);
 			// The room it is for, beside it, for e2e scripts that inspect the light.
 			Object.assign(window, {

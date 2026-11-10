@@ -58,6 +58,219 @@ export async function bakeLightmap(
 	const started = performance.now();
 	const meshes = lit.meshes;
 	const { width, height } = lit.atlas;
+	const world = buildWorld(lit, lamp);
+
+	// Where each atlas pixel is in the room and which way it faces: every surface
+	// drawn once into the atlas, at its lightmap coordinates.
+	const [posTarget, nrmTarget] = [0, 1].map(() => floatTarget(width, height));
+	const raster = new THREE.ShaderMaterial({
+		glslVersion: THREE.GLSL3,
+		side: THREE.DoubleSide,
+		depthTest: false,
+		depthWrite: false,
+		uniforms: { normals: { value: 0 } },
+		vertexShader: /* glsl */ `
+			in vec2 uv1;
+			out vec3 vPos;
+			out vec3 vNormal;
+			void main() {
+				vPos = (modelMatrix * vec4(position, 1.0)).xyz;
+				vNormal = mat3(modelMatrix) * normal;
+				gl_Position = vec4(uv1 * 2.0 - 1.0, 0.0, 1.0);
+			}
+		`,
+		fragmentShader: /* glsl */ `
+			uniform int normals;
+			in vec3 vPos;
+			in vec3 vNormal;
+			out vec4 outColor;
+			void main() { outColor = normals == 1 ? vec4(normalize(vNormal), 1.0) : vec4(vPos, 1.0); }
+		`,
+	});
+	const layout = new THREE.Scene();
+	for (const m of meshes) {
+		const material = m.material;
+		if (Array.isArray(material) || isGlass(material)) continue;
+		const flatMesh = new THREE.Mesh(m.geometry, raster);
+		flatMesh.matrixAutoUpdate = false;
+		flatMesh.matrix.copy(m.matrixWorld);
+		// Drawn at its lightmap coordinates, not where it stands: three's culling by the
+		// camera's view would drop every mesh beyond a metre of the room's origin.
+		flatMesh.frustumCulled = false;
+		layout.add(flatMesh);
+	}
+	const built = performance.now();
+	const before = renderer.getRenderTarget();
+	const clear = renderer.getClearColor(new THREE.Color());
+	const clearAlpha = renderer.getClearAlpha();
+	const autoClear = renderer.autoClear;
+	const flat = new THREE.Camera();
+	renderer.setClearColor(0x000000, 0);
+	[posTarget, nrmTarget].forEach((t, i) => {
+		raster.uniforms['normals'].value = i;
+		renderer.setRenderTarget(t);
+		renderer.clear();
+		renderer.render(layout, flat);
+	});
+	// Off the layout's targets: the passes give the page its own between them, and
+	// its frame would land in the normals the light is finished by.
+	renderer.setRenderTarget(before);
+
+	// A local bake traces only its region's texels, packed ROW to a row (`atlasAt`
+	// says where each is in the atlas): scattered over the atlas, they would leave the
+	// GPU running every group of texels that holds one, and every pass over them all.
+	const inRegion: number[] = [];
+	// Where a surface is: a pixel no chart covers now (a removed one's) keeps no sums.
+	const points = local ? new Float32Array(width * height * 4) : undefined;
+	if (local && points) {
+		renderer.readRenderTargetPixels(posTarget, 0, 0, width, height, points);
+		const at = new THREE.Vector3();
+		for (let i = 0; i < width * height; i++) {
+			if (points[i * 4 + 3] === 0) continue;
+			at.fromArray(points, i * 4);
+			if (local.traces(i, at)) inRegion.push(i);
+		}
+	}
+	const packedRows = Math.max(1, Math.ceil(inRegion.length / ROW));
+	const where = new Float32Array(ROW * packedRows * 4).fill(-1);
+	inRegion.forEach((i, k) => where.set([i % width, Math.floor(i / width)], k * 4));
+	const atlasAt = rowTexture(where, packedRows);
+	const target = local ? floatTarget(ROW, packedRows) : floatTarget(width, height);
+	const material = kernel(world, bounces, {
+		pos: posTarget.texture,
+		normal: nrmTarget.texture,
+		atlasAt,
+		packed: !!local,
+	});
+	await runPasses(renderer, material, target, samples, progress);
+	const traced = performance.now();
+	let read = new Float32Array(width * height * 4);
+	if (local) {
+		// What was not traced takes the base's sums; what was, its own.
+		const sums = new Float32Array(ROW * packedRows * 4);
+		renderer.readRenderTargetPixels(target, 0, 0, ROW, packedRows, sums);
+		read = local.base.slice();
+		if (points)
+			for (let i = 0; i < width * height; i++)
+				if (points[i * 4 + 3] === 0) read.fill(0, i * 4, i * 4 + 4);
+		inRegion.forEach((i, k) => read.set(sums.subarray(k * 4, k * 4 + 4), i * 4));
+	} else renderer.readRenderTargetPixels(target, 0, 0, width, height, read);
+	const normalsRead = new Float32Array(width * height * 4);
+	renderer.readRenderTargetPixels(nrmTarget, 0, 0, width, height, normalsRead);
+	renderer.autoClear = autoClear;
+	renderer.setRenderTarget(before);
+	renderer.setClearColor(clear, clearAlpha);
+
+	const readBack = performance.now();
+	const light = finish(read, normalsRead, width, height);
+	const finished = performance.now();
+	let summed = 0;
+	for (let t = 3; t < read.length; t += 4) summed = Math.max(summed, read[t]);
+
+	for (const r of [target, atlasAt, posTarget, nrmTarget, material, raster]) r.dispose();
+	world.dispose();
+	// A shader that failed to compile draws nothing, and every texel would count none.
+	const most = local ? inRegion.reduce((m, i) => Math.max(m, read[i * 4 + 3]), 0) : summed;
+	const asked = Math.ceil(samples / PER_PASS) * PER_PASS;
+	if ((!local || inRegion.length > 0) && most !== asked)
+		throw new Error(`the trace counted at most ${most} of ${asked} samples on a texel`);
+	const ms = {
+		build: Math.round(built - started),
+		trace: Math.round(traced - built),
+		read: Math.round(readBack - traced),
+		finish: Math.round(finished - readBack),
+	};
+	let owned: ((pixel: number) => boolean) | undefined;
+	if (points) {
+		const covered = new Uint8Array(width * height);
+		for (let i = 0; i < width * height; i++) covered[i] = points[i * 4 + 3] !== 0 ? 1 : 0;
+		owned = ownLight(width, height, covered, inRegion);
+	}
+	return {
+		light,
+		summed,
+		raw: read,
+		traced: local ? inRegion.length : width * height,
+		owned,
+		ms,
+	};
+}
+
+/**
+ * The light on `points`, each a place in the room (xyz) facing a way (`normal`,
+ * xyz), traced as `bakeLightmap` traces a texel's: what a small surface there,
+ * facing so, would receive. RGB a point, in the trace's units; NaN where most of
+ * its samples began inside something (a point in a wall or a cupboard), which has
+ * no light of its own to give. With `lamp`, that lamp's light alone.
+ */
+export async function bakeProbes(
+	renderer: THREE.WebGLRenderer,
+	lit: Lit,
+	samples: number,
+	points: { at: Float32Array; normal: Float32Array },
+	lamp?: string,
+	bounces = 4,
+	progress: (done: number) => void = () => undefined,
+): Promise<Float32Array> {
+	const count = points.at.length / 3;
+	if (points.normal.length !== points.at.length)
+		throw new Error(`${count} points with ${points.normal.length / 3} normals`);
+	const rows = Math.max(1, Math.ceil(count / ROW));
+	// w 1 marks a point: the rest of the last row is none.
+	const [at, normal] = [new Float32Array(ROW * rows * 4), new Float32Array(ROW * rows * 4)];
+	for (let i = 0; i < count; i++) {
+		at.set([points.at[i * 3], points.at[i * 3 + 1], points.at[i * 3 + 2], 1], i * 4);
+		normal.set(
+			[points.normal[i * 3], points.normal[i * 3 + 1], points.normal[i * 3 + 2], 1],
+			i * 4,
+		);
+	}
+	const world = buildWorld(lit, lamp);
+	const [atTex, normalTex, none] = [
+		rowTexture(at, rows),
+		rowTexture(normal, rows),
+		rowTexture(new Float32Array(ROW * 4).fill(-1), 1),
+	];
+	const target = floatTarget(ROW, rows);
+	const material = kernel(world, bounces, {
+		pos: atTex,
+		normal: normalTex,
+		atlasAt: none,
+		packed: false,
+	});
+	await runPasses(renderer, material, target, samples, progress);
+	const sums = new Float32Array(ROW * rows * 4);
+	renderer.readRenderTargetPixels(target, 0, 0, ROW, rows, sums);
+	for (const r of [target, atTex, normalTex, none, material]) r.dispose();
+	world.dispose();
+	const asked = Math.ceil(samples / PER_PASS) * PER_PASS;
+	const light = new Float32Array(count * 3);
+	let most = 0;
+	for (let i = 0; i < count; i++) {
+		const valid = sums[i * 4 + 3];
+		most = Math.max(most, valid);
+		for (let c = 0; c < 3; c++)
+			light[i * 3 + c] = valid >= asked / 4 ? sums[i * 4 + c] / valid : NaN;
+	}
+	// A shader that failed to compile draws nothing, and every point would count none.
+	if (count > 0 && most !== asked)
+		throw new Error(`the trace counted at most ${most} of ${asked} samples on a point`);
+	return light;
+}
+
+/** What a trace's rays meet and where its light comes from, on the GPU: every
+ *  surface (its triangles in a BVH, what each is made of), and the sources, the
+ *  panes or a lamp's glowing surfaces (`bakeLightmap`'s `lamp`). */
+interface World {
+	bvh: MeshBVHUniformStruct;
+	surfaces: FloatVertexAttributeTexture;
+	lights: THREE.DataTexture[];
+	count: number;
+	dispose(): void;
+}
+
+function buildWorld(lit: Lit, lamp: string | undefined): World {
+	const meshes = lit.meshes;
 	// Everything the rays can hit, as one geometry: its triangles, and per vertex what
 	// a hit there does (albedo and kind: 0 a solid's surface, seen from one side; 1
 	// glass, which light passes; 2 a sheet, seen from both, as a wall or a curtain).
@@ -203,89 +416,39 @@ export async function bakeLightmap(
 		lc.set([l.e2.x, l.e2.y, l.e2.z, l.sides], i * 4);
 		ld.set([...l.le, 0], i * 4);
 	});
-	const asTexture = (data: Float32Array, rows: number) => {
-		const t = new THREE.DataTexture(data, ROW, rows, THREE.RGBAFormat, THREE.FloatType);
-		t.needsUpdate = true;
-		return t;
+	const lightTexs = [la, lb, lc, ld].map((d) => rowTexture(d, lightRows));
+
+	return {
+		bvh: bvhUniform,
+		surfaces: surfaceTex,
+		lights: lightTexs,
+		count: lights.length,
+		dispose: () => {
+			for (const r of [surfaceTex, ...lightTexs, world]) r.dispose();
+			bvhUniform.dispose();
+		},
 	};
-	const lightTexs = [la, lb, lc, ld].map((d) => asTexture(d, lightRows));
+}
 
-	// Where each atlas pixel is in the room and which way it faces: every surface
-	// drawn once into the atlas, at its lightmap coordinates.
-	const [posTarget, nrmTarget] = [0, 1].map(() => floatTarget(width, height));
-	const raster = new THREE.ShaderMaterial({
-		glslVersion: THREE.GLSL3,
-		side: THREE.DoubleSide,
-		depthTest: false,
-		depthWrite: false,
-		uniforms: { normals: { value: 0 } },
-		vertexShader: /* glsl */ `
-			in vec2 uv1;
-			out vec3 vPos;
-			out vec3 vNormal;
-			void main() {
-				vPos = (modelMatrix * vec4(position, 1.0)).xyz;
-				vNormal = mat3(modelMatrix) * normal;
-				gl_Position = vec4(uv1 * 2.0 - 1.0, 0.0, 1.0);
-			}
-		`,
-		fragmentShader: /* glsl */ `
-			uniform int normals;
-			in vec3 vPos;
-			in vec3 vNormal;
-			out vec4 outColor;
-			void main() { outColor = normals == 1 ? vec4(normalize(vNormal), 1.0) : vec4(vPos, 1.0); }
-		`,
-	});
-	const layout = new THREE.Scene();
-	for (const m of meshes) {
-		const material = m.material;
-		if (Array.isArray(material) || isGlass(material)) continue;
-		const flatMesh = new THREE.Mesh(m.geometry, raster);
-		flatMesh.matrixAutoUpdate = false;
-		flatMesh.matrix.copy(m.matrixWorld);
-		// Drawn at its lightmap coordinates, not where it stands: three's culling by the
-		// camera's view would drop every mesh beyond a metre of the room's origin.
-		flatMesh.frustumCulled = false;
-		layout.add(flatMesh);
-	}
-	const built = performance.now();
-	const before = renderer.getRenderTarget();
-	const clear = renderer.getClearColor(new THREE.Color());
-	const clearAlpha = renderer.getClearAlpha();
-	const autoClear = renderer.autoClear;
-	const flat = new THREE.Camera();
-	renderer.setClearColor(0x000000, 0);
-	[posTarget, nrmTarget].forEach((t, i) => {
-		raster.uniforms['normals'].value = i;
-		renderer.setRenderTarget(t);
-		renderer.clear();
-		renderer.render(layout, flat);
-	});
+/** A row-major float texture ROW wide: points, or the light sources. */
+function rowTexture(data: Float32Array, rows: number): THREE.DataTexture {
+	const t = new THREE.DataTexture(data, ROW, rows, THREE.RGBAFormat, THREE.FloatType);
+	t.needsUpdate = true;
+	return t;
+}
 
-	// A local bake traces only its region's texels, packed ROW to a row (`atlasAt`
-	// says where each is in the atlas): scattered over the atlas, they would leave the
-	// GPU running every group of texels that holds one, and every pass over them all.
-	const inRegion: number[] = [];
-	// Where a surface is: a pixel no chart covers now (a removed one's) keeps no sums.
-	const points = local ? new Float32Array(width * height * 4) : undefined;
-	if (local && points) {
-		renderer.readRenderTargetPixels(posTarget, 0, 0, width, height, points);
-		const at = new THREE.Vector3();
-		for (let i = 0; i < width * height; i++) {
-			if (points[i * 4 + 3] === 0) continue;
-			at.fromArray(points, i * 4);
-			if (local.traces(i, at)) inRegion.push(i);
-		}
-	}
-	const packedRows = Math.max(1, Math.ceil(inRegion.length / ROW));
-	const where = new Float32Array(ROW * packedRows * 4).fill(-1);
-	inRegion.forEach((i, k) => where.set([i % width, Math.floor(i / width)], k * 4));
-	const atlasAt = asTexture(where, packedRows);
-	const target = local ? floatTarget(ROW, packedRows) : floatTarget(width, height);
-	// Samples a pass: one short draw at a time, so no draw outlives the GPU's watchdog.
-	const PER_PASS = 1;
-	const material = new THREE.ShaderMaterial({
+/** Samples a pass: one short draw at a time, so no draw outlives the GPU's watchdog. */
+const PER_PASS = 1;
+
+/** The trace, as a shader drawn once a pass over the points: each pixel a point
+ *  (where `at.pos` says, facing `at.normal`; through `at.atlasAt` if `at.packed`),
+ *  its light summed with the count of samples that counted. */
+function kernel(
+	world: World,
+	bounces: number,
+	at: { pos: THREE.Texture; normal: THREE.Texture; atlasAt: THREE.Texture; packed: boolean },
+): THREE.ShaderMaterial {
+	return new THREE.ShaderMaterial({
 		glslVersion: THREE.GLSL3,
 		// three blends only a transparent material: else each pass overwrites the last.
 		// Each pass's sums added as they are: three's AdditiveBlending scales them by
@@ -299,17 +462,17 @@ export async function bakeLightmap(
 		depthWrite: false,
 		defines: { PER_PASS, BOUNCES: bounces, ROW, INSIDE: '0.05', SMALL_ANGLE: '1e-4' },
 		uniforms: {
-			bvh: { value: bvhUniform },
-			surfaceTex: { value: surfaceTex },
-			lightA: { value: lightTexs[0] },
-			lightB: { value: lightTexs[1] },
-			lightC: { value: lightTexs[2] },
-			lightD: { value: lightTexs[3] },
-			lightCount: { value: lights.length },
-			pointPos: { value: posTarget.texture },
-			atlasAt: { value: atlasAt },
-			packed: { value: local ? 1 : 0 },
-			pointNormal: { value: nrmTarget.texture },
+			bvh: { value: world.bvh },
+			surfaceTex: { value: world.surfaces },
+			lightA: { value: world.lights[0] },
+			lightB: { value: world.lights[1] },
+			lightC: { value: world.lights[2] },
+			lightD: { value: world.lights[3] },
+			lightCount: { value: world.count },
+			pointPos: { value: at.pos },
+			atlasAt: { value: at.atlasAt },
+			packed: { value: at.packed ? 1 : 0 },
+			pointNormal: { value: at.normal },
 			seed: { value: 0 },
 			skyTint: { value: new THREE.Vector3(...SKY) },
 			groundLight: { value: new THREE.Vector3(...GROUND).multiplyScalar((GROUND_ALBEDO * 7) / 9) },
@@ -516,6 +679,21 @@ export async function bakeLightmap(
 			}
 		`,
 	});
+}
+
+/** Draws `material` `samples` times into `target`, each pass's sums added to the
+ *  last's, giving the page a turn every few; the renderer as it was after. */
+async function runPasses(
+	renderer: THREE.WebGLRenderer,
+	material: THREE.ShaderMaterial,
+	target: THREE.WebGLRenderTarget,
+	samples: number,
+	progress: (done: number) => void,
+): Promise<void> {
+	const before = renderer.getRenderTarget();
+	const clear = renderer.getClearColor(new THREE.Color());
+	const clearAlpha = renderer.getClearAlpha();
+	const autoClear = renderer.autoClear;
 	const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material);
 	const scene = new THREE.Scene();
 	scene.add(quad);
@@ -542,69 +720,10 @@ export async function bakeLightmap(
 			renderer.setRenderTarget(target);
 		}
 	}
-	const traced = performance.now();
-	let read = new Float32Array(width * height * 4);
-	if (local) {
-		// What was not traced takes the base's sums; what was, its own.
-		const sums = new Float32Array(ROW * packedRows * 4);
-		renderer.readRenderTargetPixels(target, 0, 0, ROW, packedRows, sums);
-		read = local.base.slice();
-		if (points)
-			for (let i = 0; i < width * height; i++)
-				if (points[i * 4 + 3] === 0) read.fill(0, i * 4, i * 4 + 4);
-		inRegion.forEach((i, k) => read.set(sums.subarray(k * 4, k * 4 + 4), i * 4));
-	} else renderer.readRenderTargetPixels(target, 0, 0, width, height, read);
-	const normalsRead = new Float32Array(width * height * 4);
-	renderer.readRenderTargetPixels(nrmTarget, 0, 0, width, height, normalsRead);
 	renderer.autoClear = autoClear;
 	renderer.setRenderTarget(before);
 	renderer.setClearColor(clear, clearAlpha);
-
-	const readBack = performance.now();
-	const light = finish(read, normalsRead, width, height);
-	const finished = performance.now();
-	let summed = 0;
-	for (let t = 3; t < read.length; t += 4) summed = Math.max(summed, read[t]);
-
-	for (const r of [
-		target,
-		atlasAt,
-		posTarget,
-		nrmTarget,
-		surfaceTex,
-		...lightTexs,
-		material,
-		raster,
-		quad.geometry,
-		world,
-	])
-		r.dispose();
-	bvhUniform.dispose();
-	// A shader that failed to compile draws nothing, and every texel would count none.
-	const most = local ? inRegion.reduce((m, i) => Math.max(m, read[i * 4 + 3]), 0) : summed;
-	const asked = Math.ceil(samples / PER_PASS) * PER_PASS;
-	if ((!local || inRegion.length > 0) && most !== asked)
-		throw new Error(`the trace counted at most ${most} of ${asked} samples on a texel`);
-	const ms = {
-		build: Math.round(built - started),
-		trace: Math.round(traced - built),
-		read: Math.round(readBack - traced),
-		finish: Math.round(finished - readBack),
-	};
-	let owned: ((pixel: number) => boolean) | undefined;
-	if (points) {
-		const covered = new Uint8Array(width * height);
-		for (let i = 0; i < width * height; i++) covered[i] = points[i * 4 + 3] !== 0 ? 1 : 0;
-		owned = ownLight(width, height, covered, inRegion);
-	}
-	return {
-		light,
-		summed,
-		raw: read,
-		traced: local ? inRegion.length : width * height,
-		owned,
-		ms,
-	};
+	quad.geometry.dispose();
 }
 
 /** Milliseconds a bake spent on each phase: building the scene's BVH and textures,

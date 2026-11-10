@@ -4,11 +4,11 @@
 // --trace N path-traces it to N samples a pixel instead (room.ts's ?trace), and
 // says how long that took; --tone linear drops the tone curve (?tone=linear);
 // --night is the evening (?night): traced, lit by its ceiling lights alone;
-// else baked, every lamp on; --exposure auto meters it as the page does when
-// walked (no ?exposure); --tap x,y;x,y clicks the canvas at those pixels first (a
-// door or drawer opens, a lamp switches), and lets the page's clock run --after ms
-// (1500) after each for it to move: its clock is held, so a short --after catches
-// one exactly partway.
+// else baked, every lamp on; --lamps a,b turns those lamps on (?lamps);
+// --exposure auto meters it as the page does when walked (no ?exposure); --tap
+// x,y;x,y clicks the canvas at those pixels first (a door or drawer opens, a lamp
+// switches), and lets the page's clock run --after ms (1500) after each for it to
+// move: its clock is held, so a short --after catches one exactly partway.
 import { chromium } from '@playwright/test';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { extname, join } from 'node:path';
@@ -25,6 +25,7 @@ const { values: a } = parseArgs({
 		trace: { type: 'string' },
 		tone: { type: 'string' },
 		night: { type: 'boolean', default: false },
+		lamps: { type: 'string' },
 		tap: { type: 'string' },
 		after: { type: 'string', default: '1500' },
 	},
@@ -88,7 +89,8 @@ page.on('console', (m) => {
 const trace =
 	(a.trace ? `&trace=${a.trace}` : '') +
 	(a.tone ? `&tone=${a.tone}` : '') +
-	(a.night ? '&night' : '');
+	(a.night ? '&night' : '') +
+	(a.lamps ? `&lamps=${a.lamps}` : '');
 const start = Date.now();
 // --exposure auto leaves it to the page's meter, and prints what it read.
 const exposure = a.exposure === 'auto' ? '' : `&exposure=${a.exposure}`;

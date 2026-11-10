@@ -1,6 +1,6 @@
 /** A camera asked for in the URL, overriding the room's own `view`:
  *  `?eye=x,y,z&look=x,y,z&fov=deg` (vertical field of view), with `trace`,
- *  `exposure`, `tone=linear`, `stats`, `bake` (with `since` or `shut`), `export` and `night`. For comparing a render against a photograph
+ *  `exposure`, `tone=linear`, `stats`, `bake` (with `since` or `shut`), `export`, `night` and `lamps`. For comparing a render against a photograph
  *  taken from the same spot. */
 export interface CameraQuery {
 	eye?: [number, number, number];
@@ -27,6 +27,8 @@ export interface CameraQuery {
 	/** The physical scene at night: no daylight, the ceiling lights lit; in the
 	 *  everyday view, every lamp on. */
 	night?: boolean;
+	/** In the everyday view, these lamps on (by their lights' ids), the rest off. */
+	lamps?: string[];
 }
 
 function triple(raw: string | null): [number, number, number] | undefined {
@@ -55,5 +57,7 @@ export function cameraFromQuery(search: string): CameraQuery {
 	if (q.has('shut')) out.shut = true;
 	if (q.has('export')) out.export = true;
 	if (q.has('night')) out.night = true;
+	const lamps = (q.get('lamps') ?? '').split(',').filter((l) => l !== '');
+	if (lamps.length > 0) out.lamps = lamps;
 	return out;
 }

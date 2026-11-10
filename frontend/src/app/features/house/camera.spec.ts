@@ -15,6 +15,13 @@ describe('cameraFromQuery', () => {
 		expect(cameraFromQuery('?trace=0&exposure=-1')).toEqual({});
 	});
 
+	it('reads which lamps are on', () => {
+		expect(cameraFromQuery('?lamps=living-ceiling-lamp,kitchen-ceiling-lamp')).toEqual({
+			lamps: ['living-ceiling-lamp', 'kitchen-ceiling-lamp'],
+		});
+		expect(cameraFromQuery('?lamps=')).toEqual({});
+	});
+
 	it('reads the night', () => {
 		expect(cameraFromQuery('?trace=64&night')).toEqual({ trace: 64, night: true });
 	});
