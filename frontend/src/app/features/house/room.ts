@@ -219,6 +219,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		const lamps = this.lamps;
 		const collider = new Collider(lit.meshes);
 		const movables = new Movables(
+			view.renderer,
 			view.scene,
 			lit.movables,
 			(x, z, below) => collider.ground(x, z, below),
@@ -245,7 +246,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			);
 		view.beforeRender = (now) => {
 			const opening = joints.update(now);
-			const carried = movables.update(now, view.camera);
+			const carried = movables.update(now, view.camera, walker.standing);
 			show();
 			return opening || carried;
 		};
@@ -311,6 +312,13 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		);
 		view.useMover(walker);
 		this.walking.set(true);
+		// The physics, once the room is drawn: the walker meets what it walks into from
+		// the start. Its build time on the host, to measure (`data-physics`, ms).
+		const physicsFrom = performance.now();
+		void movables.start().then(() => {
+			canvas.dataset['physics'] = String(Math.round(performance.now() - physicsFrom));
+			view.requestFrame();
+		});
 	}
 
 	/** Builds the room the scene describes, its atlas laid out to the bake's (where

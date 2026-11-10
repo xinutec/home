@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Room } from './house.model';
+import { ContactShadow } from './contact-shadow';
 import type { Dynamics } from './dynamics';
 import type { ProbeLight, ProbeUniforms } from './probes';
 import { roomTag } from './probes';
@@ -8,15 +9,6 @@ import { roomAt } from './scene-geometry';
 /** Metres ahead of the eye, and below it, that a held thing is carried. */
 const HOLD_AHEAD = 0.55;
 const HOLD_BELOW = 0.35;
-/** How dark a thing's shadow is right under it, as a share of the light there, and
- *  how high above what is under it the shadow is gone. */
-const SHADOW = 0.55;
-const SHADOW_FADE = 0.6;
-/** How far past its footprint its shadow spreads. */
-const SHADOW_SPREAD = 1.5;
-/** Millimetres the shadow floats above what it falls on, against z-fighting. */
-const SHADOW_LIFT = 0.002;
-
 /** What a thing stands on: the highest surface of the fixed room under [x, z]
  *  below `below` (`Collider.ground`). */
 export type Ground = (x: number, z: number, below: number) => number | undefined;
@@ -31,7 +23,9 @@ interface Movable {
 	/** Its footprint's half-sizes, along its own x and z, and its height. */
 	half: [number, number];
 	height: number;
-	shadow: THREE.Mesh;
+	shadow: ContactShadow;
+	/** Where its shadow was last drawn for: its matrix then. */
+	drawn?: THREE.Matrix4;
 	/** Its parts' points, in its own frame: its hull, as a body. */
 	points: Float32Array;
 	/** Which room's probes it reads, and the uniforms it reads them by. */
@@ -55,6 +49,7 @@ export class Movables {
 	private starting?: Promise<Dynamics>;
 
 	constructor(
+		private readonly renderer: THREE.WebGLRenderer,
 		scene: THREE.Scene,
 		/** Their meshes as drawn, each saying what it is part of (`userData.movable`). */
 		meshes: THREE.Mesh[],
@@ -66,7 +61,6 @@ export class Movables {
 		/** The physics they move by, made when first needed. */
 		private readonly makeDynamics: () => Promise<Dynamics>,
 	) {
-		const shadowMap = own(blobTexture());
 		const byKey = new Map<string, THREE.Mesh[]>();
 		for (const m of meshes) {
 			const key = String(m.userData['movable']);
@@ -96,20 +90,9 @@ export class Movables {
 				}
 			}
 			const size = box.getSize(new THREE.Vector3());
-			const shadowMaterial = own(
-				new THREE.MeshBasicMaterial({
-					color: 0x000000,
-					alphaMap: shadowMap,
-					transparent: true,
-					depthWrite: false,
-					polygonOffset: true,
-					polygonOffsetFactor: -1,
-				}),
-			);
-			const shadow = new THREE.Mesh(own(new THREE.PlaneGeometry(1, 1)), shadowMaterial);
-			shadow.rotation.x = -Math.PI / 2;
-			shadow.scale.set(size.x * SHADOW_SPREAD, size.z * SHADOW_SPREAD, 1);
-			scene.add(shadow);
+			// Wide enough for its shadow however it lies, with the blur round it.
+			const shadow = own(new ContactShadow(renderer, group, size.length() * 1.3));
+			scene.add(shadow.mesh);
 			const thing: Movable = {
 				group,
 				half: [size.x / 2, size.z / 2],
@@ -161,8 +144,10 @@ export class Movables {
 		this.held = undefined;
 	}
 
-	/** The physics, made once, with every thing in it as it stands. */
-	private start(): Promise<Dynamics> {
+	/** The physics, made once, with every thing in it as it stands: at the first
+	 *  pick-up, or before (the room view starts it once the room is drawn, so the
+	 *  walker meets things before it has carried any). */
+	start(): Promise<Dynamics> {
 		this.starting ??= this.makeDynamics().then((d) => {
 			for (const [key, t] of this.things) d.add(key, t.group, t.points);
 			this.dynamics = d;
@@ -171,12 +156,14 @@ export class Movables {
 		return this.starting;
 	}
 
-	/** Moves what is carried, and runs the physics, at `now` (ms); true while
-	 *  anything still moves, so another frame should follow. */
-	update(now: number, eye: THREE.Camera): boolean {
+	/** Moves what is carried, the walker standing at `feet`, and runs the physics,
+	 *  at `now` (ms); true while anything still moves, so another frame should
+	 *  follow. */
+	update(now: number, eye: THREE.Camera, feet?: THREE.Vector3): boolean {
 		const dynamics = this.dynamics;
 		if (!dynamics) return false;
 		const dt = this.last === undefined ? 0 : (now - this.last) / 1000;
+		if (feet) dynamics.walk(feet);
 		if (this.held) {
 			const t = this.thing(this.held.key);
 			const ahead = new THREE.Vector3(0, 0, -1).applyQuaternion(eye.quaternion).setY(0).normalize();
@@ -193,7 +180,9 @@ export class Movables {
 			dynamics.pose(key, t.group);
 			this.place(t);
 		}
-		this.last = moving ? now : undefined;
+		// The clock runs on while all sleeps: the walker moving through the world is a
+		// step's worth of time like any other (a long pause is cut short by `step`).
+		this.last = now;
 		return moving;
 	}
 
@@ -218,18 +207,14 @@ export class Movables {
 		return top;
 	}
 
-	/** Its shadow on what is under it, and its light from the room it is in. */
+	/** Its shadow on what is under it, drawn again if it has moved, and its light
+	 *  from the room it is in. */
 	private place(t: Movable): void {
 		t.group.updateMatrixWorld(true);
 		const { x, y, z } = t.group.position;
-		const floor = this.under(t);
-		t.shadow.visible = floor !== undefined;
-		if (floor !== undefined) {
-			t.shadow.position.set(x, floor + SHADOW_LIFT, z);
-			t.shadow.rotation.z = new THREE.Euler().setFromQuaternion(t.group.quaternion, 'YXZ').y;
-			const material = t.shadow.material;
-			if (material instanceof THREE.MeshBasicMaterial)
-				material.opacity = SHADOW * Math.max(0, 1 - (y - floor) / SHADOW_FADE);
+		if (!t.drawn?.equals(t.group.matrixWorld)) {
+			t.shadow.update(this.under(t));
+			t.drawn = t.group.matrixWorld.clone();
 		}
 		if (!this.light || !t.probes) return;
 		const name = roomAt(this.rooms, x, z, y + t.height / 2);
@@ -283,20 +268,4 @@ function yawOf(eye: THREE.Camera): number {
 function isIn(o: THREE.Object3D, group: THREE.Group): boolean {
 	for (let p: THREE.Object3D | null = o; p; p = p.parent) if (p === group) return true;
 	return false;
-}
-
-/** A soft round shadow, as alpha: dark at its middle, none at its edge. */
-function blobTexture(): THREE.DataTexture {
-	const n = 64;
-	const data = new Uint8Array(n * n * 4);
-	for (let y = 0; y < n; y++)
-		for (let x = 0; x < n; x++) {
-			const r = Math.hypot((x + 0.5) / n - 0.5, (y + 0.5) / n - 0.5) * 2;
-			const a = Math.round(255 * Math.max(0, 1 - r) ** 2);
-			data.set([a, a, a, 255], (y * n + x) * 4);
-		}
-	const t = new THREE.DataTexture(data, n, n, THREE.RGBAFormat);
-	t.magFilter = t.minFilter = THREE.LinearFilter;
-	t.needsUpdate = true;
-	return t;
 }

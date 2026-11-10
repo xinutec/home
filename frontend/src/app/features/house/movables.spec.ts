@@ -25,6 +25,7 @@ function room(): { cushion: THREE.Mesh; movables: Movables; fixed: THREE.Mesh[] 
 		return below >= top ? top : undefined;
 	};
 	const movables = new Movables(
+		drawsNothing(),
 		scene,
 		[cushion],
 		ground,
@@ -34,6 +35,21 @@ function room(): { cushion: THREE.Mesh; movables: Movables; fixed: THREE.Mesh[] 
 		async () => new Dynamics(await loadRapier(), fixed),
 	);
 	return { cushion, movables, fixed };
+}
+
+/** A renderer that draws nothing: the physics needs none, and there is no WebGL
+ *  here; the shadows' drawing is seen on the page. */
+function drawsNothing(): THREE.WebGLRenderer {
+	const stub = {
+		autoClear: true,
+		getRenderTarget: () => null,
+		getClearColor: (c: THREE.Color) => c,
+		getClearAlpha: () => 0,
+		setClearColor: () => undefined,
+		setRenderTarget: () => undefined,
+		render: () => undefined,
+	};
+	return stub as unknown as THREE.WebGLRenderer;
 }
 
 /** Frames of 16 ms until nothing moves, at most `max`; the frames it took. */
@@ -82,6 +98,21 @@ describe('Movables', () => {
 		expect(down.min.y).toBeGreaterThan(0.69);
 		expect(down.min.y).toBeLessThan(0.72);
 		expect(movables.holding).toBe(false);
+	});
+
+	it('is pushed aside by the walker walking into it, though all had come to rest', async () => {
+		const { cushion, movables } = room();
+		const camera = eye(-1);
+		// The physics started, as the room view starts it, and everything asleep.
+		await movables.start();
+		expect(settle(movables, camera)).toBeLessThan(600);
+		const before = cushion.getWorldPosition(new THREE.Vector3());
+		// Walked along x, through where it stands, a frame at a time.
+		let t = 10_000;
+		for (let x = -1; x <= 1; x += 0.02)
+			movables.update((t += 16), camera, new THREE.Vector3(x, 0, 0.05));
+		const after = cushion.getWorldPosition(new THREE.Vector3());
+		expect(after.distanceTo(before)).toBeGreaterThan(0.1);
 	});
 
 	it('stays out of the merged room, so it is neither baked nor merged', () => {

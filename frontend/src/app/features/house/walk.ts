@@ -258,6 +258,11 @@ export class WalkControls {
 		return true;
 	}
 
+	/** Where its feet are: under the eye, on what it stands on. */
+	get standing(): THREE.Vector3 {
+		return new THREE.Vector3(this.camera.position.x, this.feet, this.camera.position.z);
+	}
+
 	dispose(): void {
 		for (const off of this.off) off();
 		this.stick.classList.remove('held');

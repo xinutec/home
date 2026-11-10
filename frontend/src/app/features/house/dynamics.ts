@@ -1,6 +1,10 @@
 import * as RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
+import { BODY } from './walk';
 
+/** Metres over its feet the walker's body starts: its feet kick what is on the
+ *  floor, where its walk steps over a rug (`BODY.low`). */
+const FEET = 0.03;
 /** Seconds a physics step covers: the screen's usual frame. */
 const STEP = 1 / 60;
 /** Steps at most a frame: a frame late by more drops the rest, not the page. */
@@ -23,12 +27,15 @@ export async function loadRapier(): Promise<typeof RAPIER> {
  * the room one triangle mesh (its doors as they stand shut), each thing the convex
  * hull of its parts. A held thing follows the hand (`hold`), and let go keeps the
  * hand's speed (`release`); then it falls, tumbles, and comes to rest, and sleeps.
+ * The walker is a body too (`walk`), its column (`BODY`, down to its feet)
+ * following it, pushing what it walks into.
  */
 export class Dynamics {
 	private readonly world: RAPIER.World;
 	private readonly bodies = new Map<string, RAPIER.RigidBody>();
 	private readonly R: typeof RAPIER;
 	private left = 0;
+	private walker?: RAPIER.RigidBody;
 
 	constructor(R: typeof RAPIER, fixed: THREE.Mesh[]) {
 		this.R = R;
@@ -77,6 +84,21 @@ export class Dynamics {
 		const v = body.linvel();
 		body.setBodyType(this.R.RigidBodyType.Dynamic, true);
 		body.setLinvel(v, true);
+	}
+
+	/** Moves the walker's column to stand at `feet` by the next step. */
+	walk(feet: THREE.Vector3): void {
+		const R = this.R;
+		// Its column: a capsule from FEET over its feet to BODY.high.
+		const middle = feet.y + (FEET + BODY.high) / 2;
+		if (!this.walker) {
+			this.walker = this.world.createRigidBody(
+				R.RigidBodyDesc.kinematicPositionBased().setTranslation(feet.x, middle, feet.z),
+			);
+			const half = (BODY.high - FEET) / 2 - BODY.radius;
+			this.world.createCollider(R.ColliderDesc.capsule(half, BODY.radius), this.walker);
+		}
+		this.walker.setNextKinematicTranslation({ x: feet.x, y: middle, z: feet.z });
 	}
 
 	/** Runs the world `seconds` on, in whole steps; true while anything moves. */
