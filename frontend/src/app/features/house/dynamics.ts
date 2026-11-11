@@ -149,25 +149,74 @@ export class Dynamics {
 
 /** How far a ball's points may lie from one radius, as a share of it. */
 const ROUND = 0.03;
-/** The directions a thing's outline is taken in: 8 headings round, each level,
- *  45° up and down, and a degree off straight up and down, which picks out the rim
- *  of a flat foot or top; and straight up and down. */
-const DIRECTIONS = [
-	new THREE.Vector3(0, 1, 0),
-	new THREE.Vector3(0, -1, 0),
-	...[0, 45, -45, 89, -89].flatMap((up) =>
-		Array.from({ length: 8 }, (_, i) =>
-			new THREE.Vector3().setFromSphericalCoords(1, ((90 - up) * Math.PI) / 180, (i * Math.PI) / 4),
-		),
-	),
-];
+/** The least share of its radius a ball reaches every way: its faces fall short of
+ *  it by little (a low sphere's, 0.9), a box's by much (a cube's, 0.58). */
+const BALL_REACH = 0.85;
+/** Directions spread evenly over the sphere (a Fibonacci lattice) a thing's outline
+ *  is taken in: enough to keep a round body within 5 mm of itself. */
+const DIRECTIONS = Array.from({ length: 256 }, (_, i) => {
+	const y = 1 - (2 * (i + 0.5)) / 256;
+	const r = Math.sqrt(1 - y * y);
+	const turn = i * Math.PI * (3 - Math.sqrt(5));
+	return new THREE.Vector3(Math.cos(turn) * r, y, Math.sin(turn) * r);
+});
+/** The axes a thing's flat faces lie square to (a foot, a cushion's side). */
+const AXES = [
+	[1, 0, 0],
+	[-1, 0, 0],
+	[0, 1, 0],
+	[0, -1, 0],
+	[0, 0, 1],
+	[0, 0, -1],
+].map(([x, y, z]) => new THREE.Vector3(x, y, z));
+/** Metres within which points lie in one flat face. */
+const FLAT = 0.001;
+/** The corners a flat face keeps: its own, if it has no more; a round foot as a
+ *  12-gon, within 3.4% of its radius. A face of dozens of corners, a thing
+ *  standing on it rocks and walks off a shelf (a candle in a jar, 3 cm on its own). */
+const FACE_CORNERS = 12;
+
+/** The extreme point of `points` (of which `among` the indices) along `d`. */
+function furthest(points: Float32Array, among: number[], d: THREE.Vector3): number {
+	let [best, at] = [-Infinity, among[0]];
+	for (const i of among) {
+		const reach = points[i] * d.x + points[i + 1] * d.y + points[i + 2] * d.z;
+		if (reach > best) [best, at] = [reach, i];
+	}
+	return at;
+}
+
+/** The corners of a flat face (`face`, indices into `points`) square to `axis`: its
+ *  outline's convex hull, by the monotone chain. */
+function cornersOf(points: Float32Array, face: number[], axis: THREE.Vector3): number[] {
+	const u = new THREE.Vector3(axis.y, axis.z, axis.x);
+	const v = axis.clone().cross(u);
+	const flat = face
+		.map((i) => {
+			const p = new THREE.Vector3().fromArray(points, i);
+			return { i, x: p.dot(u), y: p.dot(v) };
+		})
+		.sort((a, b) => a.x - b.x || a.y - b.y);
+	type P = (typeof flat)[number];
+	const turn = (o: P, a: P, b: P) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+	const half = (pts: P[]) => {
+		const out: P[] = [];
+		for (const p of pts) {
+			while (out.length >= 2 && turn(out[out.length - 2], out[out.length - 1], p) <= 1e-9)
+				out.pop();
+			out.push(p);
+		}
+		return out.slice(0, -1);
+	};
+	return [...half(flat), ...half([...flat].reverse())].map((p) => p.i);
+}
 
 /** The shape a thing collides as, from its parts' points (its own frame): a ball if
- *  they lie on one, and reach it every way; else the hull of its furthest point in
- *  each of DIRECTIONS. A box keeps its corners; a round foot becomes an octagon.
- *  The hull of every point gives a round foot dozens of corners, and a thing on one
- *  rocks and walks off a shelf (a candle in a jar, 3 cm on its own). */
-function shapeOf(R: typeof RAPIER, points: Float32Array): RAPIER.ColliderDesc | null {
+ *  they lie on one, and reach it every way; else the hull of its furthest points in
+ *  DIRECTIONS, each flat face square to an axis cut to FACE_CORNERS corners. */
+export function collisionShape(
+	points: Float32Array,
+): { ball: { middle: THREE.Vector3; radius: number } } | { hull: Float32Array } {
 	const middle = new THREE.Box3().setFromArray(points).getCenter(new THREE.Vector3());
 	const p = new THREE.Vector3();
 	let [near, far] = [Infinity, 0];
@@ -175,22 +224,49 @@ function shapeOf(R: typeof RAPIER, points: Float32Array): RAPIER.ColliderDesc | 
 		const r = p.fromArray(points, i).distanceTo(middle);
 		[near, far] = [Math.min(near, r), Math.max(far, r)];
 	}
-	const outline: number[] = [];
+	const all = Array.from({ length: points.length / 3 }, (_, i) => i * 3);
 	// Every way, how far from the middle it reaches: a box's corners lie on a ball,
 	// but its faces fall short of it.
 	let short = Infinity;
+	const outline = new Set<number>();
 	for (const d of DIRECTIONS) {
-		let [best, at] = [-Infinity, 0];
-		for (let i = 0; i < points.length; i += 3) {
-			const reach = p.fromArray(points, i).sub(middle).dot(d);
-			if (reach > best) [best, at] = [reach, i];
-		}
-		short = Math.min(short, best);
-		outline.push(points[at], points[at + 1], points[at + 2]);
+		const at = furthest(points, all, d);
+		short = Math.min(short, p.fromArray(points, at).sub(middle).dot(d));
+		outline.add(at);
 	}
-	const round = far - near < far * ROUND && short > far * (1 - ROUND);
-	if (round) return R.ColliderDesc.ball(far).setTranslation(middle.x, middle.y, middle.z);
-	return R.ColliderDesc.convexHull(Float32Array.from(outline));
+	if (far - near < far * ROUND && short > far * BALL_REACH)
+		return { ball: { middle, radius: far } };
+	for (const axis of AXES) {
+		const along = (i: number) =>
+			points[i] * axis.x + points[i + 1] * axis.y + points[i + 2] * axis.z;
+		const top = along(furthest(points, all, axis));
+		const face = all.filter((i) => along(i) > top - FLAT);
+		if (face.length < 3) continue;
+		// Its own corners only, round it: the face's every point the outline took goes.
+		for (const i of [...outline]) if (along(i) > top - FLAT) outline.delete(i);
+		const corners = cornersOf(points, face, axis);
+		if (corners.length <= FACE_CORNERS) for (const i of corners) outline.add(i);
+		else {
+			// Round: its furthest points in FACE_CORNERS headings across it.
+			const across = new THREE.Vector3(axis.y, axis.z, axis.x);
+			for (let k = 0; k < FACE_CORNERS; k++) {
+				const heading = across.clone().applyAxisAngle(axis, (k * 2 * Math.PI) / FACE_CORNERS);
+				outline.add(furthest(points, face, heading));
+			}
+		}
+	}
+	return {
+		hull: Float32Array.from([...outline].flatMap((i) => [points[i], points[i + 1], points[i + 2]])),
+	};
+}
+
+function shapeOf(R: typeof RAPIER, points: Float32Array): RAPIER.ColliderDesc | null {
+	const shape = collisionShape(points);
+	if ('ball' in shape) {
+		const { middle, radius } = shape.ball;
+		return R.ColliderDesc.ball(radius).setTranslation(middle.x, middle.y, middle.z);
+	}
+	return R.ColliderDesc.convexHull(shape.hull);
 }
 
 /** `meshes`' triangles where they stand, as one list of vertices and indices. */
