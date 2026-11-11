@@ -123,12 +123,15 @@ writeFileSync(a.out, await canvas.screenshot());
 const box = await canvas.boundingBox();
 const meter = await canvas.getAttribute('data-meter');
 const physics = await canvas.getAttribute('data-physics');
+// The corner's frame rate, and the GPU's time where the browser can say it.
+const corner = await page.locator('.fps').first().textContent({ timeout: 1000 }).catch(() => null);
 console.log(
 	JSON.stringify({
 		w: box?.width,
 		h: box?.height,
 		...(meter ? { meter: Number(meter) } : {}),
 		...(physics ? { physicsMs: Number(physics) } : {}),
+		...(corner ? { corner: corner.trim() } : {}),
 		...(a.trace ? { samples: Number(a.trace), seconds } : {}),
 	}),
 );

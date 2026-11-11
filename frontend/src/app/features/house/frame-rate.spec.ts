@@ -31,4 +31,20 @@ describe('FrameRate', () => {
 		expect(rate.reading(100)).toBeDefined();
 		expect(rate.reading(1000)).toBeUndefined();
 	});
+
+	it('says the slowest frame the GPU drew in the last second, as its timer reports it later', () => {
+		const rate = new FrameRate();
+		let t = 0;
+		for (let k = 0; k < 60; k++) {
+			t += 1000 / 60;
+			rate.frame(t, 2);
+			// The GPU's time for a frame arrives a frame or two after it.
+			if (k > 1) rate.gpu(t, k === 30 ? 9 : 3);
+		}
+		expect(rate.reading(t)?.gpu).toBe(9);
+		// No timer, no GPU reading.
+		const none = new FrameRate();
+		none.frame(0, 2);
+		expect(none.reading(10)?.gpu).toBeUndefined();
+	});
 });

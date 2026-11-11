@@ -62,21 +62,27 @@ cost is known; the photo comparison (`realistic-rendering.md`) judges the look.
 
 ## Steps
 
-Each lands deployed, the view working throughout.
+The engine first; the model's shapes and surfaces (rounded edges, textures from the
+walk's photos, soft cushions) wait until the engine is right (decided 11 November).
+Each step lands deployed, the view working throughout, its cost read on the phone.
 
-1. **One model.** The walker is Rapier's character controller in the physics
-   world (sliding, stepping onto a rug, standing on an open door); `Collider` goes.
-   What is under a thing, and which probes light it, are asked of that world and of
-   the probes' own extents, not of other copies. Done when no feature builds its
-   own copy of the house's shapes.
-2. **Joints.** Doors and drawers as bodies on motorised joints; the jam check goes.
-   Done when a drawer shut on a cushion stalls on it, and one pulled drags what is
-   in it, with nothing in `joints.ts` that knows about either.
-3. **Screen-space occlusion.** One pass; contact shadows and occluders go. Done
-   when the photo comparison does not get worse and the phone's frame stays under
-   its budget.
-4. **Doors out of the bake.** Doors and drawers lit as movables; the joint and
+1. **One model.** Done (11 November): the walker steps and slides in the physics
+   world (`Dynamics.walk`), what is under a thing and which probes light it are
+   asked of that world and of the probes' own grids; `Collider` is gone.
+2. **The GPU's time on screen.** Done: the corner says the slowest frame's GPU
+   time (`GpuTimer`), or that the browser has no timer. Every step after is judged
+   by it.
+3. **The image as a camera makes it.** Screen-space ambient occlusion (GTAO) for
+   every crease and contact, replacing the contact shadows and the ellipsoid
+   occluders; a filmic tone curve (AgX); anti-aliasing; bloom on the windows and
+   lamps. Done when the photo comparison does not get worse and the phone's frame
+   stays inside its budget.
+4. **Shadows of what moves.** A shadow map of moving things from the light that
+   dominates, blended into the bake. Done when a cushion's shadow falls where the
+   path tracer puts it.
+5. **Joints.** Doors and drawers as bodies on motorised joints; the jam check
+   goes. Done when a drawer shut on a cushion stalls on it, and one pulled drags
+   what is in it, with nothing in `joints.ts` that knows about either.
+6. **Doors out of the bake.** Doors and drawers lit as movables; the joint and
    pair layers go. Done when an open door's inside matches the old bake's within
    the comparison's tolerance, and the bake is smaller.
-5. **Shadows of what moves.** A shadow map of moving things from the dominant
-   light. Done when a cushion's shadow falls where the path tracer puts it.

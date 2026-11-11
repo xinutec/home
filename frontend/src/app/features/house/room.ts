@@ -144,7 +144,13 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		this.zone.runOutsideAngular(() => {
 			this.fpsTimer = window.setInterval(() => {
 				const r = view.frames.reading(performance.now());
-				const text = r ? `${r.fps} fps · slowest ${r.slowest} ms` : 'idle';
+				// The GPU's time where the browser can say it; else that it cannot.
+				const gpu = view.gpu
+					? r?.gpu === undefined
+						? ''
+						: ` · gpu ${r.gpu} ms`
+					: ' · no gpu timer';
+				const text = r ? `${r.fps} fps · slowest ${r.slowest} ms${gpu}` : 'idle';
 				if (text !== this.fps()) this.zone.run(() => this.fps.set(text));
 			}, FPS_READ_MS);
 		});

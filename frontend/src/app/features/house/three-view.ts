@@ -2,6 +2,7 @@ import type { NgZone } from '@angular/core';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { FrameRate } from './frame-rate';
+import { GpuTimer } from './gpu-timer';
 
 /**
  * The plumbing every 3D screen shares: a renderer in a host element, a camera,
@@ -19,6 +20,8 @@ export class ThreeView {
 
 	/** The frames drawn, for a frame-rate readout. */
 	readonly frames = new FrameRate();
+	/** The GPU's timer, if the browser has one: `frames` then says the GPU's time. */
+	readonly gpu: GpuTimer | undefined;
 
 	/** While true, nothing is drawn here: something else owns the canvas (the path tracer). */
 	paused = false;
@@ -48,6 +51,8 @@ export class ThreeView {
 		this.renderer.setSize(host.clientWidth, host.clientHeight || 400);
 		setup(this.renderer);
 		host.appendChild(this.renderer.domElement);
+		const gl = this.renderer.getContext();
+		this.gpu = gl instanceof WebGL2RenderingContext ? GpuTimer.of(gl) : undefined;
 
 		this.camera = new THREE.PerspectiveCamera(50, this.aspect(), 0.05, 200);
 		this.controls = new OrbitControls(this.camera, this.renderer.domElement);
@@ -75,10 +80,14 @@ export class ThreeView {
 				if (this.mover) moving = this.mover.update();
 				else this.controls.update();
 				if (this.beforeRender?.(performance.now())) moving = true;
+				// The GPU timed over what it draws for the frame and for its metering.
+				this.gpu?.begin();
 				this.renderer.render(this.scene, this.camera);
 				const more = this.afterRender?.(performance.now()) ?? false;
+				this.gpu?.end();
 				const end = performance.now();
 				this.frames.frame(end, end - start);
+				for (const ms of this.gpu?.done() ?? []) this.frames.gpu(end, ms);
 				if (moving || more) this.requestFrame();
 			});
 		});
