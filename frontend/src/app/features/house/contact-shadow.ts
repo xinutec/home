@@ -17,6 +17,9 @@ const SOFTNESS = 0.03;
 const BLUR_TAPS = 4;
 /** Metres the shadow floats over what it falls on, against z-fighting. */
 const LIFT = 0.002;
+/** Metres under the surface its camera looks up from: what touches the surface
+ *  must lie past the camera's near plane, or its face there is cut away. */
+const BELOW = 0.01;
 
 /**
  * The soft shadow a thing casts on what it stands on, in a room lit from all round,
@@ -70,9 +73,18 @@ export class ContactShadow {
 		});
 		this.proxy.matrixAutoUpdate = false;
 		this.scene.add(this.proxy);
-		this.camera = new THREE.OrthographicCamera(-size / 2, size / 2, size / 2, -size / 2, 0, REACH);
+		this.camera = new THREE.OrthographicCamera(
+			-size / 2,
+			size / 2,
+			size / 2,
+			-size / 2,
+			0,
+			BELOW + REACH,
+		);
+		// Looking up (+y), its image's right +x and its up +z.
 		this.camera.rotation.x = Math.PI / 2;
-		// Both faces: mirrored to read the camera's view, it faces away from the room.
+		this.camera.position.y = -BELOW;
+		// Both faces: turned as its camera is, it faces away from the room.
 		const material = new THREE.MeshBasicMaterial({
 			map: this.target.texture,
 			transparent: true,
@@ -80,9 +92,9 @@ export class ContactShadow {
 			side: THREE.DoubleSide,
 		});
 		this.plane = new THREE.Mesh(new THREE.PlaneGeometry(size, size), material);
-		// Seen from above as the camera saw it from below.
+		// Turned as the camera is, so its texture lies as the camera saw it: right +x,
+		// up +z. It faces down so, and is drawn from both sides.
 		this.plane.rotation.x = Math.PI / 2;
-		this.plane.scale.y = -1;
 		this.mesh = new THREE.Group();
 		this.mesh.add(this.plane, this.camera);
 		const blur = (shader: THREE.ShaderMaterialParameters, key: 'h' | 'v') => {
