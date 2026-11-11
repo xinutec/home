@@ -8,8 +8,9 @@ import {
 	signal,
 	viewChild,
 } from '@angular/core';
-import { HttpClient, HttpErrorResponse } from '@angular/common/http';
-import { catchError, forkJoin, of } from 'rxjs';
+import { HttpClient, HttpErrorResponse, HttpEventType } from '@angular/common/http';
+import type { HttpResponse } from '@angular/common/http';
+import { catchError, filter, forkJoin, map, of, tap } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
@@ -87,6 +88,9 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 	readonly empty = signal(false);
 	readonly error = signal(false);
 	readonly loading = signal(false);
+	/** How much of the bake has come, in percent, while it downloads; else unknown
+	 *  (the scene alone, or the room being built from it). */
+	readonly progress = signal<number | undefined>(undefined);
 	/** Walking the room in the first person (not while tracing or baking). */
 	readonly walking = signal(false);
 	/** A mouse and keys, not a finger: the hint says how to walk by them. */
@@ -167,12 +171,28 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 	/** A failed load is the error state, never "no such room": 404 alone is absent. */
 	load(): void {
 		this.loading.set(true);
+		this.progress.set(undefined);
 		this.error.set(false);
 		this.empty.set(false);
 		// The bake may be missing (404) or stale; either way the room is drawn without it.
+		// Megabytes, most of the wait: the bar shows how much has come.
 		const bake = this.http
-			.get('/api/house/bake', { responseType: 'arraybuffer' })
-			.pipe(catchError(() => of(undefined)));
+			.get('/api/house/bake', {
+				responseType: 'arraybuffer',
+				reportProgress: true,
+				observe: 'events',
+			})
+			.pipe(
+				tap((e) => {
+					if (e.type === HttpEventType.DownloadProgress && e.total)
+						this.progress.set((100 * e.loaded) / e.total);
+				}),
+				filter((e): e is HttpResponse<ArrayBuffer> => e.type === HttpEventType.Response),
+				map((r) => r.body ?? undefined),
+				// Come: what is left (decoding, building) has no measure.
+				tap(() => this.progress.set(undefined)),
+				catchError(() => of(undefined)),
+			);
 		forkJoin([this.http.get<HouseScene>('/api/house'), bake]).subscribe({
 			next: ([scene, baked]) => void this.open(withModels(scene), baked),
 			error: (e) => {

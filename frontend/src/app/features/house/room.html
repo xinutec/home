@@ -22,7 +22,10 @@
 
 	<div class="status">
 		@if (loading()) {
-			<mat-progress-bar mode="indeterminate" />
+			<mat-progress-bar
+				[mode]="progress() === undefined ? 'indeterminate' : 'determinate'"
+				[value]="progress() ?? 0"
+			/>
 		} @else if (error()) {
 			<div class="banner banner-error">
 				<mat-icon>cloud_off</mat-icon>
