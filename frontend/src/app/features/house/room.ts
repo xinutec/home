@@ -29,7 +29,8 @@ import { cameraFromQuery } from './camera';
 import { AutoExposure } from './exposure';
 import type { CameraQuery } from './camera';
 import { buildInterior } from './room-builder';
-import { type LastBake, bakeHouse, fetchLastBake, lampRegions } from './house-bake';
+import { type BakeStore, type LastBake, bakeHouse, fetchLastBake, lampRegions } from './house-bake';
+import { decodeStage, encodeStage } from './stage-file';
 import type { Lit } from './room-builder';
 import { Lamps } from './lamps';
 import { Dynamics, loadRapier } from './dynamics';
@@ -40,6 +41,41 @@ import { ThreeView } from './three-view';
 import { Joints } from './joints';
 import { WalkControls } from './walk';
 import { Occluders } from './occluders';
+
+declare global {
+	interface Window {
+		/** e2e/bake.ts's, for a bake's stages (?stages): a kept stage's size (0 for
+		 *  none), loading it into `houseStageIn`, keeping `houseStageOut`. */
+		houseStageSize?: (key: string) => Promise<number>;
+		houseStageLoad?: (key: string) => Promise<void>;
+		houseStageKeep?: (key: string) => Promise<void>;
+		houseStageIn?: Uint8Array;
+		houseStageOut?: Uint8Array;
+	}
+}
+
+/** A bake's stages, kept by e2e/bake.ts as each finishes: moved through the window
+ *  a chunk at a time, as tens of MB do not go as one request. */
+function stagesFromHost(): BakeStore {
+	const { houseStageSize: size, houseStageLoad: load, houseStageKeep: keep } = window;
+	if (!size || !load || !keep) throw new Error('?stages, but nothing keeps them (e2e/bake.ts)');
+	return {
+		get: async (key) => {
+			const n = await size(key);
+			if (n === 0) return undefined;
+			window.houseStageIn = new Uint8Array(n);
+			await load(key);
+			const bytes = window.houseStageIn;
+			window.houseStageIn = undefined;
+			return decodeStage(bytes);
+		},
+		put: async (key, value) => {
+			window.houseStageOut = encodeStage(value);
+			await keep(key);
+			window.houseStageOut = undefined;
+		},
+	};
+}
 
 /** Inflates a gzipped lightmap: the browser's own stream, no library. */
 async function gunzip(bytes: Uint8Array): Promise<Uint8Array> {
@@ -533,6 +569,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 				since,
 				shutOnly,
 				scene,
+				this.query.stages ? stagesFromHost() : undefined,
 			);
 			// The room it is for, beside it, for e2e scripts that inspect the light.
 			Object.assign(window, {

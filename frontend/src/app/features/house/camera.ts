@@ -1,6 +1,6 @@
 /** A camera asked for in the URL, overriding the room's own `view`:
  *  `?eye=x,y,z&look=x,y,z&fov=deg` (vertical field of view), with `trace`,
- *  `exposure`, `tone=linear`, `stats`, `bake` (with `since` or `shut`), `export`, `night` and `lamps`. For comparing a render against a photograph
+ *  `exposure`, `tone=linear`, `stats`, `bake` (with `since`, `shut`, `stages`), `export`, `night` and `lamps`. For comparing a render against a photograph
  *  taken from the same spot. */
 export interface CameraQuery {
 	eye?: [number, number, number];
@@ -22,6 +22,9 @@ export interface CameraQuery {
 	/** Bake only the house with every door and drawer shut, none opened: to measure
 	 *  its light by, not to ship. */
 	shut?: boolean;
+	/** Keep each stage of a bake as it finishes, and take the ones a stopped run
+	 *  kept (e2e/bake.ts keeps them): the bake runs again from where it stopped. */
+	stages?: boolean;
 	/** Write the physical scene `trace` would draw as glTF, for the tracer crate. */
 	export?: boolean;
 	/** The physical scene at night: no daylight, the ceiling lights lit; in the
@@ -55,6 +58,7 @@ export function cameraFromQuery(search: string): CameraQuery {
 	if (bake > 0 && bake <= 100_000) out.bake = bake;
 	if (q.has('since')) out.since = true;
 	if (q.has('shut')) out.shut = true;
+	if (q.has('stages')) out.stages = true;
 	if (q.has('export')) out.export = true;
 	if (q.has('night')) out.night = true;
 	const lamps = (q.get('lamps') ?? '').split(',').filter((l) => l !== '');

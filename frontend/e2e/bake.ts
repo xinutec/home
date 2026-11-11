@@ -3,6 +3,9 @@
 //
 //   node e2e/bake.ts [--samples 2048] [--full]
 //
+// Stopped partway, the same command runs it on from its last finished stage
+// (.bake-cache/stages/): a bake can be run in pieces, each under a job's limit.
+//
 // After an edit it bakes only near what changed (the page's ?since): every chart
 // the last bake laid out keeps its place, and its light where nothing near it came
 // or went. It needs that bake's raw sums and the surfaces it saw, which each bake
@@ -10,7 +13,9 @@
 // scene's lights and the samples, as when they were summed. Else, or with --full,
 // it bakes the whole house, its atlas laid out afresh. --shut bakes the house with
 // every door shut and none opened, into .bake-cache/shut.bake: to measure its light
-// by, never the scene's bake, and the cache's sums are left as they were.
+// by, never the scene's bake, and the cache's sums are left as they were. --out
+// <dir> writes the bake and its cache there instead of scenes/ and .bake-cache/: a
+// bake to try, not to ship. --app <dir> bakes with a copy of the build there.
 //
 // The local build (`pnpm run build` first), fed the local scenes/house.json, on
 // this machine's GPU in headless Chromium; e2e/bake-horus.sh runs it on horus. Bake again after any change to the
@@ -18,7 +23,7 @@
 // the page then draws the room without it.
 import { chromium } from '@playwright/test';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { extname, join } from 'node:path';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { parseArgs } from 'node:util';
@@ -29,14 +34,22 @@ const { values: args } = parseArgs({
 		samples: { type: 'string', default: '2048' },
 		full: { type: 'boolean', default: false },
 		shut: { type: 'boolean', default: false },
+		out: { type: 'string' },
+		app: { type: 'string' },
 	},
 });
 const ORIGIN = 'https://home.xinutec.org';
 const ROOT = new URL('../..', import.meta.url).pathname;
-const DIST = new URL('../dist/frontend/browser', import.meta.url).pathname;
+// The built page, or a copy of it (--app): a bake run in pieces over hours keeps
+// to one build while the working tree is built again.
+const DIST = args.app ?? new URL('../dist/frontend/browser', import.meta.url).pathname;
 const SCENE = join(ROOT, 'scenes/house.json');
-const CACHE = join(ROOT, '.bake-cache');
-const OUT = args.shut ? join(CACHE, 'shut.bake') : join(ROOT, 'scenes/house.bake');
+const CACHE = args.out ? join(args.out, 'cache') : join(ROOT, '.bake-cache');
+const OUT = args.shut
+	? join(CACHE, 'shut.bake')
+	: args.out
+		? join(args.out, 'house.bake')
+		: join(ROOT, 'scenes/house.bake');
 const md5 = (b: Buffer) => createHash('md5').update(b).digest('hex');
 // What the light is baked by, besides the charts an edit shows: changed, every
 // texel's light may have, and only a whole bake will do.
@@ -73,6 +86,29 @@ const since =
 	existsSync(join(CACHE, 'house.raw.gz')) &&
 	existsSync(join(CACHE, 'house.surfaces.gz'));
 console.log(since ? 'baking only what changed since the last bake' : 'baking the whole house');
+// Each stage of the bake is kept as it finishes, so a run stopped partway (a job's
+// time limit, a sleep) is run again from where it was: under what makes this bake
+// this one (the light's inputs, the scene, the app that builds the house, the
+// bake it starts from, how it was asked for), so none of another's is taken.
+const app = readdirSync(DIST)
+	.filter((f) => f.endsWith('.js'))
+	.sort()
+	.map((f) => readFileSync(join(DIST, f)));
+const STAGES = join(
+	CACHE,
+	'stages',
+	md5(
+		Buffer.concat([
+			Buffer.from(inputs),
+			readFileSync(SCENE),
+			...app,
+			Buffer.from(JSON.stringify({ since, shut: args.shut, previous: previous && md5(previous) })),
+		]),
+	),
+);
+const kept = existsSync(STAGES) ? readdirSync(STAGES).length : 0;
+if (kept > 0) console.log(`resuming: ${kept} stages kept from a run before`);
+const stageFile = (key: string) => join(STAGES, `${encodeURIComponent(key)}.gz`);
 const TYPES: Record<string, string> = {
 	'.js': 'text/javascript',
 	'.css': 'text/css',
@@ -139,8 +175,68 @@ const page = await ctx.newPage();
 page.on('console', (m) => {
 	if (m.type() === 'error') console.error(`page: ${m.text()}`);
 });
+// The page's bytes, a chunk at a time: one string of the raw sums would be 45 MB.
+const fetchBytes = async (name: 'houseBake' | 'houseRaw' | 'houseSurfaces' | 'houseStageOut') => {
+	const size = await page.evaluate(
+		(n) => (window as unknown as Record<string, ArrayBufferView>)[n].byteLength,
+		name,
+	);
+	const parts: Buffer[] = [];
+	for (let at = 0; at < size; at += 1 << 22)
+		parts.push(
+			Buffer.from(
+				await page.evaluate(
+					([n, from]) => {
+						const v = (window as unknown as Record<string, ArrayBufferView>)[n];
+						const b = new Uint8Array(v.buffer, v.byteOffset, v.byteLength).subarray(
+							from,
+							from + (1 << 22),
+						);
+						let s = '';
+						for (let i = 0; i < b.length; i += 0x8000)
+							s += String.fromCharCode(...b.subarray(i, i + 0x8000));
+						return btoa(s);
+					},
+					[name, at] as const,
+				),
+				'base64',
+			),
+		);
+	return Buffer.concat(parts);
+};
+// A bake's stages, kept as each finishes (?stages): moved a chunk at a time, as
+// the page's bytes are, both ways; a request's body is carried as one string, and
+// a layer's sums are tens of MB.
+const loading = new Map<string, Buffer>();
+await page.exposeFunction('houseStageSize', (key: string) => {
+	const file = stageFile(key);
+	if (!existsSync(file)) return 0;
+	const bytes = gunzipSync(readFileSync(file));
+	loading.set(key, bytes);
+	return bytes.length;
+});
+await page.exposeFunction('houseStageLoad', async (key: string) => {
+	const bytes = loading.get(key);
+	if (!bytes) throw new Error(`no stage ${key} to load`);
+	for (let at = 0; at < bytes.length; at += 1 << 22)
+		await page.evaluate(
+			([from, b64]) => {
+				const into = (window as unknown as Record<string, Uint8Array | undefined>)['houseStageIn'];
+				if (!into) throw new Error('no buffer for the stage');
+				const s = atob(b64);
+				for (let i = 0; i < s.length; i++) into[from + i] = s.charCodeAt(i);
+			},
+			[at, bytes.subarray(at, at + (1 << 22)).toString('base64')] as const,
+		);
+	loading.delete(key);
+});
+await page.exposeFunction('houseStageKeep', async (key: string) => {
+	mkdirSync(STAGES, { recursive: true });
+	writeFileSync(stageFile(key), gzipSync(await fetchBytes('houseStageOut'), { level: 1 }));
+});
+
 await page.goto(
-	`${ORIGIN}/house/living?bake=${args.samples}${since ? '&since' : ''}${args.shut ? '&shut' : ''}`,
+	`${ORIGIN}/house/living?bake=${args.samples}&stages${since ? '&since' : ''}${args.shut ? '&shut' : ''}`,
 	{
 		waitUntil: 'domcontentloaded',
 	},
@@ -182,35 +278,6 @@ if (!done || 'error' in (JSON.parse(done) as object)) {
 	process.exit(1);
 }
 process.stdout.write('\n');
-// The page's bytes, a chunk at a time: one string of the raw sums would be 45 MB.
-const fetchBytes = async (name: 'houseBake' | 'houseRaw' | 'houseSurfaces') => {
-	const size = await page.evaluate(
-		(n) => (window as unknown as Record<string, ArrayBufferView>)[n].byteLength,
-		name,
-	);
-	const parts: Buffer[] = [];
-	for (let at = 0; at < size; at += 1 << 22)
-		parts.push(
-			Buffer.from(
-				await page.evaluate(
-					([n, from]) => {
-						const v = (window as unknown as Record<string, ArrayBufferView>)[n];
-						const b = new Uint8Array(v.buffer, v.byteOffset, v.byteLength).subarray(
-							from,
-							from + (1 << 22),
-						);
-						let s = '';
-						for (let i = 0; i < b.length; i += 0x8000)
-							s += String.fromCharCode(...b.subarray(i, i + 0x8000));
-						return btoa(s);
-					},
-					[name, at] as const,
-				),
-				'base64',
-			),
-		);
-	return Buffer.concat(parts);
-};
 const raw = await fetchBytes('houseBake');
 // The header as the page wrote it, the scene file it is for (by its FNV-1a, which
 // tests/scene.test.ts checks), then the pixels gzipped.
@@ -222,6 +289,7 @@ const bytes = Buffer.concat([head, gzipSync(raw.subarray(HEADER), { level: 9 })]
 mkdirSync(CACHE, { recursive: true });
 writeFileSync(OUT, bytes);
 if (args.shut) {
+	rmSync(STAGES, { recursive: true, force: true });
 	console.log(`${OUT}: ${(bytes.length / 1e6).toFixed(2)} MB, ${done}`);
 	await browser.close();
 	process.exit(0);
@@ -238,5 +306,7 @@ writeFileSync(
 	gzipSync(await fetchBytes('houseSurfaces'), { level: 1 }),
 );
 writeFileSync(join(CACHE, 'house.json'), JSON.stringify({ bake: md5(bytes), inputs }));
+// Done: its stages are in it.
+rmSync(STAGES, { recursive: true, force: true });
 console.log(`${OUT}: ${(bytes.length / 1e6).toFixed(2)} MB, ${done}`);
 await browser.close();

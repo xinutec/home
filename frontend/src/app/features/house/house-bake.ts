@@ -13,7 +13,7 @@ import {
 	trimmedPair,
 } from './bake-file';
 import { roomChecksum, texelOwners } from './baked-light';
-import { bakeLightmap, bakeProbes } from './baker';
+import { type BakeTimes, bakeLightmap, bakeProbes } from './baker';
 import { type Surfaces, editedCells } from './edits';
 import type { HouseScene } from './house.model';
 import { type Joints, keptChanges } from './joints';
@@ -78,6 +78,57 @@ export async function fetchLastBake(map: Lightmap): Promise<LastBake> {
 	};
 }
 
+/** What a kept stage must be, read back: the shapes `bakeHouse` puts. */
+function isFloats(v: unknown): v is Float32Array {
+	return v instanceof Float32Array;
+}
+function field(v: unknown, name: string): unknown {
+	return typeof v === 'object' && v !== null
+		? new Map<string, unknown>(Object.entries(v)).get(name)
+		: undefined;
+}
+function isTimes(v: unknown): v is BakeTimes {
+	return ['build', 'trace', 'read', 'finish'].every((k) => typeof field(v, k) === 'number');
+}
+function isChange(v: unknown): v is LightChange {
+	return (
+		typeof field(v, 'key') === 'string' &&
+		typeof field(v, 'at') === 'number' &&
+		field(v, 'texels') instanceof Uint32Array &&
+		field(v, 'delta') instanceof Float32Array
+	);
+}
+function isChanged(v: unknown): v is { change: LightChange; ms: BakeTimes } {
+	return isChange(field(v, 'change')) && isTimes(field(v, 'ms'));
+}
+function isLit(v: unknown): v is { light: Float32Array; raw: Float32Array; ms: BakeTimes } {
+	return isFloats(field(v, 'light')) && isFloats(field(v, 'raw')) && isTimes(field(v, 'ms'));
+}
+function isShut(v: unknown): v is {
+	light: Float32Array;
+	raw: Float32Array;
+	summed: number;
+	traced: number;
+	ms: BakeTimes;
+} {
+	return (
+		isLit(v) && typeof field(v, 'summed') === 'number' && typeof field(v, 'traced') === 'number'
+	);
+}
+
+/**
+ * Where a bake keeps each stage as it finishes (a layer's light, a joint's change),
+ * so one stopped partway can be run again from where it was: a stage it has is
+ * taken, not traced again. Its keys name the stage (`shut`, `joint:<key>`,
+ * `lamp:<key>`, `pair:<joint>|<lamp>`, `probes:<lamp or daylight>`); what makes the
+ * stages of one bake the same as another's (the scene, the code, the samples) is
+ * its keeper's to tell.
+ */
+export interface BakeStore {
+	get(key: string): Promise<unknown>;
+	put(key: string, value: unknown): Promise<void>;
+}
+
 /** A bake of the house: the file as scenes/house.bake stores it before compression,
  *  its raw sums and the surfaces it saw (for the next bake since this one), its
  *  light, and what `data-baked` reports. */
@@ -114,7 +165,27 @@ export async function bakeHouse(
 	shutOnly = false,
 	/** The scene, for its lamps and rooms: without, no lamp is baked. */
 	scene?: HouseScene,
+	/** Where each stage is kept as it finishes, and found if a run before finished it. */
+	store?: BakeStore,
 ): Promise<HouseBake> {
+	/** A stage: the one kept, if there is one (its samples then reported done), else
+	 *  `run` and kept. */
+	const stage = async <T>(
+		key: string,
+		k: number,
+		is: (v: unknown) => v is T,
+		run: () => Promise<T>,
+	): Promise<T> => {
+		const had = await store?.get(key);
+		if (had !== undefined) {
+			if (!is(had)) throw new Error(`the bake's kept stage ${key} is not what that stage makes`);
+			report(k)(samples);
+			return had;
+		}
+		const made = await run();
+		await store?.put(key, made);
+		return made;
+	};
 	const lamps = scene ? lampRegions(scene) : [];
 	const started = performance.now();
 	const { width, height } = lit.atlas;
@@ -175,18 +246,27 @@ export async function bakeHouse(
 		width,
 		height,
 	);
-	const { light, summed, raw, traced, ms } = await bakeLightmap(
-		renderer,
-		lit,
-		samples,
-		4,
-		report(0),
-		since &&
-			edited && {
-				traces: (i, at) => fresh[i] === 1 || edited.has(at),
-				base: relaid(since.raw, since.map.width, since.map.height, width, height),
-			},
-	);
+	const { light, summed, raw, traced, ms } = await stage('shut', 0, isShut, async () => {
+		const shut = await bakeLightmap(
+			renderer,
+			lit,
+			samples,
+			4,
+			report(0),
+			since &&
+				edited && {
+					traces: (i, at) => fresh[i] === 1 || edited.has(at),
+					base: relaid(since.raw, since.map.width, since.map.height, width, height),
+				},
+		);
+		return {
+			light: shut.light,
+			summed: shut.summed,
+			raw: shut.raw,
+			traced: shut.traced,
+			ms: shut.ms,
+		};
+	});
 	const changes: LightChange[] = [];
 	// Each phase's time, the shut bake's and the joints' summed.
 	const times = { shut: ms, joints: { build: 0, trace: 0, read: 0, finish: 0 } };
@@ -198,15 +278,21 @@ export async function bakeHouse(
 		// Its change from the last bake, where the edit came near it: traced again only
 		// where the edit could have changed it, kept elsewhere.
 		const last = since?.map.joints.find((j) => j.key === key && j.at === at);
-		const open = await bakeLightmap(renderer, lit, samples, 4, report(k + 1), {
-			traces: (i, p) =>
-				inside.containsPoint(p) && (!last || !edited || fresh[i] === 1 || edited.has(p)),
-			base: raw,
+		const done = await stage(`joint:${key}`, k + 1, isChanged, async () => {
+			const open = await bakeLightmap(renderer, lit, samples, 4, report(k + 1), {
+				traces: (i, p) =>
+					inside.containsPoint(p) && (!last || !edited || fresh[i] === 1 || edited.has(p)),
+				base: raw,
+			});
+			const change = lightChange(key, at, light, open.light);
+			return {
+				change: last && open.owned ? mergedChange(last, change, open.owned) : change,
+				ms: open.ms,
+			};
 		});
 		joints.set(key, joints.closedAt(key));
-		const change = lightChange(key, at, light, open.light);
-		changes.push(last && open.owned ? mergedChange(last, change, open.owned) : change);
-		for (const k of ['build', 'trace', 'read', 'finish'] as const) times.joints[k] += open.ms[k];
+		changes.push(done.change);
+		for (const k of ['build', 'trace', 'read', 'finish'] as const) times.joints[k] += done.ms[k];
 	}
 	// Every joint, in the order they are keyed: the kept ones as they were.
 	const all = (shutOnly ? [] : joints.keys())
@@ -219,34 +305,45 @@ export async function bakeHouse(
 	const lampMs = { build: 0, trace: 0, read: 0, finish: 0 };
 	let done = keys.length + 1;
 	for (const l of lampKeys) {
-		const on = await bakeLightmap(
-			renderer,
-			lit,
-			samples,
-			4,
-			report(done++),
-			{ traces: (i) => rooms[roomOf[i]] === l.room, base: none },
-			l.key,
-		);
+		const on = await stage(`lamp:${l.key}`, done, isLit, async () => {
+			const alone = await bakeLightmap(
+				renderer,
+				lit,
+				samples,
+				4,
+				report(done),
+				{ traces: (i) => rooms[roomOf[i]] === l.room, base: none },
+				l.key,
+			);
+			return { light: alone.light, raw: alone.raw, ms: alone.ms };
+		});
+		done++;
 		baked.push(lampLight(l.key, on.light));
 		for (const k of ['build', 'trace', 'read', 'finish'] as const) lampMs[k] += on.ms[k];
 		// Each joint near it opened alone: the lamp's light traced again around it.
 		for (const j of near(l)) {
 			const at = joints.openAt(j);
-			joints.set(j, at);
-			const inside = region(j);
-			const open = await bakeLightmap(
-				renderer,
-				lit,
-				samples,
-				4,
-				report(done++),
-				{ traces: (i, p) => inside.containsPoint(p) && rooms[roomOf[i]] === l.room, base: on.raw },
-				l.key,
-			);
-			joints.set(j, joints.closedAt(j));
-			pairs.push(lightChange(pairKey(j, l.key), at, on.light, open.light));
-			for (const k of ['build', 'trace', 'read', 'finish'] as const) lampMs[k] += open.ms[k];
+			const pair = await stage(`pair:${pairKey(j, l.key)}`, done, isChanged, async () => {
+				joints.set(j, at);
+				const inside = region(j);
+				const open = await bakeLightmap(
+					renderer,
+					lit,
+					samples,
+					4,
+					report(done),
+					{
+						traces: (i, p) => inside.containsPoint(p) && rooms[roomOf[i]] === l.room,
+						base: on.raw,
+					},
+					l.key,
+				);
+				joints.set(j, joints.closedAt(j));
+				return { change: lightChange(pairKey(j, l.key), at, on.light, open.light), ms: open.ms };
+			});
+			done++;
+			pairs.push(pair.change);
+			for (const k of ['build', 'trace', 'read', 'finish'] as const) lampMs[k] += pair.ms[k];
 		}
 	}
 	// The daylight and each lamp in every room, as probes, all a source's rooms in one
@@ -267,7 +364,10 @@ export async function bakeHouse(
 	}
 	const probes: ProbeGrid[] = [];
 	for (const lamp of sources) {
-		const light = await bakeProbes(renderer, lit, samples, { at, normal }, lamp, 4, report(done++));
+		const light = await stage(`probes:${lamp ?? 'daylight'}`, done, isFloats, () =>
+			bakeProbes(renderer, lit, samples, { at, normal }, lamp, 4, report(done)),
+		);
+		done++;
 		k = 0;
 		for (const g of boxed) {
 			const size = g.box.getSize(new Vector3());
