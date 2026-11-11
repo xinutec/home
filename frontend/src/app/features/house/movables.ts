@@ -2,9 +2,10 @@ import * as THREE from 'three';
 import type { Movable as Falls, Room } from './house.model';
 import { ContactShadow } from './contact-shadow';
 import type { Dynamics } from './dynamics';
+import type { Occluders } from './occluders';
 import type { ProbeLight, ProbeUniforms } from './probes';
 import { roomTag } from './probes';
-import { roomAt } from './scene-geometry';
+import { nearestRoom } from './scene-geometry';
 
 /** Metres ahead of the eye, and below it, that a held thing is carried. */
 const HOLD_AHEAD = 0.55;
@@ -28,6 +29,9 @@ interface Movable {
 	drawn?: THREE.Matrix4;
 	/** Its parts' points, in its own frame: its shape, as a body. */
 	points: Float32Array;
+	/** The ellipsoid it shades others by: its slot, and its middle and half-axes in
+	 *  its own frame (its parts' box's). */
+	occluder?: { slot: number; middle: THREE.Vector3; radii: THREE.Vector3 };
 	/** Which room's probes it reads, and the uniforms it reads them by. */
 	room?: string;
 	probes?: ProbeUniforms;
@@ -62,6 +66,8 @@ export class Movables {
 		private readonly makeDynamics: () => Promise<Dynamics>,
 		/** How each falls, by its piece's id (`Furniture.movable`). */
 		private readonly how: (key: string) => Falls,
+		/** What they shade each other and the room by, if anything. */
+		private readonly occluders?: Occluders,
 	) {
 		const byKey = new Map<string, THREE.Mesh[]>();
 		for (const m of meshes) {
@@ -95,12 +101,18 @@ export class Movables {
 			// Wide enough for its shadow however it lies, with the blur round it.
 			const shadow = own(new ContactShadow(renderer, group, size.length() * 1.3));
 			scene.add(shadow.mesh);
+			const inOwnFrame = new THREE.Box3().setFromArray(points);
 			const thing: Movable = {
 				group,
 				half: [size.x / 2, size.z / 2],
 				height: size.y,
 				shadow,
 				points: Float32Array.from(points),
+				occluder: occluders && {
+					slot: occluders.add(),
+					middle: inOwnFrame.getCenter(new THREE.Vector3()),
+					radii: inOwnFrame.getSize(new THREE.Vector3()).multiplyScalar(0.5),
+				},
 			};
 			if (light) this.lightFromProbes(thing, parts, own);
 			this.things.set(key, thing);
@@ -217,9 +229,11 @@ export class Movables {
 		if (!t.drawn?.equals(t.group.matrixWorld)) {
 			t.shadow.update(this.under(t));
 			t.drawn = t.group.matrixWorld.clone();
+			const o = t.occluder;
+			if (o) this.occluders?.place(o.slot, t.group.matrixWorld, o.middle, o.radii);
 		}
 		if (!this.light || !t.probes) return;
-		const name = roomAt(this.rooms, x, z, y + t.height / 2);
+		const name = nearestRoom(this.rooms, x, z, y + t.height / 2);
 		const room = this.rooms.find((r) => r.name === name);
 		const tag = room && roomTag(room);
 		if (tag && tag !== t.room && this.light.has(tag)) {
@@ -234,7 +248,7 @@ export class Movables {
 		const light = this.light;
 		if (!light) return;
 		const { x, y, z } = t.group.position;
-		const name = roomAt(this.rooms, x, z, y + t.height / 2);
+		const name = nearestRoom(this.rooms, x, z, y + t.height / 2);
 		const room = this.rooms.find((r) => r.name === name);
 		const tag = room && roomTag(room);
 		if (!tag || !light.has(tag)) return;
@@ -246,7 +260,11 @@ export class Movables {
 				throw new Error(`${key}'s part is drawn in ${from.type}, not a standard material`);
 			const material = from.clone();
 			material.envMap = null;
-			material.onBeforeCompile = (shader) => light.patch(shader, probes, 'all');
+			const slot = t.occluder?.slot;
+			material.onBeforeCompile = (shader) => {
+				light.patch(shader, probes, 'all');
+				if (slot !== undefined) this.occluders?.patch(shader, { self: slot });
+			};
 			material.customProgramCacheKey = () => 'moves';
 			return own(material);
 		};

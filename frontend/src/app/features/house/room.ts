@@ -38,6 +38,7 @@ import { nightSkyImage, overcastSky, overcastSkyImage } from './sky';
 import { ThreeView } from './three-view';
 import { Joints } from './joints';
 import { Collider, WalkControls } from './walk';
+import { Occluders } from './occluders';
 
 /** Inflates a gzipped lightmap: the browser's own stream, no library. */
 async function gunzip(bytes: Uint8Array): Promise<Uint8Array> {
@@ -113,6 +114,8 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 	private farLight?: ProbeLight;
 	/** All the light probes' light, for what moves. */
 	private movesLight?: ProbeLight;
+	/** What moves, as it shades the room and itself, once a lightmap applies. */
+	private occluders?: Occluders;
 	/** The reflections, to capture again when the light changes. */
 	private recapture?: () => void;
 	private auto?: AutoExposure;
@@ -232,6 +235,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 				if (!how) throw new Error(`${key} is not movable`);
 				return how;
 			},
+			this.occluders,
 		);
 		// What moves takes the daylight by day, and every lamp at its weight.
 		const lightMoves = () =>
@@ -391,8 +395,15 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			);
 			this.movesLight = view.own(new ProbeLight(map.probes, () => true));
 		}
+		if (applied && lit.movables.length > 0) this.occluders = new Occluders();
 		if (applied) {
-			const reflections = addReflections(view.renderer, view.scene, lit, this.farLight);
+			const reflections = addReflections(
+				view.renderer,
+				view.scene,
+				lit,
+				this.farLight,
+				this.occluders,
+			);
 			for (const t of reflections.owned) view.own(t);
 			this.recapture = reflections.recapture;
 		}
