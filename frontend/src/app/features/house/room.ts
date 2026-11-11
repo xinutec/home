@@ -38,7 +38,7 @@ import { ProbeLight } from './probes';
 import { nightSkyImage, overcastSky, overcastSkyImage } from './sky';
 import { ThreeView } from './three-view';
 import { Joints } from './joints';
-import { Collider, WalkControls } from './walk';
+import { WalkControls } from './walk';
 import { Occluders } from './occluders';
 
 /** Inflates a gzipped lightmap: the browser's own stream, no library. */
@@ -237,19 +237,21 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 	 *  evening while one is on (`?night`: every one, from the start; `?lamps=a,b`:
 	 *  those); on a thing that can be picked up, picks it up, and a tap again lets it
 	 *  go. */
-	private walk(view: ThreeView, joints: Joints, lit: Lit, scene: HouseScene): void {
+	private async walk(view: ThreeView, joints: Joints, lit: Lit, scene: HouseScene): Promise<void> {
 		const standing = !this.query.eye;
 		const lamps = this.lamps;
-		const collider = new Collider(lit.meshes);
+		const canvas = view.renderer.domElement;
+		// The one world the walker, the doors and the things are in, built once the
+		// room is drawn. Its build time on the host, to measure (`data-physics`, ms).
+		const physicsFrom = performance.now();
+		const dynamics = view.own(new Dynamics(await loadRapier(), lit.meshes));
 		const movables = new Movables(
 			view.renderer,
 			view.scene,
 			lit.movables,
-			(x, z, below) => collider.ground(x, z, below),
-			scene.rooms,
+			dynamics,
 			this.movesLight,
 			(r) => view.own(r),
-			async () => view.own(new Dynamics(await loadRapier(), lit.meshes)),
 			(key) => {
 				const how = scene.furniture.find((f) => f.id === key)?.movable;
 				if (!how) throw new Error(`${key} is not movable`);
@@ -275,7 +277,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			);
 		view.beforeRender = (now) => {
 			const opening = joints.update(now);
-			const carried = movables.update(now, view.camera, walker.standing);
+			const carried = movables.update(now, view.camera);
 			// A door or drawer stops on what it cannot push away, as a real one does.
 			for (const key of movables.jammed()) joints.stop(key);
 			show();
@@ -298,7 +300,6 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		for (const key of this.query.lamps ?? []) lamps?.toggle(key);
 		if (lamps && (this.query.night || this.query.lamps)) switched();
 		const caster = new THREE.Raycaster();
-		const canvas = view.renderer.domElement;
 		const tapped = (x: number, y: number) => {
 			const box = canvas.getBoundingClientRect();
 			const ndc = new THREE.Vector2(
@@ -313,8 +314,8 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			}
 			const thing = movables.pick(caster.ray, lit.meshes);
 			if (thing) {
-				// The first pick-up loads the physics: the frames follow once it has.
-				void movables.hold(thing, view.camera).then(() => view.requestFrame());
+				movables.hold(thing, view.camera);
+				view.requestFrame();
 				return;
 			}
 			const lamp = lamps?.pick(caster.ray);
@@ -332,7 +333,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			view.camera,
 			view.renderer.domElement,
 			this.stick().nativeElement,
-			collider,
+			dynamics,
 			() => {
 				if (!this.moved()) this.zone.run(() => this.moved.set(true));
 				view.requestFrame();
@@ -343,13 +344,8 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		);
 		view.useMover(walker);
 		this.walking.set(true);
-		// The physics, once the room is drawn: the walker meets what it walks into from
-		// the start. Its build time on the host, to measure (`data-physics`, ms).
-		const physicsFrom = performance.now();
-		void movables.start().then(() => {
-			canvas.dataset['physics'] = String(Math.round(performance.now() - physicsFrom));
-			view.requestFrame();
-		});
+		canvas.dataset['physics'] = String(Math.round(performance.now() - physicsFrom));
+		view.requestFrame();
 	}
 
 	/** Builds the room the scene describes, its atlas laid out to the bake's (where
@@ -380,7 +376,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		} else {
 			const joints = new Joints(scene, lit.meshes);
 			this.light(view, scene, lit, map);
-			this.walk(view, joints, lit, scene);
+			void this.walk(view, joints, lit, scene);
 		}
 		view.requestFrame();
 	}

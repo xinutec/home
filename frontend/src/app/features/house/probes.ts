@@ -200,6 +200,18 @@ export class ProbeLight {
 		}
 	}
 
+	/** The room whose probes light a thing at `p`: the one whose grid holds it, else
+	 *  the nearest (a thing in a wall's thickness, between two rooms' grids). */
+	at(p: THREE.Vector3): string | undefined {
+		let best: string | undefined;
+		let bestD = Infinity;
+		for (const [room, r] of this.rooms) {
+			const d = new THREE.Box3(r.min, r.min.clone().add(r.size)).distanceToPoint(p);
+			if (d < bestD) [best, bestD] = [room, d];
+		}
+		return best;
+	}
+
 	/** Whether `room` has probes here. */
 	has(room: string): boolean {
 		return this.rooms.has(room);

@@ -5,17 +5,28 @@ import { withModels } from './assembly';
 import type { HouseScene } from './house.model';
 import { MaterialLibrary } from './materials';
 import { buildHouse } from './room-builder';
-import { Collider, EYE, RUN_SPEED, WALK_SPEED, WalkControls, stickSpeed } from './walk';
+import { Dynamics, loadRapier } from './dynamics';
+import { EYE, RUN_SPEED, WALK_SPEED, WalkControls, stickSpeed } from './walk';
 
 const house = withModels(json as unknown as HouseScene);
 
-/** Walks in a straight line in 5 cm steps, kept clear at each; where it ends. */
-function walk(c: Collider, from: [number, number], to: [number, number]): [number, number] {
-	let [x, z] = from;
+const R = await loadRapier();
+
+/** Walks in a straight line in 5 cm steps, a frame each, from standing on what is
+ *  under `from`; where it ends. */
+function walk(d: Dynamics, from: [number, number], to: [number, number]): [number, number] {
+	let feet = new THREE.Vector3(from[0], d.ground(from[0], from[1], 1) ?? 0, from[1]);
 	const steps = Math.ceil(Math.hypot(to[0] - from[0], to[1] - from[1]) / 0.05);
 	for (let k = 0; k < steps; k++)
-		[x, z] = c.push(x + (to[0] - from[0]) / steps, z + (to[1] - from[1]) / steps, 0);
-	return [x, z];
+		feet = d.walk(feet, (to[0] - from[0]) / steps, (to[1] - from[1]) / steps);
+	return [feet.x, feet.z];
+}
+
+/** A world of `meshes` on a floor, as the room view's physics holds it. */
+function world(meshes: THREE.Mesh[]): Dynamics {
+	const floor = box(40, 0.1, 40, 0, -0.05, 0);
+	for (const m of [floor, ...meshes]) m.updateMatrixWorld();
+	return new Dynamics(R, [floor, ...meshes]);
 }
 
 /** A box w × h × d with its centre at (x, y, z), turned `yaw` about the vertical. */
@@ -42,21 +53,24 @@ function drawnMeshes(): THREE.Mesh[] {
 }
 
 /** The real house, as drawn. */
-function drawn(): Collider {
-	return new Collider(drawnMeshes());
+function drawn(): Dynamics {
+	const meshes = drawnMeshes();
+	for (const m of meshes) m.updateMatrixWorld();
+	return new Dynamics(R, meshes);
 }
 
 describe('walking', () => {
 	it('stops a walker its radius short of a wall', () => {
 		const wall = new THREE.Mesh(new THREE.PlaneGeometry(2, 2.4).rotateY(Math.PI / 2));
 		wall.position.set(0, 1.2, 0);
-		const [x] = walk(new Collider([wall]), [-1, 0], [1, 0]);
-		expect(x).toBeCloseTo(-0.2, 3);
+		const [x] = walk(world([wall]), [-1, 0], [1, 0]);
+		// Its radius, and the centimetre the world keeps it clear by.
+		expect(x).toBeCloseTo(-0.21, 3);
 	});
 
 	it('keeps a walker out of a turned box, and slides it along a side', () => {
 		// Turned a quarter, the box is 0.5 wide in x: the walker stops at its side.
-		const c = new Collider([box(1, 0.8, 0.5, 0, 0.4, 0, Math.PI / 2)]);
+		const c = world([box(1, 0.8, 0.5, 0, 0.4, 0, Math.PI / 2)]);
 		const [x, z] = walk(c, [-1, 0.3], [1, 0.3]);
 		expect(x).toBeLessThan(-0.25 - 0.2 + 1e-3);
 		expect(Math.abs(z - 0.3)).toBeLessThan(0.3);
@@ -64,24 +78,27 @@ describe('walking', () => {
 
 	it('walks over what lies below its knees, and not into what stands higher', () => {
 		const rug = box(1, 0.01, 1, 0, 0.005, 0);
-		expect(walk(new Collider([rug]), [-1, 0], [1, 0])[0]).toBeCloseTo(1, 6);
+		expect(walk(world([rug]), [-1, 0], [1, 0])[0]).toBeCloseTo(1, 6);
 		const table = box(1, 0.75, 1, 0, 0.375, 0);
-		expect(walk(new Collider([table]), [-1, 0], [1, 0])[0]).toBeLessThan(-0.69);
+		expect(walk(world([table]), [-1, 0], [1, 0])[0]).toBeLessThan(-0.69);
 	});
 
 	it('stops a walker at a door where it stands now, not where it stood shut', () => {
 		// Shut, the door stands aside at x = 5; opened, it swings across the way.
 		const door = box(0.05, 2, 1, 5, 1, 0);
 		door.userData['moves'] = 'cupboard/door';
-		const c = new Collider([door]);
+		const c = world([door]);
 		expect(walk(c, [-1, 0], [1, 0])[0]).toBeCloseTo(1, 6);
+		// Moved, the door's body follows at the next step, as each frame steps.
 		door.position.x = 0;
 		door.updateMatrixWorld();
+		c.step(1 / 60);
 		expect(walk(c, [-1, 0], [1, 0])[0]).toBeLessThan(-0.025 - 0.2 + 1e-3);
 		// Turned a quarter, it lies along the way: the walker passes beside it, and
 		// one walking across is stopped.
 		door.rotation.y = Math.PI / 2;
 		door.updateMatrixWorld();
+		c.step(1 / 60);
 		expect(walk(c, [-1, 0.6], [1, 0.6])[0]).toBeCloseTo(1, 6);
 		expect(walk(c, [0, -1], [0, 1])[1]).toBeLessThan(-0.025 - 0.2 + 1e-3);
 	});
@@ -107,16 +124,18 @@ describe('walking', () => {
 			const [lx, , lz] = room.view?.look ?? [0, 0, 0];
 			const feet = house3d.ground(ex, ez, ey) ?? NaN;
 			expect(feet, `${room.name}: its start stands on its floor`).toBeCloseTo(room.floor ?? 0, 3);
-			const [x, z] = house3d.push(ex, ez, feet);
-			expect(Math.hypot(x - ex, z - ez), `${room.name}: its start is in something`).toBeLessThan(
-				1e-3,
-			);
+			// A first step of 30 cm the way it looks, taken whole: not from inside
+			// something, nor into it.
 			const d = Math.hypot(lx - ex, lz - ez);
-			const [sx, sz] = [ex + ((lx - ex) / d) * 0.3, ez + ((lz - ez) / d) * 0.3];
-			const [ax, az] = house3d.push(sx, sz, feet);
-			expect(Math.hypot(ax - sx, az - sz), `${room.name}: its first step is blocked`).toBeLessThan(
-				1e-3,
+			const to = house3d.walk(
+				new THREE.Vector3(ex, feet, ez),
+				((lx - ex) / d) * 0.3,
+				((lz - ez) / d) * 0.3,
 			);
+			expect(
+				Math.hypot(to.x - ex, to.z - ez),
+				`${room.name}: its first step is blocked`,
+			).toBeCloseTo(0.3, 3);
 		}
 	});
 
@@ -150,7 +169,7 @@ describe('walking', () => {
 				camera,
 				dom,
 				document.createElement('div'),
-				new Collider([new THREE.Mesh(new THREE.PlaneGeometry(1, 1))]),
+				world([]),
 				() => undefined,
 				true,
 				(x, y) => taps.push([x, y]),
@@ -203,7 +222,7 @@ describe('the controls, as a first-person game’s', () => {
 		window.dispatchEvent(Object.assign(new Event(type), { code }));
 
 	/** Controls on a `width` × 800 screen, far from anything to bump into, or in `world`. */
-	function controls(width = 400, world = [box(1, 1, 1, 100, 0.5, 100)], at?: THREE.Vector3) {
+	function controls(width = 400, things = [box(1, 1, 1, 100, 0.5, 100)], at?: THREE.Vector3) {
 		const dom = document.createElement('div');
 		dom.getBoundingClientRect = () => new DOMRect(0, 0, width, 800);
 		dom.setPointerCapture = () => undefined;
@@ -215,7 +234,7 @@ describe('the controls, as a first-person game’s', () => {
 			camera,
 			dom,
 			document.createElement('div'),
-			new Collider(world),
+			world(things),
 			() => undefined,
 			!at,
 			(x, y) => taps.push([x, y]),

@@ -11,9 +11,11 @@ import { Movables } from './movables';
 import { buildHouse } from './room-builder';
 import { oneSided } from './sides';
 
+const R = await loadRapier();
+
 /** A 40 cm cushion standing on a floor at the origin, and a table 70 cm high over
  *  x 1 to 2. */
-function room(): { cushion: THREE.Mesh; movables: Movables; fixed: THREE.Mesh[] } {
+function room(): { cushion: THREE.Mesh; movables: Movables; dynamics: Dynamics } {
 	const scene = new THREE.Scene();
 	const cushion = new THREE.Mesh(
 		new THREE.BoxGeometry(0.4, 0.4, 0.15),
@@ -26,23 +28,18 @@ function room(): { cushion: THREE.Mesh; movables: Movables; fixed: THREE.Mesh[] 
 	floor.position.set(0, -0.05, 0);
 	const table = new THREE.Mesh(new THREE.BoxGeometry(1, 0.7, 1));
 	table.position.set(1.5, 0.35, 0);
-	const fixed = [floor, table];
-	const ground = (x: number, _z: number, below: number) => {
-		const top = x > 1 && x < 2 ? 0.7 : 0;
-		return below >= top ? top : undefined;
-	};
+	for (const m of [floor, table]) m.updateMatrixWorld();
+	const dynamics = new Dynamics(R, [floor, table]);
 	const movables = new Movables(
 		drawsNothing(),
 		scene,
 		[cushion],
-		ground,
-		[],
+		dynamics,
 		undefined,
 		(r) => r,
-		async () => new Dynamics(await loadRapier(), fixed),
 		() => ({ kg: 0.3 }),
 	);
-	return { cushion, movables, fixed };
+	return { cushion, movables, dynamics };
 }
 
 /** A renderer that draws nothing: the physics needs none, and there is no WebGL
@@ -88,10 +85,10 @@ describe('Movables', () => {
 		expect(movables.pick(at, [wall])).toBeUndefined();
 	});
 
-	it('is carried before the eye, and let go falls under gravity and comes to rest on what is under it', async () => {
+	it('is carried before the eye, and let go falls under gravity and comes to rest on what is under it', () => {
 		const { cushion, movables } = room();
 		const camera = eye(0);
-		await movables.hold('cushion', camera);
+		movables.hold('cushion', camera);
 		for (let t = 16; t < 400; t += 16) movables.update(t, camera);
 		const held = cushion.getWorldPosition(new THREE.Vector3());
 		expect(held.z).toBeCloseTo(1 - 0.55, 1);
@@ -109,17 +106,19 @@ describe('Movables', () => {
 		expect(movables.holding).toBe(false);
 	});
 
-	it('is pushed aside by the walker walking into it, though all had come to rest', async () => {
-		const { cushion, movables } = room();
+	it('is pushed aside by the walker walking into it, though all had come to rest', () => {
+		const { cushion, movables, dynamics } = room();
 		const camera = eye(-1);
-		// The physics started, as the room view starts it, and everything at rest.
-		await movables.start();
+		// Everything at rest, as the room view starts it.
 		expect(settle(movables, camera)).toBeLessThan(600);
 		const before = cushion.getWorldPosition(new THREE.Vector3());
 		// Walked along x, through where it stands, a frame at a time.
 		let t = 10_000;
-		for (let x = -1; x <= 1; x += 0.02)
-			movables.update((t += 16), camera, new THREE.Vector3(x, 0, 0.05));
+		let feet = new THREE.Vector3(-1, 0, 0.05);
+		for (let k = 0; k < 100; k++) {
+			feet = dynamics.walk(feet, 0.02, 0);
+			movables.update((t += 16), camera);
+		}
 		const after = cushion.getWorldPosition(new THREE.Vector3());
 		expect(after.distanceTo(before)).toBeGreaterThan(0.1);
 	});
@@ -138,7 +137,7 @@ describe('Movables', () => {
 		expect(cushion.parent).toBe(scene);
 	});
 
-	it('in the real house, each thing stays where it stands, from the start and while another is carried off and dropped', async () => {
+	it('in the real house, each thing stays where it stands, from the start and while another is carried off and dropped', () => {
 		// As the room view builds it: the fixed room one-sided and merged, the things apart.
 		const scene = withModels(json as unknown as HouseScene);
 		const stage = { scene: new THREE.Scene(), own: <T>(r: T) => r };
@@ -157,11 +156,9 @@ describe('Movables', () => {
 			drawsNothing(),
 			stage.scene,
 			meshes,
-			() => undefined,
-			[],
+			new Dynamics(R, fixed),
 			undefined,
 			(r) => r,
-			async () => new Dynamics(await loadRapier(), fixed),
 			how,
 		);
 		const where = () =>
@@ -191,12 +188,11 @@ describe('Movables', () => {
 		camera.updateMatrixWorld();
 		// The physics started, as the room view starts it once drawn: nothing jumps.
 		const placed = where();
-		await movables.start();
 		expect(settle(movables, camera)).toBeLessThan(600);
 		expect(shifted(movables.keys(), placed)).toEqual([]);
 		// One carried off from among the others: they stay.
 		const before = where();
-		await movables.hold('living-jbl-speaker', camera);
+		movables.hold('living-jbl-speaker', camera);
 		for (let t = 20_000; t < 22_000; t += 16) movables.update(t, camera);
 		const others = movables.keys().filter((k) => k !== 'living-jbl-speaker');
 		expect(shifted(others, before)).toEqual([]);
@@ -210,7 +206,7 @@ describe('Movables', () => {
 		expect(speaker.min.y).toBeLessThan(0.02);
 	});
 
-	it('in the real house, a drawer shut on a box too tall for it stops on it, and the box stays', async () => {
+	it('in the real house, a drawer shut on a box too tall for it stops on it, and the box stays', () => {
 		const scene = withModels(json as unknown as HouseScene);
 		const stage = { scene: new THREE.Scene(), own: <T>(r: T) => r };
 		buildHouse(stage, scene, new MaterialLibrary(stage.own, false), false, false);
@@ -231,15 +227,12 @@ describe('Movables', () => {
 			drawsNothing(),
 			stage.scene,
 			[cushion],
-			() => undefined,
-			[],
+			new Dynamics(R, fixed),
 			undefined,
 			(r) => r,
-			async () => new Dynamics(await loadRapier(), fixed),
 			() => ({ kg: 0.3 }),
 		);
 		const camera = eye(-0.9);
-		await movables.start();
 		expect(settle(movables, camera)).toBeLessThan(600);
 		const lying = cushion.getWorldPosition(new THREE.Vector3());
 		// Tapped shut, the room view's frame loop running.

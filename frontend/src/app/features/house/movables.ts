@@ -1,19 +1,13 @@
 import * as THREE from 'three';
-import type { Movable as Falls, Room } from './house.model';
+import type { Movable as Falls } from './house.model';
 import { ContactShadow } from './contact-shadow';
 import type { Dynamics } from './dynamics';
 import type { Occluders } from './occluders';
 import type { ProbeLight, ProbeUniforms } from './probes';
-import { roomTag } from './probes';
-import { nearestRoom } from './scene-geometry';
 
 /** Metres ahead of the eye, and below it, that a held thing is carried. */
 const HOLD_AHEAD = 0.55;
 const HOLD_BELOW = 0.35;
-/** What a thing stands on: the highest surface of the fixed room under [x, z]
- *  below `below` (`Collider.ground`). */
-export type Ground = (x: number, z: number, below: number) => number | undefined;
-
 /** Keeps a GPU resource for disposal with the view, and gives it back. */
 type Own = <T extends { dispose(): void }>(r: T) => T;
 
@@ -41,7 +35,7 @@ interface Movable {
  * The things in the room that can be picked up (`Furniture.movable`), as the room
  * view walks it. A tap on one picks it up: it is carried before the eye. A tap
  * again lets it go: it falls, tumbles and comes to rest among the room and the
- * others (`Dynamics`, made at the first pick-up). It is lit where it is from the
+ * others (`Dynamics`, the room view's one world). It is lit where it is from the
  * light probes (`ProbeLight`, every source), not baked, and has a soft shadow
  * under it.
  */
@@ -49,23 +43,19 @@ export class Movables {
 	private readonly things = new Map<string, Movable>();
 	private held?: { key: string; yaw: number };
 	private last?: number;
-	private dynamics?: Dynamics;
-	private starting?: Promise<Dynamics>;
 
 	constructor(
 		private readonly renderer: THREE.WebGLRenderer,
 		scene: THREE.Scene,
 		/** Their meshes as drawn, each saying what it is part of (`userData.movable`). */
 		meshes: THREE.Mesh[],
-		private readonly ground: Ground,
-		private readonly rooms: Room[],
+		/** The world they move in, with the room, its doors and the walker. */
+		private readonly dynamics: Dynamics,
 		/** Their light, if the bake has probes; else the room's approximate light. */
 		private readonly light: ProbeLight | undefined,
 		own: Own,
-		/** The physics they move by, made when first needed. */
-		private readonly makeDynamics: () => Promise<Dynamics>,
 		/** How each falls, by its piece's id (`Furniture.movable`). */
-		private readonly how: (key: string) => Falls,
+		how: (key: string) => Falls,
 		/** What they shade each other and the room by, if anything. */
 		private readonly occluders?: Occluders,
 	) {
@@ -116,7 +106,8 @@ export class Movables {
 			};
 			if (light) this.lightFromProbes(thing, parts, own);
 			this.things.set(key, thing);
-			this.place(thing);
+			dynamics.add(key, group, thing.points, how(key));
+			this.place(key, thing);
 		}
 	}
 
@@ -143,10 +134,9 @@ export class Movables {
 
 	/** Picks up `key`, keeping how it is turned to the eye about the vertical; it is
 	 *  carried upright. */
-	async hold(key: string, eye: THREE.Camera): Promise<void> {
+	hold(key: string, eye: THREE.Camera): void {
 		const t = this.thing(key);
-		const dynamics = await this.start();
-		dynamics.hold(key);
+		this.dynamics.hold(key);
 		const turned = new THREE.Euler().setFromQuaternion(t.group.quaternion, 'YXZ');
 		this.held = { key, yaw: turned.y - yawOf(eye) };
 	}
@@ -154,30 +144,15 @@ export class Movables {
 	/** Lets what is carried go, moving as the hand moved it. */
 	drop(): void {
 		if (!this.held) return;
-		this.dynamics?.release(this.held.key);
+		this.dynamics.release(this.held.key);
 		this.held = undefined;
 	}
 
-	/** The physics, made once, with every thing in it as it stands: at the first
-	 *  pick-up, or before (the room view starts it once the room is drawn, so the
-	 *  walker meets things before it has carried any). */
-	start(): Promise<Dynamics> {
-		this.starting ??= this.makeDynamics().then((d) => {
-			for (const [key, t] of this.things) d.add(key, t.group, t.points, this.how(key));
-			this.dynamics = d;
-			return d;
-		});
-		return this.starting;
-	}
-
-	/** Moves what is carried, the walker standing at `feet`, and runs the physics,
-	 *  at `now` (ms); true while anything still moves, so another frame should
-	 *  follow. */
-	update(now: number, eye: THREE.Camera, feet?: THREE.Vector3): boolean {
+	/** Moves what is carried and runs the physics, at `now` (ms); true while anything
+	 *  still moves, so another frame should follow. */
+	update(now: number, eye: THREE.Camera): boolean {
 		const dynamics = this.dynamics;
-		if (!dynamics) return false;
 		const dt = this.last === undefined ? 0 : (now - this.last) / 1000;
-		if (feet) dynamics.walk(feet);
 		if (this.held) {
 			const t = this.thing(this.held.key);
 			const ahead = new THREE.Vector3(0, 0, -1).applyQuaternion(eye.quaternion).setY(0).normalize();
@@ -192,7 +167,7 @@ export class Movables {
 		const moving = dynamics.step(dt) || this.held !== undefined;
 		for (const [key, t] of this.things) {
 			dynamics.pose(key, t.group);
-			this.place(t);
+			this.place(key, t);
 		}
 		// The clock runs on while all sleeps: the walker moving through the world is a
 		// step's worth of time like any other (a long pause is cut short by `step`).
@@ -201,14 +176,14 @@ export class Movables {
 	}
 
 	/** The doors and drawers pressing into a thing they cannot push away
-	 *  (`Dynamics.jammed`): none before the physics starts. */
+	 *  (`Dynamics.jammed`). */
 	jammed(): string[] {
-		return this.dynamics?.jammed() ?? [];
+		return this.dynamics.jammed();
 	}
 
-	/** The highest surface of the fixed room under a thing's footprint, below its
-	 *  foot: where its shadow falls. */
-	private under(t: Movable): number | undefined {
+	/** The highest surface under a thing's footprint, below its foot (the room, its
+	 *  doors where they stand, other things): where its shadow falls. */
+	private under(key: string, t: Movable): number | undefined {
 		const { x, y, z } = t.group.position;
 		const yaw = new THREE.Euler().setFromQuaternion(t.group.quaternion, 'YXZ').y;
 		const [c, s] = [Math.cos(yaw), Math.sin(yaw)];
@@ -221,7 +196,7 @@ export class Movables {
 			[-1, -1],
 		]) {
 			const [dx, dz] = [u * t.half[0] * 0.8, v * t.half[1] * 0.8];
-			const g = this.ground(x + dx * c + dz * s, z - dx * s + dz * c, y + 1e-3);
+			const g = this.dynamics.ground(x + dx * c + dz * s, z - dx * s + dz * c, y + 1e-3, key);
 			if (g !== undefined) top = Math.max(top ?? g, g);
 		}
 		return top;
@@ -229,20 +204,18 @@ export class Movables {
 
 	/** Its shadow on what is under it, drawn again if it has moved, and its light
 	 *  from the room it is in. */
-	private place(t: Movable): void {
+	private place(key: string, t: Movable): void {
 		t.group.updateMatrixWorld(true);
 		const { x, y, z } = t.group.position;
 		if (!t.drawn?.equals(t.group.matrixWorld)) {
-			t.shadow.update(this.under(t));
+			t.shadow.update(this.under(key, t));
 			t.drawn = t.group.matrixWorld.clone();
 			const o = t.occluder;
 			if (o) this.occluders?.place(o.slot, t.group.matrixWorld, o.middle, o.radii);
 		}
 		if (!this.light || !t.probes) return;
-		const name = nearestRoom(this.rooms, x, z, y + t.height / 2);
-		const room = this.rooms.find((r) => r.name === name);
-		const tag = room && roomTag(room);
-		if (tag && tag !== t.room && this.light.has(tag)) {
+		const tag = this.light.at(new THREE.Vector3(x, y + t.height / 2, z));
+		if (tag && tag !== t.room) {
 			this.light.aim(t.probes, tag);
 			t.room = tag;
 		}
@@ -254,10 +227,8 @@ export class Movables {
 		const light = this.light;
 		if (!light) return;
 		const { x, y, z } = t.group.position;
-		const name = nearestRoom(this.rooms, x, z, y + t.height / 2);
-		const room = this.rooms.find((r) => r.name === name);
-		const tag = room && roomTag(room);
-		if (!tag || !light.has(tag)) return;
+		const tag = light.at(new THREE.Vector3(x, y + t.height / 2, z));
+		if (!tag) return;
 		const probes = light.uniforms(tag);
 		t.room = tag;
 		t.probes = probes;

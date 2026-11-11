@@ -445,11 +445,12 @@ stick: a dead zone for a resting thumb, a walk (1.4 m/s) by three quarters of it
 reach, a run (2.6 m/s) at its edge. With a mouse, a click captures it (pointer
 lock) and it looks as it moves, until Esc; a dot marks the middle of the view,
 which a click or E opens; W A S D or the arrows walk, Shift runs. The walk eases
-in and out over about 0.1 s, the look never does; a frame's step is taken in
-steps of at most 5 cm, so a run does not pass through a thin wall. The walker is a column 0.2 m round, 0.12 to 1.75 m up, pushed sideways out
-of the drawn room's own triangles (`Collider`: one BVH over the meshes the page
-draws, 21,702 triangles, built in 20 ms on the Mac; a step 10 µs), so it slides
-along a wall or round a table's edge, and steps over a rug or the hearth. A camera
+in and out over about 0.1 s, the look never does. The walker is a column 0.2 m
+round, 0.22 to 1.75 m up, in the one physics world the doors and things are in
+(`Dynamics.walk`, Rapier's character controller; see `engine.md`), so it slides
+along a wall, an open door or round a table's edge; its feet stand on the highest
+surface under its footprint, so it steps over a rug, the hearth or a stair, and
+its shins kick what lies on the floor aside. A camera
 placed by the URL (a photo's) keeps its exact pose. The top corner says the frame
 rate while anything moves, and how long the slowest frame's work took
 (`FrameRate`; `idle` while still, as nothing is drawn then).

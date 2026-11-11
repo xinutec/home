@@ -1,7 +1,5 @@
 import * as THREE from 'three';
 
-import { MeshBVH } from 'three-mesh-bvh';
-
 /** The walker as a column: its radius, and the heights above its feet between which
  *  anything stops it (a rug or a stair's riser does not, it steps up onto it; a
  *  coffee table, a curtain, a wall above a sill do). */
@@ -9,121 +7,12 @@ export const BODY = { radius: 0.2, low: 0.22, high: 1.75 };
 /** Eye height standing, metres. */
 export const EYE = 1.6;
 
-/** Meshes' triangles as one geometry: in the room (`world`), or in the mesh's own frame. */
-function triangles(meshes: THREE.Mesh[], world: boolean): THREE.BufferGeometry {
-	const pos: number[] = [];
-	const v = new THREE.Vector3();
-	for (const m of meshes) {
-		m.updateMatrixWorld(true);
-		const g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry;
-		const p = g.getAttribute('position');
-		for (let i = 0; i < p.count; i++) {
-			v.fromBufferAttribute(p, i);
-			if (world) v.applyMatrix4(m.matrixWorld);
-			pos.push(v.x, v.y, v.z);
-		}
-	}
-	const geometry = new THREE.BufferGeometry();
-	geometry.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-	return geometry;
-}
-
-/**
- * What a walker cannot pass: the drawn room's own triangles, every one between its
- * feet and head. The walker is a column (BODY): a capsule from BODY.low to
- * BODY.high, pushed out sideways from whatever it overlaps, so it slides along a
- * wall or round a table's edge, and steps over a rug or a hearth. The fixed room is
- * one BVH; what moves on a joint (`userData.moves`, a door) is one BVH each, in its
- * own frame, met wherever it stands now.
- */
-export class Collider {
-	private readonly fixed: MeshBVH;
-	private readonly moving: { mesh: THREE.Mesh; bvh: MeshBVH }[];
-
-	constructor(meshes: THREE.Mesh[]) {
-		const moves = (m: THREE.Mesh) => m.userData['moves'] !== undefined;
-		this.fixed = new MeshBVH(
-			triangles(
-				meshes.filter((m) => !moves(m)),
-				true,
-			),
-		);
-		this.moving = meshes
-			.filter(moves)
-			.map((mesh) => ({ mesh, bvh: new MeshBVH(triangles([mesh], false)) }));
-	}
-
-	/** Where a walker at [x, z], its feet at `feet`, ends up, pushed clear of
-	 *  everything it overlaps. */
-	push(x: number, z: number, feet: number, r = BODY.radius): [number, number] {
-		const segment = new THREE.Line3(
-			new THREE.Vector3(x, feet + BODY.low + r, z),
-			new THREE.Vector3(x, feet + BODY.high - r, z),
-		);
-		const toLocal = new THREE.Matrix4();
-		const shift = new THREE.Vector3();
-		for (let round = 0; round < 4; round++) {
-			let moved = shove(this.fixed, segment, r);
-			for (const { mesh, bvh } of this.moving) {
-				// In the door's own frame, then the push turned back into the room's.
-				toLocal.copy(mesh.matrixWorld).invert();
-				const local = segment.clone().applyMatrix4(toLocal);
-				const before = local.start.clone();
-				if (!shove(bvh, local, r)) continue;
-				shift.subVectors(local.start, before).transformDirection(mesh.matrixWorld);
-				shift.multiplyScalar(local.start.distanceTo(before));
-				segment.start.x += shift.x;
-				segment.start.z += shift.z;
-				segment.end.x = segment.start.x;
-				segment.end.z = segment.start.z;
-				moved = true;
-			}
-			if (!moved) break;
-		}
-		return [segment.start.x, segment.start.z];
-	}
-
-	/** The height of the highest surface of the fixed room under [x, z] below
-	 *  `below`: what a walker there stands on. None: nothing is under it. */
-	ground(x: number, z: number, below: number): number | undefined {
-		const down = new THREE.Ray(new THREE.Vector3(x, below, z), new THREE.Vector3(0, -1, 0));
-		return this.fixed.raycastFirst(down, THREE.DoubleSide)?.point.y;
-	}
-}
-
-/** Pushes a walker's `segment` (radius r) sideways out of a BVH's triangles; true if
- *  it moved it. */
-function shove(bvh: MeshBVH, segment: THREE.Line3, r: number): boolean {
-	const near = new THREE.Box3().setFromPoints([segment.start, segment.end]).expandByScalar(r);
-	const [onTri, onBody] = [new THREE.Vector3(), new THREE.Vector3()];
-	const [x, z] = [segment.start.x, segment.start.z];
-	let moved = false;
-	bvh.shapecast({
-		intersectsBounds: (b) => b.intersectsBox(near),
-		intersectsTriangle: (tri) => {
-			const d = tri.closestPointToSegment(segment, onTri, onBody);
-			if (d >= r) return false;
-			// Out sideways only: the walker keeps its feet on the floor.
-			let [px, pz] = [onBody.x - onTri.x, onBody.z - onTri.z];
-			let len = Math.hypot(px, pz);
-			if (len < 1e-9) {
-				const n = tri.getNormal(new THREE.Vector3());
-				[px, pz] = [n.x, n.z];
-				len = Math.hypot(px, pz);
-				if (len < 1e-9) return false;
-				// Through a face, the push is its whole radius, back the way it faces.
-				if (px * (x - onTri.x) + pz * (z - onTri.z) < 0) [px, pz] = [-px, -pz];
-			}
-			const by = (r - d) / len;
-			segment.start.x += px * by;
-			segment.start.z += pz * by;
-			segment.end.x = segment.start.x;
-			segment.end.z = segment.start.z;
-			moved = true;
-			return false;
-		},
-	});
-	return moved;
+/** What the walker walks in (`Dynamics`): what is under a spot, and a step taken. */
+export interface Footing {
+	/** The highest surface under [x, z] below `below`; none if nothing is. */
+	ground(x: number, z: number, below: number): number | undefined;
+	/** Walks from standing at `feet` by `dx`, `dz`; where its feet are then. */
+	walk(feet: THREE.Vector3, dx: number, dz: number): THREE.Vector3;
 }
 
 /**
@@ -135,7 +24,7 @@ function shove(bvh: MeshBVH, segment: THREE.Line3, r: number): boolean {
  * the view (marked by `crosshair` while captured); W A S D or the arrows walk,
  * Shift runs. The walk eases in and out; the look never does. The walker stands on
  * whatever is under it, stepping up a stair and down, its eye at standing height
- * above it, and is kept out of everything drawn (`Collider`).
+ * above it, and is kept out of everything (`Footing`, the physics world).
  */
 export class WalkControls {
 	private yaw = 0;
@@ -158,7 +47,7 @@ export class WalkControls {
 		private readonly camera: THREE.PerspectiveCamera,
 		private readonly dom: HTMLElement,
 		private readonly stick: HTMLElement,
-		private readonly collider: Collider,
+		private readonly footing: Footing,
 		private readonly changed: () => void,
 		standing: boolean,
 		/** A tap, at a point on the screen (client pixels). */
@@ -170,7 +59,7 @@ export class WalkControls {
 		this.yaw = e.y;
 		this.pitch = standing ? 0 : e.x;
 		const p = camera.position;
-		this.feet = collider.ground(p.x, p.z, p.y) ?? 0;
+		this.feet = footing.ground(p.x, p.z, p.y) ?? 0;
 		this.eye = standing ? this.feet + EYE : p.y;
 		if (standing) {
 			p.y = this.eye;
@@ -239,28 +128,19 @@ export class WalkControls {
 			return false;
 		}
 		this.last = now;
-		// In steps no longer than a wall is thin, so a run does not pass through one,
-		// each onto what is underfoot there: up a step, or down.
+		// The world slides it along what it meets, up a step or down one.
 		const travel = this.velocity.length() * dt;
-		const steps = Math.max(1, Math.ceil(travel / STEP));
-		let [x, z] = [p.x, p.z];
-		for (let s = 0; s < steps; s++) {
-			[x, z] = this.collider.push(
-				x + (this.velocity.x * dt) / steps,
-				z + (this.velocity.y * dt) / steps,
-				this.feet,
-			);
-			this.feet = this.collider.ground(x, z, this.feet + BODY.low) ?? this.feet;
-		}
+		const to = this.footing.walk(
+			new THREE.Vector3(p.x, this.feet, p.z),
+			this.velocity.x * dt,
+			this.velocity.y * dt,
+		);
+		const [x, z] = [to.x, to.z];
+		this.feet = to.y;
 		// The eye follows the feet smoothly, as a head does up a flight of stairs.
 		if (travel > 0) this.eye = this.feet + EYE;
 		p.set(x, p.y + (this.eye - p.y) * (1 - Math.exp(-dt / EYE_EASE_S)), z);
 		return true;
-	}
-
-	/** Where its feet are: under the eye, on what it stands on. */
-	get standing(): THREE.Vector3 {
-		return new THREE.Vector3(this.camera.position.x, this.feet, this.camera.position.z);
 	}
 
 	dispose(): void {
@@ -401,8 +281,6 @@ const EASE_S = 0.08;
 const EYE_EASE_S = 0.12;
 /** Metres a second under which an eased walk has stopped. */
 const STOPPED = 0.01;
-/** The longest step, metres, the walker is kept clear at: under a wall's thickness. */
-const STEP = 0.05;
 /** Of the stick's reach: where a resting thumb moves nothing, and where it walks. */
 const DEAD_ZONE = 0.12;
 const WALK_REACH = 0.75;

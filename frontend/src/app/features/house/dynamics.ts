@@ -2,9 +2,22 @@ import * as RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import { BODY } from './walk';
 
-/** Metres over its feet the walker's body starts: its feet kick what is on the
- *  floor, where its walk steps over a rug (`BODY.low`). */
+/** Metres the walker keeps clear of what it meets (the controller's offset). */
+const GAP = 0.01;
+/** Points round the walker's footprint its feet look for the floor under. */
+const FOOTPRINT = 8;
+/** Metres over its feet the walker's shins start: they kick what lies on the
+ *  floor, where its feet step over a rug. */
 const FEET = 0.03;
+
+/** The walker: its column's body and shape, the controller that moves it, and its
+ *  shins. */
+interface Walker {
+	body: RAPIER.RigidBody;
+	shape: RAPIER.Collider;
+	controller: RAPIER.KinematicCharacterController;
+	shins: RAPIER.RigidBody;
+}
 /** Seconds a physics step covers: the screen's usual frame. */
 const STEP = 1 / 60;
 /** Steps at most a frame: a frame late by more drops the rest, not the page. */
@@ -32,15 +45,16 @@ export async function loadRapier(): Promise<typeof RAPIER> {
  * the room one triangle mesh (its doors as they stand shut), each thing a ball or
  * a hull round its parts (`shapeOf`). A held thing follows the hand (`hold`), and let go keeps the
  * hand's speed (`release`); then it falls, tumbles, and comes to rest, and sleeps.
- * The walker is a body too (`walk`), its column (`BODY`, down to its feet)
- * following it, pushing what it walks into.
+ * The walker walks in the same world (`walk`, Rapier's character controller), and
+ * what is under a thing is asked of it (`ground`): there is no other copy of the
+ * room's shapes.
  */
 export class Dynamics {
 	private readonly world: RAPIER.World;
 	private readonly bodies = new Map<string, RAPIER.RigidBody>();
 	private readonly R: typeof RAPIER;
 	private left = 0;
-	private walker?: RAPIER.RigidBody;
+	private walker?: Walker;
 	/** Each door and drawer: its key, body and shape, a mesh it moves as, and where
 	 *  it was last put. */
 	private readonly joints: {
@@ -70,17 +84,34 @@ export class Dynamics {
 		}
 		const { vertices, indices } = soup(fixed, (m) => m.matrixWorld);
 		this.world.createCollider(R.ColliderDesc.trimesh(vertices, indices, flags));
-		// A joint's meshes as they stand shut (their parent's frame: their own matrix
-		// is the joint's move from shut), its body moved as they move.
+		// A joint's meshes in its first mesh's frame (placed and turned, not scaled),
+		// its body placed and turned as that mesh is, now and as it moves.
 		for (const [key, parts] of byJoint) {
-			const shut = soup(parts, (m) => m.parent?.matrixWorld ?? new THREE.Matrix4());
-			const body = this.world.createRigidBody(R.RigidBodyDesc.kinematicPositionBased());
+			const frame = rigid(parts[0]);
+			const toFrame = frame.clone().invert();
+			const shut = soup(parts, (m) => toFrame.clone().multiply(m.matrixWorld));
+			const p = new THREE.Vector3();
+			const q = new THREE.Quaternion();
+			frame.decompose(p, q, new THREE.Vector3());
+			const body = this.world.createRigidBody(
+				R.RigidBodyDesc.kinematicPositionBased()
+					.setTranslation(p.x, p.y, p.z)
+					.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }),
+			);
 			const shape = this.world.createCollider(
 				R.ColliderDesc.trimesh(shut.vertices, shut.indices, flags),
 				body,
 			);
-			this.joints.push({ key, body, shape, mesh: parts[0], at: new THREE.Matrix4(), depth: 0 });
+			this.joints.push({
+				key,
+				body,
+				shape,
+				mesh: parts[0],
+				at: parts[0].matrixWorld.clone(),
+				depth: 0,
+			});
 		}
+		this.refresh();
 	}
 
 	/** Adds `key` as it stands: `object`'s place and turn, its parts' points (in its
@@ -112,6 +143,7 @@ export class Dynamics {
 			body,
 		);
 		this.bodies.set(key, body);
+		this.refresh();
 	}
 
 	/** Takes `key` in hand: from now it goes where `follow` puts it. */
@@ -134,19 +166,118 @@ export class Dynamics {
 		body.setLinvel(v, true);
 	}
 
-	/** Moves the walker's column to stand at `feet` by the next step. */
-	walk(feet: THREE.Vector3): void {
+	/** Walks the walker standing at `feet` by `dx`, `dz`:
+	 *  its column (knee to head, BODY) slides along what it meets and shoves what is
+	 *  loose, its shins kick what lies on the floor aside, and its feet stand on the
+	 *  highest surface of the room under it, up a step or down one. Where its feet
+	 *  are then. */
+	walk(feet: THREE.Vector3, dx: number, dz: number): THREE.Vector3 {
 		const R = this.R;
-		// Its column: a capsule from FEET over its feet to BODY.high.
-		const middle = feet.y + (FEET + BODY.high) / 2;
-		if (!this.walker) {
-			this.walker = this.world.createRigidBody(
-				R.RigidBodyDesc.kinematicPositionBased().setTranslation(feet.x, middle, feet.z),
+		const w = this.walkerAt(feet);
+		// Along the room and its doors; what is loose it walks into, and shoves.
+		w.controller.computeColliderMovement(
+			w.shape,
+			{ x: dx, y: 0, z: dz },
+			R.QueryFilterFlags.EXCLUDE_DYNAMIC,
+			undefined,
+			(c) => !this.isWalker(c),
+		);
+		const m = w.controller.computedMovement();
+		const [x, z] = [feet.x + m.x, feet.z + m.z];
+		const y = this.standOn(x, z, feet.y + BODY.low) ?? feet.y;
+		// Its column and shins moved there by the next step, as bodies moving push.
+		w.body.setNextKinematicTranslation({ x, y: y + (BODY.low + BODY.high) / 2, z });
+		w.shins.setNextKinematicTranslation({ x, y: y + (FEET + BODY.low) / 2, z });
+		return new THREE.Vector3(x, y, z);
+	}
+
+	/** The highest surface under [x, z] below `below`: of the room, its doors where
+	 *  they stand now, and the things in it, but `except` (a thing's key) and the
+	 *  walker. None: nothing is under it. */
+	ground(x: number, z: number, below: number, except?: string): number | undefined {
+		const R = this.R;
+		const down = new R.Ray({ x, y: below, z }, { x: 0, y: -1, z: 0 });
+		const hit = this.world.castRay(
+			down,
+			100,
+			true,
+			undefined,
+			undefined,
+			undefined,
+			except === undefined ? undefined : this.body(except),
+			(c) => !this.isWalker(c),
+		);
+		return hit ? below - hit.timeOfImpact : undefined;
+	}
+
+	/** Whether `c` is the walker's own: its column or its shins. */
+	private isWalker(c: RAPIER.Collider): boolean {
+		const parent = c.parent();
+		return !!this.walker && (parent === this.walker.body || parent === this.walker.shins);
+	}
+
+	/** Makes what was added findable by the world's queries (the walker's, `ground`):
+	 *  they see a collider only once a step has placed it, so a step of no time. */
+	private refresh(): void {
+		this.world.timestep = 0;
+		this.world.step();
+		this.world.timestep = STEP;
+	}
+
+	/** What the walker stands on at [x, z] below `below`: the highest surface under
+	 *  its footprint (its middle, and round it), as feet across a stair's edge stand
+	 *  on the higher tread; of the room and its doors where they stand, not what is
+	 *  loose (that is kicked aside, not stood on). */
+	private standOn(x: number, z: number, below: number): number | undefined {
+		const R = this.R;
+		let top: number | undefined;
+		for (let k = 0; k <= FOOTPRINT; k++) {
+			const turn = (k * 2 * Math.PI) / FOOTPRINT;
+			const r = k === FOOTPRINT ? 0 : BODY.radius * 0.7;
+			const down = new R.Ray(
+				{ x: x + r * Math.cos(turn), y: below, z: z + r * Math.sin(turn) },
+				{ x: 0, y: -1, z: 0 },
 			);
-			const half = (BODY.high - FEET) / 2 - BODY.radius;
-			this.world.createCollider(R.ColliderDesc.capsule(half, BODY.radius), this.walker);
+			const hit = this.world.castRay(
+				down,
+				100,
+				true,
+				R.QueryFilterFlags.EXCLUDE_DYNAMIC,
+				undefined,
+				undefined,
+				undefined,
+				(c) => !this.isWalker(c),
+			);
+			if (hit) top = Math.max(top ?? -Infinity, below - hit.timeOfImpact);
 		}
-		this.walker.setNextKinematicTranslation({ x: feet.x, y: middle, z: feet.z });
+		return top;
+	}
+
+	/** The walker, made the first time, its column put to stand at `feet` now (and
+	 *  moving on from there, if a walk then sets where to). */
+	private walkerAt(feet: THREE.Vector3): Walker {
+		const R = this.R;
+		const middle = { x: feet.x, y: feet.y + (BODY.low + BODY.high) / 2, z: feet.z };
+		if (!this.walker) {
+			const body = this.world.createRigidBody(
+				R.RigidBodyDesc.kinematicPositionBased().setTranslation(middle.x, middle.y, middle.z),
+			);
+			const half = (BODY.high - BODY.low) / 2 - BODY.radius;
+			const shape = this.world.createCollider(R.ColliderDesc.capsule(half, BODY.radius), body);
+			const controller = this.world.createCharacterController(GAP);
+			const shins = this.world.createRigidBody(
+				R.RigidBodyDesc.kinematicPositionBased().setTranslation(
+					feet.x,
+					feet.y + (FEET + BODY.low) / 2,
+					feet.z,
+				),
+			);
+			this.world.createCollider(R.ColliderDesc.cylinder((BODY.low - FEET) / 2, BODY.radius), shins);
+			this.walker = { body, shape, controller, shins };
+		}
+		this.walker.body.setTranslation(middle, true);
+		this.world.propagateModifiedBodyPositionsToColliders();
+		return this.walker;
 	}
 
 	/** Runs the world `seconds` on, in whole steps; true while anything moves. */
@@ -154,9 +285,12 @@ export class Dynamics {
 		// Each door and drawer to where it is drawn now, by the next step: what it
 		// meets, it pushes, and what is in it, it carries.
 		for (const j of this.joints) {
-			if (j.mesh.matrix.equals(j.at)) continue;
-			j.at.copy(j.mesh.matrix);
-			const { position: p, quaternion: q } = j.mesh;
+			j.mesh.updateMatrixWorld();
+			if (j.mesh.matrixWorld.equals(j.at)) continue;
+			j.at.copy(j.mesh.matrixWorld);
+			const p = new THREE.Vector3();
+			const q = new THREE.Quaternion();
+			rigid(j.mesh).decompose(p, q, new THREE.Vector3());
 			j.body.setNextKinematicTranslation({ x: p.x, y: p.y, z: p.z });
 			j.body.setNextKinematicRotation({ x: q.x, y: q.y, z: q.z, w: q.w });
 		}
@@ -329,6 +463,15 @@ function shapeOf(R: typeof RAPIER, points: Float32Array): RAPIER.ColliderDesc | 
 		return R.ColliderDesc.ball(radius).setTranslation(middle.x, middle.y, middle.z);
 	}
 	return R.ColliderDesc.convexHull(shape.hull);
+}
+
+/** Where `m` is in the room, placed and turned but not scaled: a body's frame. */
+function rigid(m: THREE.Object3D): THREE.Matrix4 {
+	m.updateMatrixWorld();
+	const p = new THREE.Vector3();
+	const q = new THREE.Quaternion();
+	m.matrixWorld.decompose(p, q, new THREE.Vector3());
+	return new THREE.Matrix4().compose(p, q, new THREE.Vector3(1, 1, 1));
 }
 
 /** `meshes`' triangles, each placed by `place`, as one list of vertices and indices. */
