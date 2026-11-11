@@ -136,3 +136,28 @@
 	color: var(--on-media);
 	pointer-events: none;
 }
+
+// The view's settings: a button in the top corner the frame rate leaves free, and
+// the panel it opens under it, over the scene.
+.settings-toggle {
+	position: absolute;
+	top: 0.25rem;
+	left: 0.25rem;
+	z-index: 2;
+	color: var(--on-media);
+}
+
+.settings {
+	position: absolute;
+	top: 3rem;
+	left: 0.5rem;
+	z-index: 2;
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.25rem 0.75rem;
+	border-radius: 14px;
+	background: var(--mat-sys-surface-container);
+	color: var(--mat-sys-on-surface);
+	font: var(--mat-sys-label-large);
+}

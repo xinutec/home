@@ -36,9 +36,8 @@ describe('cameraFromQuery', () => {
 		expect(cameraFromQuery('?tone=aces')).toEqual({});
 	});
 
-	it('reads a request for frame statistics, with bloom or without, and for a bake', () => {
+	it('reads a request for frame statistics, and for a bake', () => {
 		expect(cameraFromQuery('?stats')).toEqual({ stats: true });
-		expect(cameraFromQuery('?stats&bloom')).toEqual({ stats: true, bloom: true });
 		expect(cameraFromQuery('?bake=512')).toEqual({ bake: 512 });
 		expect(cameraFromQuery('?bake=0')).toEqual({});
 	});

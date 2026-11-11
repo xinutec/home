@@ -14,6 +14,7 @@ import { catchError, filter, forkJoin, map, of, tap } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatSliderModule } from '@angular/material/slider';
 import { ActivatedRoute } from '@angular/router';
 import { scaffoldTitle } from '@xinutec/ui-scaffold';
 import * as THREE from 'three';
@@ -40,7 +41,8 @@ import { nightSkyImage, overcastSky, overcastSkyImage } from './sky';
 import { ThreeView } from './three-view';
 import { Joints } from './joints';
 import { WalkControls } from './walk';
-import { imageStage } from './image-stage';
+import { type ImageStage, imageStage } from './image-stage';
+import { readGlow, writeGlow } from './glow-setting';
 
 declare global {
 	interface Window {
@@ -118,7 +120,7 @@ const TRACE_BUDGET_MS = 30;
 	selector: 'app-room',
 	templateUrl: './room.html',
 	styleUrl: './room.scss',
-	imports: [MatButtonModule, MatIconModule, MatProgressBarModule],
+	imports: [MatButtonModule, MatIconModule, MatProgressBarModule, MatSliderModule],
 })
 export class RoomPage implements AfterViewInit, OnDestroy {
 	readonly empty = signal(false);
@@ -137,6 +139,12 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 	readonly fps = signal('');
 	/** With `?stats`: what one frame costs, once measured. */
 	readonly stats = signal('');
+	/** The view's settings panel, open or not, and its glow (0 to 1: how much light
+	 *  the lens scatters round bright things), kept on the device. */
+	readonly settingsOpen = signal(false);
+	readonly glow = signal(readGlow());
+	/** What draws the walked view, once walking. */
+	private stage?: ImageStage;
 	readonly room = inject(ActivatedRoute).snapshot.paramMap.get('room') ?? '';
 
 	private http = inject(HttpClient);
@@ -320,7 +328,6 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			view.camera,
 			host.clientWidth,
 			host.clientHeight,
-			!!this.query.bloom,
 		);
 		view.beforeRender = (now) => {
 			// The light that fills the room the eye is in, balanced to its daylight's colour.
@@ -394,6 +401,8 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			this.crosshair().nativeElement,
 		);
 		view.useMover(walker);
+		stage.glow(this.glow());
+		this.stage = stage;
 		view.useStage(stage);
 		if (this.query.stats) this.measure(view);
 		this.walking.set(true);
@@ -591,6 +600,14 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 				(e: unknown) => (host.dataset['baked'] = JSON.stringify({ error: String(e) })),
 			);
 		});
+	}
+
+	/** Sets the glow from the settings' slider: drawn at once, kept for next time. */
+	setGlow(glow: number): void {
+		this.glow.set(glow);
+		writeGlow(glow);
+		this.stage?.glow(glow);
+		this.view?.requestFrame();
 	}
 
 	/** Draws frames back to back, as the walker sees them (the image stage), for 3 s

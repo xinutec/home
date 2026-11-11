@@ -37,6 +37,8 @@ export interface ImageStage {
 	 *  in, to the colour of `white` (that room's daylight, which the paints were
 	 *  fitted under, as the phone balanced it), eased as the exposure is. */
 	balance(light: [number, number, number], white: [number, number, number]): void;
+	/** How much light the lens scatters: 0 none, 1 the most (the glow setting). */
+	glow(glow: number): void;
 	settling(): boolean;
 }
 
@@ -146,10 +148,14 @@ class ReceiverGTAOPass extends GTAOPass {
 	}
 }
 
-/** The share of the light a lens and the eye scatter round it (its point spread):
- *  the image is mixed this far toward its blur, so no light is added or taken.
- *  Jimenez's (Call of Duty: Advanced Warfare, SIGGRAPH 2014). */
-const BLOOM_STRENGTH = 0.04;
+/** The most of the light a lens may scatter round it (its point spread), as the
+ *  glow setting's top: the image is mixed that far toward its blur, so no light is
+ *  added or taken. Jimenez's 4% (Call of Duty: Advanced Warfare, SIGGRAPH 2014) is
+ *  half of it; it looked a bit much, so the setting starts at a quarter
+ *  (`GLOW_DEFAULT`). */
+const BLOOM_MOST = 0.08;
+/** The glow setting a first visit starts at, of BLOOM_MOST. */
+export const GLOW_DEFAULT = 0.25;
 /** Levels the blur is built from, each a quarter the last's width (a pass each,
  *  and on a phone each pass costs for itself, however small): the widest, at 1/64
  *  of the screen, spreads a window's glow a tenth of the view. */
@@ -172,7 +178,7 @@ function swapIn(text: string, from: string, to: string, what: string): string {
  * - Bloom, as a lens scatters light: the frame quartered in width BLOOM_LEVELS
  *   times (the first weighted against single bright pixels so a lamp's glint does
  *   not flicker), each level added back up into the one above it through a tent
- *   filter, and the frame mixed BLOOM_STRENGTH toward the sum. Every pixel
+ *   filter, and the frame mixed toward the sum by the glow setting. Every pixel
  *   scatters; only the brightest (windows, lamps) scatter enough to see.
  */
 class CameraPass extends OutputPass {
@@ -229,11 +235,9 @@ class CameraPass extends OutputPass {
 		}),
 	);
 
-	/** `bloom`: whether it scatters light (`?bloom`, while its cost on a phone is
-	 *  measured: on the Mac its passes cost 4-5 ms a frame however small). */
-	constructor(bloom: boolean) {
+	constructor() {
 		super();
-		for (let i = 0; i < (bloom ? BLOOM_LEVELS : 0); i++)
+		for (let i = 0; i < BLOOM_LEVELS; i++)
 			this.levels.push(
 				new THREE.WebGLRenderTarget(1, 1, {
 					type: THREE.HalfFloatType,
@@ -244,26 +248,31 @@ class CameraPass extends OutputPass {
 			);
 		const m = this.material;
 		m.uniforms['gain'] = { value: this.gain };
-		const [first] = this.levels;
-		if (first) m.uniforms['tBloom'] = { value: first.texture };
+		m.uniforms['tBloom'] = { value: this.levels[0].texture };
+		m.uniforms['bloomShare'] = this.share;
 		m.fragmentShader = swapIn(
 			m.fragmentShader,
 			'uniform sampler2D tDiffuse;',
-			`uniform sampler2D tDiffuse;\nuniform vec3 gain;${first ? '\nuniform sampler2D tBloom;' : ''}`,
+			'uniform sampler2D tDiffuse;\nuniform vec3 gain;\nuniform sampler2D tBloom;\nuniform float bloomShare;',
 			'output',
 		);
 		m.fragmentShader = swapIn(
 			m.fragmentShader,
 			'gl_FragColor = texture2D( tDiffuse, vUv );',
-			first
-				? `gl_FragColor = texture2D( tDiffuse, vUv );
+			`gl_FragColor = texture2D( tDiffuse, vUv );
 			// The levels summed, each a whole image's light: their mean is one.
 			vec3 bloom = texture2D( tBloom, vUv ).rgb / ${BLOOM_LEVELS.toFixed(1)};
-			gl_FragColor.rgb = mix( gl_FragColor.rgb, bloom, ${BLOOM_STRENGTH} ) * gain;`
-				: `gl_FragColor = texture2D( tDiffuse, vUv );
-			gl_FragColor.rgb *= gain;`,
+			gl_FragColor.rgb = mix( gl_FragColor.rgb, bloom, bloomShare ) * gain;`,
 			'output',
 		);
+	}
+
+	/** The share of the light scattered, as the glow setting puts it. */
+	private readonly share = { value: GLOW_DEFAULT * BLOOM_MOST };
+
+	/** Scatters `glow` (0 to 1) of BLOOM_MOST from the next frame. */
+	glow(glow: number): void {
+		this.share.value = Math.min(1, Math.max(0, glow)) * BLOOM_MOST;
 	}
 
 	/** Whether the white balance still eases toward the light last seen. */
@@ -300,7 +309,8 @@ class CameraPass extends OutputPass {
 		const w = this.wanted;
 		if (w) this.gain.fromArray(this.gain.toArray().map((g, c) => easeExposure(g, w[c], dt)));
 		if (!this.settling) this.last = undefined;
-		if (this.levels.length > 0) this.bloom(renderer, readBuffer);
+		// No glow, no blur to make.
+		if (this.share.value > 0) this.bloom(renderer, readBuffer);
 		super.render(renderer, writeBuffer, readBuffer, deltaTime, maskActive);
 	}
 
@@ -359,7 +369,7 @@ const QUAD_VERTEX = `
  * meet (ground-truth ambient occlusion, GTAO, on the screen, by who may darken
  * whom: `ReceiverGTAOPass`), then white balanced, scattered as a lens does and put
  * through the tone curve and exposure the renderer is set to, in one pass
- * (`CameraPass`; bloom only if `bloom`), then its edges smoothed (SMAA).
+ * (`CameraPass`), then its edges smoothed (SMAA).
  */
 export function imageStage(
 	renderer: THREE.WebGLRenderer,
@@ -367,7 +377,6 @@ export function imageStage(
 	camera: THREE.PerspectiveCamera,
 	width: number,
 	height: number,
-	bloom: boolean,
 ): ImageStage {
 	const target = new THREE.WebGLRenderTarget(width, height, { type: THREE.HalfFloatType });
 	const composer = new EffectComposer(renderer, target);
@@ -382,7 +391,7 @@ export function imageStage(
 	ao.updatePdMaterial({ samples: DENOISE_SAMPLES });
 	ao.blendIntensity = AO_STRENGTH;
 	composer.addPass(ao);
-	const lens = new CameraPass(bloom);
+	const lens = new CameraPass();
 	composer.addPass(lens);
 	// Edges smoothed in the finished image, after the tone curve: smoothed before it
 	// (multisampling the buffer), a sliver of window or sky in an edge, its light
@@ -391,6 +400,7 @@ export function imageStage(
 	return {
 		composer,
 		balance: (light, white) => lens.see(light, white),
+		glow: (glow) => lens.glow(glow),
 		settling: () => lens.settling,
 	};
 }

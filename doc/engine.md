@@ -97,8 +97,11 @@ Each step lands deployed, the view working throughout, its cost read on the phon
    scatter and the curtain's own fault cannot be told apart. On the Mac it costs
    4-5 ms a frame (`e2e/frame-cost.ts`, interleaved runs: 5.3-7.0 ms without,
    9.2-12.7 with), the same on 8 × 8 targets as on real ones: the passes, not
-   their pixels. So it is behind `?bloom` until the phone says what it costs there
-   (`/house/living?stats` against `?stats&bloom`).
+   their pixels. On the phone it costs about 0.4 ms (Pixel 9, `?stats` at its
+   120 Hz: 116 fps without, 111 with; its browser has no GPU timer), so it is on,
+   at a strength the viewer sets: the view's settings (top left) have a Glow
+   slider, kept on the device, from none (no bloom passes at all) to 8%; it starts
+   at 2%, as 4% looked a bit much.
 4. **Shadows of what moves.** A shadow map of moving things from the light that
    dominates, blended into the bake. Done when a cushion's shadow falls where the
    path tracer puts it.

@@ -4,8 +4,7 @@
 // --trace N path-traces it to N samples a pixel instead (room.ts's ?trace), and
 // says how long that took; --tone linear drops the tone curve (?tone=linear);
 // --night is the evening (?night): traced, lit by its ceiling lights alone;
-// else baked, every lamp on; --lamps a,b turns those lamps on (?lamps); --bloom
-// scatters light as a lens does (?bloom);
+// else baked, every lamp on; --lamps a,b turns those lamps on (?lamps);
 // --exposure auto meters it as the page does when walked (no ?exposure); --tap
 // x,y;x,y clicks the canvas at those pixels first (a door or drawer opens, a lamp
 // switches, a cushion is picked up or let go), and lets the page's clock run
@@ -30,7 +29,6 @@ const { values: a } = parseArgs({
 		tone: { type: 'string' },
 		night: { type: 'boolean', default: false },
 		lamps: { type: 'string' },
-		bloom: { type: 'boolean', default: false },
 		tap: { type: 'string' },
 		after: { type: 'string', default: '1500' },
 	},
@@ -97,8 +95,7 @@ const trace =
 	(a.trace ? `&trace=${a.trace}` : '') +
 	(a.tone ? `&tone=${a.tone}` : '') +
 	(a.night ? '&night' : '') +
-	(a.lamps ? `&lamps=${a.lamps}` : '') +
-	(a.bloom ? '&bloom' : '');
+	(a.lamps ? `&lamps=${a.lamps}` : '');
 const start = Date.now();
 // The fake clock from the first script on, running with the real one: installed
 // later, it starts the page's clock again from zero, and what kept the time before
