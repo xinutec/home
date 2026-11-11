@@ -151,11 +151,11 @@ class ReceiverGTAOPass extends GTAOPass {
 /** The most of the light a lens may scatter round it (its point spread), as the
  *  glow setting's top: the image is mixed that far toward its blur, so no light is
  *  added or taken. Jimenez's 4% (Call of Duty: Advanced Warfare, SIGGRAPH 2014) is
- *  half of it; it looked a bit much, so the setting starts at a quarter
- *  (`GLOW_DEFAULT`). */
+ *  half of it. It looked a bit much, and on a phone at 120 Hz it costs frames
+ *  their time, so the setting starts at none (`GLOW_DEFAULT`). */
 const BLOOM_MOST = 0.08;
 /** The glow setting a first visit starts at, of BLOOM_MOST. */
-export const GLOW_DEFAULT = 0.25;
+export const GLOW_DEFAULT = 0;
 /** Levels the blur is built from, each a quarter the last's width (a pass each,
  *  and on a phone each pass costs for itself, however small): the widest, at 1/64
  *  of the screen, spreads a window's glow a tenth of the view. */

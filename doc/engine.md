@@ -100,8 +100,9 @@ Each step lands deployed, the view working throughout, its cost read on the phon
    their pixels. On the phone it costs about 0.4 ms (Pixel 9, `?stats` at its
    120 Hz: 116 fps without, 111 with; its browser has no GPU timer), so it is on,
    at a strength the viewer sets: the view's settings (top left) have a Glow
-   slider, kept on the device, from none (no bloom passes at all) to 8%; it starts
-   at 2%, as 4% looked a bit much.
+   slider, kept on the device, from none (no bloom passes at all) to 8%. It starts
+   at none: 4% looked a bit much, and walking on the phone felt jittery at 60-80
+   fps on its 120 Hz screen.
 4. **Shadows of what moves.** A shadow map of moving things from the light that
    dominates, blended into the bake. Done when a cushion's shadow falls where the
    path tracer puts it.
