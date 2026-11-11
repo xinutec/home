@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { FrameRate } from './frame-rate';
 import { GpuTimer } from './gpu-timer';
+import { FrameParts } from './frame-parts';
 import type { ImageStage } from './image-stage';
 
 /**
@@ -35,6 +36,12 @@ export class ThreeView {
 
 	/** Told each frame's GPU time (ms) as its timer gives it (`?stats`). */
 	onGpuTime?: (ms: number) => void;
+
+	/** Each frame's work timed by part: the loop marks its own, `beforeRender` may
+	 *  mark finer ones (`parts.mark`). */
+	readonly parts = new FrameParts();
+	/** Told each frame's work (ms) and its parts, as it ends. */
+	onFrame?: (ms: number, parts: Record<string, number>) => void;
 
 	/** What moves the camera in place of the orbit controls, once set (walking):
 	 *  its update moves it for a frame and says whether it is still moving. */
@@ -81,21 +88,28 @@ export class ThreeView {
 		this.zone.runOutsideAngular(() => {
 			this.frame = requestAnimationFrame(() => {
 				const start = performance.now();
+				this.parts.begin(start);
 				this.framePending = false;
 				let moving = false;
 				if (this.mover) moving = this.mover.update();
 				else this.controls.update();
+				this.parts.mark('walk');
 				if (this.beforeRender?.(performance.now())) moving = true;
+				this.parts.mark('before');
 				// The GPU timed over what it draws for the frame and for its metering.
 				this.gpu?.begin();
 				if (this.stage) {
 					this.stage.composer.render();
 					if (this.stage.settling()) moving = true;
 				} else this.renderer.render(this.scene, this.camera);
+				this.parts.mark('draw');
 				const more = this.afterRender?.(performance.now()) ?? false;
 				this.gpu?.end();
+				this.parts.mark('meter');
 				const end = performance.now();
 				this.frames.frame(end, end - start);
+				const work = this.parts.end(end);
+				this.onFrame?.(work.ms, work.parts);
 				for (const ms of this.gpu?.done() ?? []) {
 					this.frames.gpu(end, ms);
 					this.onGpuTime?.(ms);

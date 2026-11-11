@@ -5,14 +5,18 @@
  * Read on every request, so an edited scene needs no restart. A missing file is
  * a 404, which the page shows as "no layout yet" rather than as a failure.
  * /house/bake serves the light baked for it, when there is one; /house/images/:name
- * the pictures its materials are painted with (scenes/images/).
+ * the pictures its materials are painted with (scenes/images/). POST
+ * /house/frames takes the view's slow frames from a signed-in browser.
  */
 
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { Hono } from "hono";
+import { db } from "../db/pool.js";
 import type { AppEnv } from "../env.js";
+import { FrameBatch, SlowFrame } from "../telemetry.js";
+import { oneLine } from "./api.js";
 
 export function houseRoutes(scenePath: string): Hono<AppEnv> {
 	const app = new Hono<AppEnv>();
@@ -79,6 +83,41 @@ export function houseRoutes(scenePath: string): Hono<AppEnv> {
 			...headers,
 			"content-type": kind === "jpg" ? "image/jpeg" : "image/png",
 		});
+	});
+
+	// The view's slow frames, as a phone sends them: logged as `house-frame` lines
+	// beside the request trace, and kept (house_frame), as a deploy clears the log.
+	// Session-gated, as /telemetry: an ungated write on a public host is an open one.
+	app.post("/house/frames", async (c) => {
+		const session = c.get("session");
+		if (!session) return c.json({ error: "not authenticated" }, 401);
+		const batch = FrameBatch.safeParse(await c.req.json().catch(() => null));
+		if (!batch.success) {
+			return c.json({ error: "invalid payload", detail: batch.error.flatten() }, 400);
+		}
+		const device = oneLine(batch.data.device, 160);
+		const user = session.userId;
+		const rows = [];
+		for (const raw of batch.data.slow) {
+			const f = SlowFrame.safeParse(raw);
+			if (!f.success || !Number.isFinite(f.data.at) || !Number.isFinite(f.data.ms)) continue;
+			const parts = Object.entries(f.data.parts)
+				.filter(([, ms]) => Number.isFinite(ms))
+				.slice(0, 24)
+				.map(([name, ms]) => `${oneLine(name, 24).replace(/[ =]/g, "_")}=${ms.toFixed(1)}`)
+				.join(" ");
+			const room = oneLine(f.data.room, 64);
+			const ms = Math.min(Math.max(f.data.ms, 0), 999_999);
+			rows.push({ user_id: user, at: new Date(f.data.at), device, room, ms, parts });
+			console.log(
+				`house-frame user=${user} room=${room} ms=${ms.toFixed(1)} ${parts} at=${f.data.at}`,
+			);
+		}
+		console.log(
+			`house-frames user=${user} frames=${batch.data.frames} slow=${rows.length} device=${device}`,
+		);
+		if (rows.length > 0) await db().insertInto("house_frame").values(rows).execute();
+		return c.body(null, 204);
 	});
 
 	return app;

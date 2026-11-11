@@ -1,3 +1,4 @@
+import type { Generated } from "kysely";
 import type { Measurement } from "../wire.js";
 
 // Kysely row types. DECIMAL columns round-trip as numbers because the pool
@@ -39,10 +40,24 @@ export interface SessionsTable {
 	expires_at: Date;
 }
 
+/** One slow frame of the house view. See schema v10. */
+export interface HouseFrameTable {
+	id: Generated<number>;
+	user_id: string;
+	at: Date;
+	/** The browser's user agent, as sent: which phone. */
+	device: string;
+	room: string;
+	ms: number;
+	/** Each part of the frame and its milliseconds, as `name=ms` joined by spaces. */
+	parts: string;
+}
+
 export interface Database {
 	measurement: MeasurementTable;
 	schema_version: SchemaVersionTable;
 	claude_usage: ClaudeUsageTable;
 	claude_usage_model: ClaudeUsageModelTable;
 	sessions: SessionsTable;
+	house_frame: HouseFrameTable;
 }

@@ -35,6 +35,7 @@ import { decodeStage, encodeStage } from './stage-file';
 import type { Lit } from './room-builder';
 import { Lamps } from './lamps';
 import { MovingShadow } from './moving-shadow';
+import { SlowFrames } from './frame-parts';
 import { Dynamics, loadRapier } from './dynamics';
 import { Movables } from './movables';
 import { ProbeLight } from './probes';
@@ -354,12 +355,18 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			const light = this.movesLight;
 			const room = light?.at(view.camera.position);
 			if (light && room) stage.balance(light.light(room), light.daylight(room));
+			view.parts.mark('balance');
 			const opening = joints.update(now);
+			view.parts.mark('doors');
 			const carried = movables.update(now, view.camera);
+			view.parts.mark('physics');
 			// A door or drawer stops on what it cannot push away, as a real one does.
 			for (const key of movables.jammed()) joints.stop(key);
+			view.parts.mark('jams');
 			show();
+			view.parts.mark('light');
 			this.shadow?.render(view.renderer, view.scene);
+			view.parts.mark('shadow');
 			return opening || carried;
 		};
 		// The light all through: the lamps' glow, the windows, the lightmap, then what
@@ -426,6 +433,9 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		this.stage = stage;
 		view.useStage(stage);
 		if (this.query.stats) this.measure(view);
+		// Slow frames, to the server: what stutters on a phone, as it happens.
+		const slow = view.own(new SlowFrames(this.room));
+		view.onFrame = (ms, parts) => slow.frame(ms, parts);
 		this.walking.set(true);
 		canvas.dataset['physics'] = String(Math.round(performance.now() - physicsFrom));
 		view.requestFrame();

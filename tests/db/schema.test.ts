@@ -5,6 +5,7 @@ import type {
 	ClaudeUsageModelTable,
 	ClaudeUsageTable,
 	Database,
+	HouseFrameTable,
 	MeasurementTable,
 	SchemaVersionTable,
 	SessionsTable,
@@ -63,6 +64,15 @@ const SESSIONS: Columns<SessionsTable> = {
 	display_name: { kind: "string", nullable: false },
 	expires_at: { kind: "date", nullable: false },
 };
+const HOUSE_FRAME: Columns<HouseFrameTable> = {
+	id: { kind: "number", nullable: false },
+	user_id: { kind: "string", nullable: false },
+	at: { kind: "date", nullable: false },
+	device: { kind: "string", nullable: false },
+	room: { kind: "string", nullable: false },
+	ms: { kind: "number", nullable: false },
+	parts: { kind: "string", nullable: false },
+};
 const SCHEMA_VERSION: Columns<SchemaVersionTable> = {
 	version: { kind: "number", nullable: false },
 };
@@ -71,6 +81,7 @@ const TABLES: { [T in keyof Database]: Columns<Database[T]> } = {
 	claude_usage: CLAUDE_USAGE,
 	claude_usage_model: CLAUDE_USAGE_MODEL,
 	sessions: SESSIONS,
+	house_frame: HOUSE_FRAME,
 	schema_version: SCHEMA_VERSION,
 };
 

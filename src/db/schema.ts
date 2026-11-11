@@ -74,6 +74,18 @@ const MIGRATIONS: readonly string[] = [
 	// only a measurement may lower a figure. A writer that does not say gets 0.
 	`ALTER TABLE claude_usage
     ADD COLUMN measured TINYINT NOT NULL DEFAULT 0`,
+	// v10: the house view's slow frames, as a phone reports them (routes/house.ts):
+	// when, on what, in which room, how long, and how long each part of it took.
+	`CREATE TABLE IF NOT EXISTS house_frame (
+    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    user_id VARCHAR(255) NOT NULL,
+    at DATETIME(3) NOT NULL,
+    device VARCHAR(160) NOT NULL,
+    room VARCHAR(64) NOT NULL,
+    ms DECIMAL(7,1) NOT NULL,
+    parts VARCHAR(512) NOT NULL,
+    INDEX idx_house_frame_at (at)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
 ];
 
 export async function migrate(conn: mariadb.Connection): Promise<void> {
