@@ -289,6 +289,14 @@ export function apiRoutes(ingestToken: string): Hono<AppEnv> {
 		return c.json(rows);
 	});
 
+	// Who is signed in on this browser, if anyone: a page offers sign-in where a
+	// write needs it (the house view's frame reports).
+	// dev-lint: allow-unauthenticated-route it says only whether the asker is signed in, and as whom: what a page needs to offer sign-in
+	api.get("/me", (c) => {
+		const session = c.get("session");
+		return c.json(session ? { signedIn: true, name: session.displayName } : { signedIn: false });
+	});
+
 	// The browser's activity trace (taps, navigations), written to the pod log
 	// as the fleet's `client-event` lines; nothing is stored. Session-gated: an
 	// ungated write on a public host is an open log-write, and a public page

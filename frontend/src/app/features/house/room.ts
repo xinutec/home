@@ -145,6 +145,11 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 	/** The view's settings panel, open or not, and its glow (0 to 1: how much light
 	 *  the lens scatters round bright things), kept on the device. */
 	readonly settingsOpen = signal(false);
+	/** Who is signed in here, once asked (`/api/me`): the view's slow frames are
+	 *  sent only from a signed-in browser (`SlowFrames`). */
+	readonly who = signal<{ signedIn: boolean; name?: string } | undefined>(undefined);
+	/** Sign-in, coming back to this view as it was opened. */
+	readonly signInUrl = `/login?return_to=${encodeURIComponent(location.pathname + location.search)}`;
 	readonly glow = signal(readGlow());
 	/** What draws the walked view, once walking. */
 	private stage?: ImageStage;
@@ -640,6 +645,17 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			void run().catch(
 				(e: unknown) => (host.dataset['baked'] = JSON.stringify({ error: String(e) })),
 			);
+		});
+	}
+
+	/** Opens or closes the view's settings; opening asks who is signed in. */
+	toggleSettings(): void {
+		const open = !this.settingsOpen();
+		this.settingsOpen.set(open);
+		if (!open) return;
+		this.http.get<{ signedIn: boolean; name?: string }>('/api/me').subscribe({
+			next: (me) => this.who.set(me),
+			error: (e: unknown) => console.warn('could not ask who is signed in', e),
 		});
 	}
 

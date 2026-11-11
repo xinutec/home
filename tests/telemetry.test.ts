@@ -55,3 +55,13 @@ describe("POST /telemetry", () => {
 		expect(log).toHaveBeenCalledTimes(100);
 	});
 });
+
+describe("GET /me", () => {
+	it("says who is signed in, or that nobody is", async () => {
+		expect(await (await app(true).request("/me")).json()).toEqual({
+			signedIn: true,
+			name: "Alice",
+		});
+		expect(await (await app(false).request("/me")).json()).toEqual({ signedIn: false });
+	});
+});
