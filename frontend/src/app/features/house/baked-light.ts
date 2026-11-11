@@ -4,7 +4,7 @@ import { type LightChange, type Lightmap, checksum, pairOf } from './bake-file';
 import type { Lit } from './room-builder';
 import type { MovingShadow } from './moving-shadow';
 import type { ProbeLight } from './probes';
-import { SKY, windowRadiance } from './sky';
+import { NIGHT_SKY, SKY, windowRadiance } from './sky';
 import { GUTTER } from './unwrap';
 
 /** The merged room's fingerprint, as its lightmap stores it: every vertex's place
@@ -191,11 +191,8 @@ export function showDaylight(scene: THREE.Scene, daylight: number): void {
 		if (day instanceof THREE.Color) m.emissive.copy(day).multiplyScalar(daylight);
 	});
 	const sky = new THREE.Color(SKY[0], SKY[1], SKY[2]).multiplyScalar(daylight);
-	scene.background = sky.lerp(NIGHT, 1 - daylight);
+	scene.background = sky.lerp(new THREE.Color(...NIGHT_SKY), 1 - daylight);
 }
-
-/** The sky outside after dark, linear: a deep blue, barely lit. */
-const NIGHT = new THREE.Color(0.002, 0.003, 0.008);
 
 /** Entries a row of the changes' list texture. */
 const LIST_ROW = 2048;

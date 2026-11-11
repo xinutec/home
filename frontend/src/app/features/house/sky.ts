@@ -84,6 +84,20 @@ export function windowRadiance(t: number): number {
  *  bright overcast day. It sets how a lamp's lumens compare with the daylight. */
 export const ZENITH_NITS = 4000;
 
+/** A suburban sky after dark, cd/m²: about 19 magnitudes an arcsecond squared,
+ *  street lights' glow included (L = 10.8e4 · 10^(-0.4 m)). Thousands of times
+ *  darker than a lamp-lit wall, so a clear window at night reads black. */
+const NIGHT_SKY_NITS = 0.003;
+
+/** That sky as the clear windows show it, linear, in the trace's units: a little
+ *  blue, the white LED street lights' glow. */
+const nightNits = NIGHT_SKY_NITS / ZENITH_NITS;
+export const NIGHT_SKY: [number, number, number] = [
+	0.8 * nightNits,
+	0.95 * nightNits,
+	1.4 * nightNits,
+];
+
 /** Lumens a lamp's light is baked at, white: shown, its layer is scaled to its own
  *  lumens and tinted its colour, as light adds and each channel goes its own way. */
 export const LAMP_BAKED_LUMENS = 1000;
