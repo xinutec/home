@@ -66,8 +66,11 @@ export class MaterialLibrary {
 				side,
 			}),
 		);
-		// What the bake bounces: a picture's mean, though it is drawn untinted.
+		// What the bake bounces: a picture's mean, though it is drawn untinted (white
+		// under its picture, whether the picture is loaded here or not, so the room is
+		// built alike in the page and in Node).
 		mat.userData['albedo'] = mat.color.clone();
+		if (spec.image) mat.color.set(0xffffff);
 		if (spec.image && this.textures) {
 			const map = new THREE.TextureLoader().load(`/api/house/images/${spec.image}`, () =>
 				this.loaded(),
@@ -75,7 +78,6 @@ export class MaterialLibrary {
 			map.colorSpace = THREE.SRGBColorSpace;
 			map.anisotropy = 8;
 			mat.map = this.own(map);
-			mat.color.set(0xffffff);
 		} else if (spec.texture && this.textures) {
 			const map = this.pattern(spec.texture).clone();
 			// Box faces and the floor carry UVs in metres; a repeat of 1/scale tiles it.

@@ -157,6 +157,22 @@ export async function bakeLightmap(
 	} else renderer.readRenderTargetPixels(target, 0, 0, width, height, read);
 	const normalsRead = new Float32Array(width * height * 4);
 	renderer.readRenderTargetPixels(nrmTarget, 0, 0, width, height, normalsRead);
+	// A sum that is not a number is a path gone wrong: said where, on what surface,
+	// not left for the light it would spread into to be found far from it.
+	const broken: number[] = [];
+	for (let i = 0; i < width * height; i++)
+		if (!Number.isFinite(read[i * 4]) || !Number.isFinite(read[i * 4 + 3])) broken.push(i);
+	if (broken.length > 0) {
+		const at = points ?? new Float32Array(width * height * 4);
+		if (!points) renderer.readRenderTargetPixels(posTarget, 0, 0, width, height, at);
+		const i = broken[0];
+		const v = (a: Float32Array) => [0, 1, 2].map((c) => a[i * 4 + c].toFixed(3)).join(', ');
+		throw new Error(
+			`${lamp ?? 'the daylight'}: the sums are not numbers at ${broken.length} texels, the first ` +
+				`${i % width}, ${Math.floor(i / width)} of ${width} by ${height}: on a surface at ` +
+				`(${v(at)}) facing (${v(normalsRead)})`,
+		);
+	}
 	renderer.autoClear = autoClear;
 	renderer.setRenderTarget(before);
 	renderer.setClearColor(clear, clearAlpha);
@@ -672,7 +688,13 @@ function kernel(
 						rd = cosineAbout(hn);
 					}
 					if (inside) continue;
-					sum += direct(p.xyz, n) + bounced;
+					vec3 got = direct(p.xyz, n) + bounced;
+					// A path that went through a degenerate case (a point all but in a pane's
+					// plane, where the spherical triangle it samples has no area): no light,
+					// and no weight, as a path that never was. One in many millions (the
+					// dining radiator's top, one texel, 32 samples a texel).
+					if (any(isnan(got)) || any(isinf(got))) continue;
+					sum += got;
 					valid += 1.0;
 				}
 				outColor = vec4(sum, valid);

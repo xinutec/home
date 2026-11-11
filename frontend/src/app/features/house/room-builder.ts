@@ -61,24 +61,7 @@ export function buildInterior(
 
 	// The everyday view draws the fixed room one-sided, as a few dozen meshes, not
 	// hundreds, laid out in a lightmap; the physical reference keeps every part as it is.
-	let lit: Lit | undefined;
-	if (!physical) {
-		oneSided(view.scene, (g) => view.own(g));
-		const meshes = mergeStatic(view.scene, (g) => view.own(g));
-		lit = {
-			meshes,
-			movables: view.scene.children.filter(
-				(o): o is THREE.Mesh => o instanceof THREE.Mesh && o.userData['movable'] !== undefined,
-			),
-			centres: roomCentres(scene),
-			atlas: unwrap(
-				meshes.map((m) => m.geometry),
-				LIGHTMAP_TEXEL,
-				layout,
-				meshes.map(madeOf),
-			),
-		};
-	}
+	const lit = physical ? undefined : litRoom(view, scene, layout);
 	if (!physical) addLight(view);
 	placeCamera(view, room, camera);
 	return (
@@ -117,6 +100,35 @@ export function surfacesOf(meshes: THREE.Mesh[]): Surfaces {
 
 /** What a mesh is made of, as the bake sees it: its colour, roughness, how much
  *  light it lets through, and how many sides it shows. Changed, its charts are new. */
+/**
+ * The house built into `stage` (`buildHouse`) made the room the lightmap lights:
+ * drawn one-sided, merged into a few dozen meshes, laid out in its atlas (keeping
+ * `layout`'s charts, the last bake's). What a bake is checked against
+ * (`roomChecksum`): built so by the page, and by the check that the committed bake
+ * still fits the scene.
+ */
+export function litRoom(
+	stage: { scene: THREE.Scene; own: <T extends { dispose(): void }>(r: T) => T },
+	scene: HouseScene,
+	layout?: Layout,
+): Lit {
+	oneSided(stage.scene, (g) => stage.own(g));
+	const meshes = mergeStatic(stage.scene, (g) => stage.own(g));
+	return {
+		meshes,
+		movables: stage.scene.children.filter(
+			(o): o is THREE.Mesh => o instanceof THREE.Mesh && o.userData['movable'] !== undefined,
+		),
+		centres: roomCentres(scene),
+		atlas: unwrap(
+			meshes.map((m) => m.geometry),
+			LIGHTMAP_TEXEL,
+			layout,
+			meshes.map(madeOf),
+		),
+	};
+}
+
 function madeOf(m: THREE.Mesh): string {
 	const mat = m.material;
 	if (Array.isArray(mat)) return 'many';
