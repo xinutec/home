@@ -143,7 +143,16 @@ const FACE_NAMES = ['probePX', 'probeNX', 'probePY', 'probeNY', 'probePZ', 'prob
 export class ProbeLight {
 	private readonly rooms = new Map<
 		string,
-		{ grids: ProbeGrid[]; min: THREE.Vector3; size: THREE.Vector3; faces: THREE.Data3DTexture[] }
+		{
+			grids: ProbeGrid[];
+			min: THREE.Vector3;
+			size: THREE.Vector3;
+			faces: THREE.Data3DTexture[];
+			/** Its light as last shown, and its daylight alone, each averaged over its
+			 *  probes and their faces. */
+			mean: [number, number, number];
+			daylight: [number, number, number];
+		}
 	>();
 
 	constructor(grids: ProbeGrid[], include: (grid: ProbeGrid) => boolean) {
@@ -172,8 +181,13 @@ export class ProbeLight {
 				min: new THREE.Vector3(...g.min),
 				size: new THREE.Vector3(...g.size),
 				faces,
+				mean: [0, 0, 0],
+				daylight: [0, 0, 0],
 			});
 		}
+		for (const room of this.rooms.values())
+			for (const g of room.grids.filter((g) => g.lamp === undefined))
+				g.light.forEach((v, i) => (room.daylight[i % 3] += v / (g.light.length / 3)));
 	}
 
 	/** Each room's light from its sources at their `weight` (RGB, 0 off; the
@@ -187,6 +201,8 @@ export class ProbeLight {
 				if (w.every((c) => c === 0)) continue;
 				for (let i = 0; i < sum.length; i++) sum[i] += g.light[i] * w[i % 3];
 			}
+			room.mean = [0, 0, 0];
+			for (let i = 0; i < sum.length; i++) room.mean[i % 3] += sum[i] / (sum.length / 3);
 			room.faces.forEach((t, f) => {
 				const data = t.image.data;
 				if (!(data instanceof Uint16Array)) throw new Error('a probe texture is not half floats');
@@ -210,6 +226,21 @@ export class ProbeLight {
 			if (d < bestD) [best, bestD] = [room, d];
 		}
 		return best;
+	}
+
+	/** `room`'s light as last shown (`show`), RGB averaged over its probes and the
+	 *  ways they face: the colour of the light that fills it. */
+	light(room: string): [number, number, number] {
+		const r = this.rooms.get(room);
+		if (!r) throw new Error(`no light probes in ${room}`);
+		return r.mean;
+	}
+
+	/** `room`'s daylight alone, averaged as `light` is: zeros if none is baked. */
+	daylight(room: string): [number, number, number] {
+		const r = this.rooms.get(room);
+		if (!r) throw new Error(`no light probes in ${room}`);
+		return r.daylight;
 	}
 
 	/** Whether `room` has probes here. */

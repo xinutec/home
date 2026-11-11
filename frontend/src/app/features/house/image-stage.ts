@@ -2,8 +2,10 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { FullScreenQuad, Pass } from 'three/addons/postprocessing/Pass.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
+import { easeExposure } from './exposure';
 
 /** The layer the things that move are drawn on as well (`Movables`): the occlusion
  *  pass draws them alone by it. */
@@ -26,6 +28,30 @@ const AO_SCALE = 0.5;
 /** Samples a pixel's occlusion is found from, and its noise smoothed by. */
 const AO_SAMPLES = 16;
 const DENOISE_SAMPLES = 16;
+
+/** The image stage: what draws each frame, and whether it still settles (another
+ *  frame should follow). */
+export interface ImageStage {
+	composer: EffectComposer;
+	/** White balances `light` (linear RGB), the light filling the room the eye is
+	 *  in, to the colour of `white` (that room's daylight, which the paints were
+	 *  fitted under, as the phone balanced it), eased as the exposure is. */
+	balance(light: [number, number, number], white: [number, number, number]): void;
+	settling(): boolean;
+}
+
+/** The gains, red, green and blue, that make `light` (linear RGB) the colour of
+ *  `white`, keeping its luminance: a camera's white balance for it. No light, or no
+ *  white, nothing to balance: 1. */
+export function balanceFor(
+	light: [number, number, number],
+	white: [number, number, number],
+): [number, number, number] {
+	const y = (c: [number, number, number]) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+	if (y(light) <= 0 || y(white) <= 0) return [1, 1, 1];
+	const k = y(light) / y(white);
+	return [(k * white[0]) / light[0], (k * white[1]) / light[1], (k * white[2]) / light[2]];
+}
 
 /**
  * GTAO at AO_SCALE of the screen, where who may darken a pixel depends on what it
@@ -118,11 +144,88 @@ class ReceiverGTAOPass extends GTAOPass {
 }
 
 /**
+ * A camera's white balance, before the tone curve: the frame's light scaled so that
+ * the light filling the room comes out the colour of a white light (`see`), eased
+ * toward it as the exposure is. A warm lamp's room comes out near the daylight's
+ * colour, as a phone shows it; the light is known, so no colour in the view (a blue
+ * rug) is taken for it.
+ */
+class WhiteBalancePass extends Pass {
+	private readonly gain = new THREE.Vector3(1, 1, 1);
+	private readonly quad = new FullScreenQuad(
+		new THREE.ShaderMaterial({
+			uniforms: { tDiffuse: { value: null }, gain: { value: this.gain } },
+			vertexShader: QUAD_VERTEX,
+			fragmentShader: `
+				uniform sampler2D tDiffuse;
+				uniform vec3 gain;
+				varying vec2 vUv;
+				void main() {
+					vec4 c = texture2D(tDiffuse, vUv);
+					gl_FragColor = vec4(c.rgb * gain, c.a);
+				}`,
+		}),
+	);
+	private wanted?: [number, number, number];
+	private last?: number;
+
+	/** Whether the gains still ease toward the light last seen. */
+	get settling(): boolean {
+		const w = this.wanted;
+		return !!w && this.gain.toArray().some((g, c) => Math.abs(Math.log(w[c] / g)) > 0.01);
+	}
+
+	/** Balances `light` to the colour of `white` from now on; the first at once, as
+	 *  a camera opens balanced. */
+	see(light: [number, number, number], white: [number, number, number]): void {
+		const first = this.wanted === undefined;
+		this.wanted = balanceFor(light, white);
+		if (first) this.gain.fromArray(this.wanted);
+	}
+
+	override render(
+		renderer: THREE.WebGLRenderer,
+		writeBuffer: THREE.WebGLRenderTarget,
+		readBuffer: THREE.WebGLRenderTarget,
+	): void {
+		const now = performance.now();
+		const dt = this.last === undefined ? 0 : (now - this.last) / 1000;
+		this.last = now;
+		const w = this.wanted;
+		if (w) this.gain.fromArray(this.gain.toArray().map((g, c) => easeExposure(g, w[c], dt)));
+		if (!this.settling) this.last = undefined;
+		this.material().uniforms['tDiffuse'].value = readBuffer.texture;
+		renderer.setRenderTarget(this.renderToScreen ? null : writeBuffer);
+		this.quad.render(renderer);
+	}
+
+	override dispose(): void {
+		this.quad.dispose();
+		this.material().dispose();
+	}
+
+	private material(): THREE.ShaderMaterial {
+		const m = this.quad.material;
+		if (!(m instanceof THREE.ShaderMaterial)) throw new Error('the white balance lost its shader');
+		return m;
+	}
+}
+
+/** A full-screen quad's vertex shader: its corners as they are. */
+const QUAD_VERTEX = `
+	varying vec2 vUv;
+	void main() {
+		vUv = uv;
+		gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+	}`;
+
+/**
  * The image as a camera makes it from the room's light: the room drawn into a
  * buffer that keeps light past white (half floats), then darkened where things
  * meet (ground-truth ambient occlusion, GTAO, on the screen, by who may darken
- * whom: `ReceiverGTAOPass`), then the tone curve and exposure the renderer is set
- * to (`OutputPass`), then its edges smoothed (SMAA).
+ * whom: `ReceiverGTAOPass`), then white balanced (`WhiteBalancePass`), then the
+ * tone curve and exposure the renderer is set to (`OutputPass`), then its edges
+ * smoothed (SMAA).
  */
 export function imageStage(
 	renderer: THREE.WebGLRenderer,
@@ -130,7 +233,7 @@ export function imageStage(
 	camera: THREE.PerspectiveCamera,
 	width: number,
 	height: number,
-): EffectComposer {
+): ImageStage {
 	const target = new THREE.WebGLRenderTarget(width, height, { type: THREE.HalfFloatType });
 	const composer = new EffectComposer(renderer, target);
 	composer.addPass(new RenderPass(scene, camera));
@@ -144,12 +247,18 @@ export function imageStage(
 	ao.updatePdMaterial({ samples: DENOISE_SAMPLES });
 	ao.blendIntensity = AO_STRENGTH;
 	composer.addPass(ao);
+	const balance = new WhiteBalancePass();
+	composer.addPass(balance);
 	composer.addPass(new OutputPass());
 	// Edges smoothed in the finished image, after the tone curve: smoothed before it
 	// (multisampling the buffer), a sliver of window or sky in an edge, its light
 	// tens of times a wall's, makes the whole pixel white.
 	composer.addPass(new SMAAPass());
-	return composer;
+	return {
+		composer,
+		balance: (light, white) => balance.see(light, white),
+		settling: () => balance.settling,
+	};
 }
 
 /** `text` with `from` once replaced by `to`; three's shader changing under us throws. */

@@ -313,7 +313,19 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 				(key) => lamps?.weight(key) ?? [0, 0, 0],
 				lamps?.evening ? 0 : 1,
 			);
+		const host = this.host().nativeElement;
+		const stage = imageStage(
+			view.renderer,
+			view.scene,
+			view.camera,
+			host.clientWidth,
+			host.clientHeight,
+		);
 		view.beforeRender = (now) => {
+			// The light that fills the room the eye is in, balanced to its daylight's colour.
+			const light = this.movesLight;
+			const room = light?.at(view.camera.position);
+			if (light && room) stage.balance(light.light(room), light.daylight(room));
 			const opening = joints.update(now);
 			const carried = movables.update(now, view.camera);
 			// A door or drawer stops on what it cannot push away, as a real one does.
@@ -381,10 +393,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			this.crosshair().nativeElement,
 		);
 		view.useMover(walker);
-		const host = this.host().nativeElement;
-		view.useComposer(
-			imageStage(view.renderer, view.scene, view.camera, host.clientWidth, host.clientHeight),
-		);
+		view.useStage(stage);
 		this.walking.set(true);
 		canvas.dataset['physics'] = String(Math.round(performance.now() - physicsFrom));
 		view.requestFrame();

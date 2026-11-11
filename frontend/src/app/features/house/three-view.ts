@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { FrameRate } from './frame-rate';
 import { GpuTimer } from './gpu-timer';
-import type { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import type { ImageStage } from './image-stage';
 
 /**
  * The plumbing every 3D screen shares: a renderer in a host element, a camera,
@@ -39,7 +39,7 @@ export class ThreeView {
 
 	private frame = 0;
 	/** What draws the frame, if not the renderer straight to the canvas. */
-	private composer?: EffectComposer;
+	private stage?: ImageStage;
 	private framePending = false;
 	private readonly owned: { dispose(): void }[] = [];
 	private readonly resize: ResizeObserver;
@@ -85,8 +85,10 @@ export class ThreeView {
 				if (this.beforeRender?.(performance.now())) moving = true;
 				// The GPU timed over what it draws for the frame and for its metering.
 				this.gpu?.begin();
-				if (this.composer) this.composer.render();
-				else this.renderer.render(this.scene, this.camera);
+				if (this.stage) {
+					this.stage.composer.render();
+					if (this.stage.settling()) moving = true;
+				} else this.renderer.render(this.scene, this.camera);
 				const more = this.afterRender?.(performance.now()) ?? false;
 				this.gpu?.end();
 				const end = performance.now();
@@ -97,9 +99,10 @@ export class ThreeView {
 		});
 	}
 
-	/** Draws each frame through `composer` from now on (the image stage). */
-	useComposer(composer: EffectComposer): void {
-		this.composer = composer;
+	/** Draws each frame through `stage` from now on. */
+	useStage(stage: ImageStage): void {
+		this.stage = stage;
+		const composer = stage.composer;
 		composer.setPixelRatio(window.devicePixelRatio);
 		composer.setSize(this.host.clientWidth, this.host.clientHeight || 400);
 		this.requestFrame();
@@ -120,7 +123,9 @@ export class ThreeView {
 		// A renderer's dispose frees only its own state; geometries, materials and
 		// textures stay on the GPU until each is disposed.
 		for (const r of this.owned) r.dispose();
-		this.composer?.dispose();
+		// The composer frees its own buffers, not its passes'.
+		for (const pass of this.stage?.composer.passes ?? []) pass.dispose();
+		this.stage?.composer.dispose();
 		this.renderer.dispose();
 	}
 
@@ -130,7 +135,7 @@ export class ThreeView {
 
 	private onResize(): void {
 		this.renderer.setSize(this.host.clientWidth, this.host.clientHeight || 400);
-		this.composer?.setSize(this.host.clientWidth, this.host.clientHeight || 400);
+		this.stage?.composer.setSize(this.host.clientWidth, this.host.clientHeight || 400);
 		this.camera.aspect = this.aspect();
 		this.camera.updateProjectionMatrix();
 		this.requestFrame();

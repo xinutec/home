@@ -79,8 +79,17 @@ Each step lands deployed, the view working throughout, its cost read on the phon
    contact, replacing the contact shadows and the ellipsoid occluders; a filmic
    tone curve (AgX); anti-aliasing; bloom on the windows and lamps. Done when the
    photo comparison does not get worse and the phone's frame stays inside its
-   budget. The occlusion and anti-aliasing (SMAA, after the tone curve) are in
-   (`imageStage`); the tone curve and bloom are next.
+   budget. In (`imageStage`): the occlusion; anti-aliasing (SMAA, after the tone
+   curve); and white balance. The white balance turns the light filling the eye's
+   room (its probes' mean) to the colour of that room's daylight, which the paints
+   were fitted under. It is computed from the light, not the pixels: balancing by
+   the view's own colours (grey world) took the bay's blue rug for a cast and
+   warmed it (kf822 16.8 → 19.8). Photo comparison (mean ΔE), before → after:
+   kf1 5.8 → 5.8, kf822 16.8 → 16.9, night kf41 21.9 → 13.7.
+   Tone curves measured on the same three, and kept at ACES: AgX scores 7.1, 13.8
+   and 18.0 (worse on kf1, the view the model gets right; better only where its
+   flat curve hides the model's faults: a curtain 20× too dark, a ceiling twice as
+   bright); Neutral 5.5, 18.6 and 26.1. Bloom is next.
 4. **Shadows of what moves.** A shadow map of moving things from the light that
    dominates, blended into the bake. Done when a cushion's shadow falls where the
    path tracer puts it.
