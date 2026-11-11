@@ -2,7 +2,7 @@
 // GPU's time (median and 90th percentile) and frames a second over 3 s of
 // back-to-back drawing, draw calls, triangles and meshes, at a phone's size.
 //
-//   node e2e/frame-cost.ts [--room living] [--deployed]
+//   node e2e/frame-cost.ts [--room living] [--deployed] [--lamps a,b]
 //
 // The local build (`pnpm run build` first) fed the local scenes/house.json, as
 // compare-view renders it; --deployed measures the live site. Frames a second
@@ -16,6 +16,8 @@ const { values: args } = parseArgs({
 	options: {
 		room: { type: 'string', default: 'living' },
 		deployed: { type: 'boolean', default: false },
+		/** Lamps on, as `?lamps`: the evening's frame. */
+		lamps: { type: 'string' },
 	},
 });
 const ORIGIN = 'https://home.xinutec.org';
@@ -63,7 +65,8 @@ if (!args.deployed) {
 	);
 }
 const page = await ctx.newPage();
-await page.goto(`${ORIGIN}/house/${args.room}?stats`, { waitUntil: 'networkidle' });
+const lamps = args.lamps ? `&lamps=${args.lamps}` : '';
+await page.goto(`${ORIGIN}/house/${args.room}?stats${lamps}`, { waitUntil: 'networkidle' });
 const stats = await page
 	.locator('.canvas[data-stats]')
 	.getAttribute('data-stats', { timeout: 60_000 });

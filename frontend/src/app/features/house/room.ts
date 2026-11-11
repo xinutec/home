@@ -34,6 +34,7 @@ import { type BakeStore, type LastBake, bakeHouse, fetchLastBake, lampRegions } 
 import { decodeStage, encodeStage } from './stage-file';
 import type { Lit } from './room-builder';
 import { Lamps } from './lamps';
+import { MovingShadow } from './moving-shadow';
 import { Dynamics, loadRapier } from './dynamics';
 import { Movables } from './movables';
 import { ProbeLight } from './probes';
@@ -159,6 +160,8 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 	private liveLight?: LiveLight;
 	/** The lamps, once a lightmap with their light applies. */
 	private lamps?: Lamps;
+	/** The moving things' shadows from the lamp lighting the view most, with the lamps. */
+	private shadow?: MovingShadow;
 	/** The lamps' light in rooms they are not in, once a lightmap with it applies. */
 	private farLight?: ProbeLight;
 	/** All the light probes' light, for what moves. */
@@ -323,12 +326,21 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 					: (lamps?.weight(source) ?? [0, 0, 0]),
 			);
 		lightMoves();
-		const show = () =>
+		// The lamp the moving things' shadows are cast from: the one lighting the eye most.
+		let casting: string | undefined;
+		const show = () => {
+			const brightest = lamps?.brightestAt(view.camera.position);
+			if (brightest !== casting) {
+				casting = brightest;
+				this.shadow?.aim(casting === undefined ? undefined : lamps?.source(casting));
+			}
 			this.liveLight?.show(
 				(key) => joints.openness(key),
 				(key) => lamps?.weight(key) ?? [0, 0, 0],
 				lamps?.evening ? 0 : 1,
+				casting,
 			);
+		};
 		const host = this.host().nativeElement;
 		const stage = imageStage(
 			view.renderer,
@@ -347,6 +359,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			// A door or drawer stops on what it cannot push away, as a real one does.
 			for (const key of movables.jammed()) joints.stop(key);
 			show();
+			this.shadow?.render(view.renderer, view.scene);
 			return opening || carried;
 		};
 		// The light all through: the lamps' glow, the windows, the lightmap, then what
@@ -461,6 +474,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			this.lamps = new Lamps(scene, lit.meshes);
 			// Before the reflections copy the materials: each glowing part glows alone.
 			for (const m of this.lamps.ownMaterials()) view.own(m);
+			this.shadow = view.own(new MovingShadow());
 		}
 		if (map && texture && (map.joints.length > 0 || map.lamps.length > 0))
 			this.liveLight = view.own(
@@ -484,7 +498,13 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			this.movesLight = view.own(new ProbeLight(map.probes, () => true));
 		}
 		if (applied) {
-			const reflections = addReflections(view.renderer, view.scene, lit, this.farLight);
+			const reflections = addReflections(
+				view.renderer,
+				view.scene,
+				lit,
+				this.farLight,
+				this.shadow,
+			);
 			for (const t of reflections.owned) view.own(t);
 			this.recapture = reflections.recapture;
 		}

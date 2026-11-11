@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { HouseScene, Light } from './house.model';
 import { LAMP_BAKED_LUMENS, kelvinColour, lampRadiance } from './sky';
+import { type GlowPatch, type ShadowSource, glowPatches } from './moving-shadow';
 
 /** The colour temperature the evening is white-balanced to, as a phone camera
  *  does under lamps, and the eye: partway, so warm white still looks warm. */
@@ -25,6 +26,11 @@ export class Lamps {
 	private readonly on = new Set<string>();
 	/** Each lamp's glowing meshes, and the area they glow from. */
 	private readonly glowing = new Map<string, { meshes: THREE.Mesh[]; area: number }>();
+	/** Each lamp's glowing part, where and how large, once asked for (`source`). */
+	private readonly shapes = new Map<
+		string,
+		{ at: THREE.Vector3; radius: number; patches: GlowPatch[] }
+	>();
 
 	constructor(
 		scene: HouseScene,
@@ -79,6 +85,43 @@ export class Lamps {
 		const k = l.lumens / LAMP_BAKED_LUMENS;
 		const [r, g, b] = shownColour(l.kelvin);
 		return [r * k, g * k, b * k];
+	}
+
+	/** Where a lamp's glowing part is, and its radius across: what its shadows are
+	 *  cast from. */
+	source(key: string): ShadowSource {
+		const g = this.glowing.get(key);
+		if (!g) throw new Error(`no lamp ${key}`);
+		let shape = this.shapes.get(key);
+		if (!shape) {
+			const box = new THREE.Box3();
+			for (const m of g.meshes) box.expandByObject(m);
+			const size = box.getSize(new THREE.Vector3());
+			shape = {
+				at: box.getCenter(new THREE.Vector3()),
+				radius: Math.max(size.x, size.z) / 2,
+				patches: glowPatches(g.meshes),
+			};
+			this.shapes.set(key, shape);
+		}
+		// As baked (white, LAMP_BAKED_LUMENS from its glowing area), at its weight now.
+		const le = lampRadiance(LAMP_BAKED_LUMENS, g.area);
+		const [r, gr, b] = this.weight(key);
+		return { ...shape, radiance: [r * le, gr * le, b * le] };
+	}
+
+	/** The lamp lighting `eye` most, of those on: its brightness over its distance
+	 *  squared. None while none is on. */
+	brightestAt(eye: THREE.Vector3): string | undefined {
+		let best: string | undefined;
+		let most = 0;
+		for (const key of this.on) {
+			const [r, g, b] = this.weight(key);
+			const d2 = Math.max(this.source(key).at.distanceToSquared(eye), 0.01);
+			const at = (0.2126 * r + 0.7152 * g + 0.0722 * b) / d2;
+			if (at > most) [best, most] = [key, at];
+		}
+		return best;
 	}
 
 	/** Gives each glowing mesh a material of its own, so it can glow alone; call

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 
 import { type LightChange, type Lightmap, checksum, pairOf } from './bake-file';
 import type { Lit } from './room-builder';
+import type { MovingShadow } from './moving-shadow';
 import type { ProbeLight } from './probes';
 import { SKY, windowRadiance } from './sky';
 import { GUTTER } from './unwrap';
@@ -226,6 +227,8 @@ export class LiveLight {
 	 *  is times the lamp's weight. */
 	private readonly pairs: { joint: number; lamp: number }[];
 	private readonly pairWeights: { value: THREE.Vector3[] };
+	/** The lamp whose shadows the moving things cast, by index, or -1. */
+	private readonly casting = { value: -1 };
 	private readonly daylight: { value: number };
 	private readonly owned: { dispose(): void }[] = [];
 	/** The points, and how many of them, from the first, some joint changes. */
@@ -265,7 +268,8 @@ export class LiveLight {
 				out vec4 outColor;
 				void main() {
 					vec4 shut = texelFetch(base, ivec2(gl_FragCoord.xy), 0);
-					outColor = vec4(shut.rgb * daylight, shut.a);
+					// No lamp's light here: none of it is the casting lamp's (MovingShadow).
+					outColor = vec4(shut.rgb * daylight, 0.0);
 				}
 			`,
 		});
@@ -344,6 +348,8 @@ export class LiveLight {
 				lamps: this.lamps,
 				pairs: this.pairWeights,
 				pairJoint: { value: this.pairs.map((p) => p.joint) },
+				pairLamp: { value: this.pairs.map((p) => p.lamp) },
+				casting: this.casting,
 				daylight: this.daylight,
 				list: { value: list },
 			},
@@ -353,6 +359,8 @@ export class LiveLight {
 				uniform vec3 lamps[LAMP_SLOTS];
 				uniform vec3 pairs[PAIR_SLOTS];
 				uniform float pairJoint[PAIR_SLOTS];
+				uniform float pairLamp[PAIR_SLOTS];
+				uniform int casting;
 				uniform float daylight;
 				uniform highp sampler2D list;
 				in vec3 shut;
@@ -360,15 +368,20 @@ export class LiveLight {
 				in float count;
 				in float owner;
 				out vec3 vLight;
+				out float vCast;
 				void main() {
 					vec3 day = shut;
 					vec3 lamp = vec3(0.0);
+					// The casting lamp's part of it.
+					vec3 castLight = vec3(0.0);
 					int at = int(first);
 					for (int i = 0; i < int(count); i++, at++) {
 						vec4 e = texelFetch(list, ivec2(at % LIST_ROW, at / LIST_ROW), 0);
 						int k = int(e.x);
 						if (k >= JOINTS + PAIRS) {
-							lamp += lamps[k - JOINTS - PAIRS] * e.yzw;
+							vec3 its = lamps[k - JOINTS - PAIRS] * e.yzw;
+							lamp += its;
+							if (k - JOINTS - PAIRS == casting) castLight += its;
 							continue;
 						}
 						// Its joint: another joint's change, on a part this texel's joint moves,
@@ -376,18 +389,26 @@ export class LiveLight {
 						int j = k < JOINTS ? k : int(pairJoint[k - JOINTS]);
 						float shut = owner >= 0.0 && int(owner) != j ? 1.0 - open[int(owner)] : 1.0;
 						if (k < JOINTS) day += shut * open[k] * e.yzw;
-						else lamp += shut * pairs[k - JOINTS] * e.yzw;
+						else {
+							vec3 its = shut * pairs[k - JOINTS] * e.yzw;
+							lamp += its;
+							if (int(pairLamp[k - JOINTS]) == casting) castLight += its;
+						}
 					}
 					vec3 light = daylight * max(day, vec3(0.0)) + max(lamp, vec3(0.0));
 					vLight = max(light, vec3(0.0));
+					const vec3 luma = vec3(0.2126, 0.7152, 0.0722);
+					vCast = clamp(dot(max(castLight, vec3(0.0)), luma) / max(dot(vLight, luma), 1e-6), 0.0, 1.0);
 					gl_PointSize = 1.0;
 					gl_Position = vec4(position.xy, 0.0, 1.0);
 				}
 			`,
 			fragmentShader: /* glsl */ `
 				in vec3 vLight;
+				in float vCast;
 				out vec4 outColor;
-				void main() { outColor = vec4(vLight, 1.0); }
+				// Its alpha: the share of its light the casting lamp gave (MovingShadow).
+				void main() { outColor = vec4(vLight, vCast); }
 			`,
 		});
 		const mesh = new THREE.Points(g, material);
@@ -408,23 +429,29 @@ export class LiveLight {
 	}
 
 	/** Shows each joint `openness(key)` of the way open (0 shut, 1 as baked), each
-	 *  lamp at its `weight(key)` (RGB, 0 off) and the daylight (1 day, 0 night);
-	 *  true if the light changed. */
+	 *  lamp at its `weight(key)` (RGB, 0 off) and the daylight (1 day, 0 night),
+	 *  with the share of `casting`'s light (the lamp the moving things' shadows are
+	 *  cast from) in the alpha; true if the light changed. */
 	show(
 		openness: (key: string) => number,
 		weight: (key: string) => [number, number, number],
 		daylight: number,
+		casting?: string,
 	): boolean {
 		const open = this.keys.map((k) => openness(k));
 		const lamps = this.lampKeys.map((k) => new THREE.Vector3(...weight(k)));
+		const cast = casting === undefined ? -1 : this.lampKeys.indexOf(casting);
 		const dark = daylight !== this.daylight.value;
+		const recast = cast !== this.casting.value;
+		this.casting.value = cast;
 		if (
 			!dark &&
+			!recast &&
 			open.every((v, k) => v === this.open.value[k]) &&
 			lamps.every((v, k) => v.equals(this.lamps.value[k]))
 		)
 			return false;
-		const lit = dark || lamps.some((v, k) => !v.equals(this.lamps.value[k]));
+		const lit = dark || recast || lamps.some((v, k) => !v.equals(this.lamps.value[k]));
 		this.open.value = open;
 		this.lamps.value = lamps;
 		this.pairWeights.value = this.pairs.map((p) =>
@@ -478,6 +505,8 @@ export function addReflections(
 	lit: Lit,
 	/** The lamps' light in rooms they are not in: a room's copies read it too. */
 	far?: ProbeLight,
+	/** The moving things' shadows, which take the casting lamp's light off. */
+	shadow?: MovingShadow,
 ): { owned: { dispose(): void }[]; recapture: () => void } {
 	const owned: { dispose(): void }[] = [];
 	const byRoom = new Map<string, THREE.Mesh[]>();
@@ -543,9 +572,11 @@ export function addReflections(
 					specularOnly,
 				);
 				if (far && lampProbes) far.patch(shader, lampProbes, 'lightmap');
+				// After the far light: the shadow takes off the lightmap's light alone.
+				shadow?.patch(shader);
 			};
 			// A room with far light draws with a program of its own.
-			own.customProgramCacheKey = () => (lampProbes ? 'far' : 'near');
+			own.customProgramCacheKey = () => (lampProbes ? 'far' : 'near') + (shadow ? ' shaded' : '');
 			own.needsUpdate = true;
 		}
 	return {

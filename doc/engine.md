@@ -106,6 +106,18 @@ Each step lands deployed, the view working throughout, its cost read on the phon
 4. **Shadows of what moves.** A shadow map of moving things from the light that
    dominates, blended into the bake. Done when a cushion's shadow falls where the
    path tracer puts it.
+   In for the lamps (`MovingShadow`): the lamp lighting the eye most casts; a
+   depth map of the moving things alone (`MOVES_LAYER`), from straight below it;
+   soft by the lamp's size (PCSS). A room surface in it loses the lamp's direct
+   light there, worked out from its glowing part (`glowPatches`, within 6% at the
+   floor's angles), never more than the lamp gave it (the lightmap's alpha, that
+   lamp's share, written by `LiveLight`); the light it sends round the room stays.
+   Against the path tracer at night, the darkest of each shadow over the open
+   floor's light: cushion 0.20 (traced 0.24), jar 0.06 (0.09); taking all the
+   lamp's baked light, as first built, gave 0.09 and 0.04. Night frame on the Mac
+   unchanged within noise (`frame-cost --lamps`), 97 more draw calls. By day it
+   casts nothing: the bay is a source 2 m wide, its shade of a thing the contact
+   shading already gives.
 5. **Joints.** Doors and drawers as bodies on motorised joints; the jam check
    goes. Done when a drawer shut on a cushion stalls on it, and one pulled drags
    what is in it, with nothing in `joints.ts` that knows about either.
