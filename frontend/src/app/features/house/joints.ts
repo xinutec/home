@@ -39,6 +39,10 @@ function ease(t: number): number {
 export class Joints {
 	private readonly state: JointState = {};
 	private readonly runs = new Map<string, Run>();
+	/** Where each running joint stood the frame before: clear of what jams it next. */
+	private readonly before = new Map<string, number>();
+	/** Where a joint stopped by a jam was going, so a tap turns it back. */
+	private readonly stoppedShort = new Map<string, number>();
 	private readonly joints = new Map<string, { piece: Furniture; part: string; joint: Joint }>();
 	private readonly moving = new Map<string, THREE.Mesh[]>();
 
@@ -134,7 +138,9 @@ export class Joints {
 		const [closed, open] = [range[0], this.openAt(key)];
 		const run = this.runs.get(key);
 		const from = this.value(key);
-		const opening = run ? run.to !== open : from === closed;
+		const short = this.stoppedShort.get(key);
+		this.stoppedShort.delete(key);
+		const opening = run ? run.to !== open : short !== undefined ? short !== open : from === closed;
 		const to = opening ? open : closed;
 		const ms = (TRAVEL_MS * Math.abs(to - from)) / Math.abs(range[1] - range[0]);
 		this.runs.set(key, { from, to, start: now, ms });
@@ -143,11 +149,24 @@ export class Joints {
 	/** Moves every joint on its way to where it is at `now`; true while any still moves. */
 	update(now: number): boolean {
 		for (const [key, run] of this.runs) {
+			this.before.set(key, this.value(key));
 			const t = run.ms > 0 ? Math.min(1, (now - run.start) / run.ms) : 1;
 			this.set(key, t >= 1 ? run.to : run.from + (run.to - run.from) * ease(Math.max(0, t)));
 			if (t >= 1) this.runs.delete(key);
 		}
 		return this.runs.size > 0;
+	}
+
+	/** Stops a running joint that has met something it cannot push away (a cushion
+	 *  caught between a drawer and its cupboard): back where it stood the frame
+	 *  before, and there it stays, as a drawer stops on what is in its way. */
+	stop(key: string): void {
+		const run = this.runs.get(key);
+		if (!run) return;
+		this.runs.delete(key);
+		this.stoppedShort.set(key, run.to);
+		const back = this.before.get(key);
+		if (back !== undefined) this.set(key, back);
 	}
 
 	private joint(key: string): { piece: Furniture; part: string; joint: Joint } {

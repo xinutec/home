@@ -200,6 +200,12 @@ export class Movables {
 		return moving;
 	}
 
+	/** The doors and drawers pressing into a thing they cannot push away
+	 *  (`Dynamics.jammed`): none before the physics starts. */
+	jammed(): string[] {
+		return this.dynamics?.jammed() ?? [];
+	}
+
 	/** The highest surface of the fixed room under a thing's footprint, below its
 	 *  foot: where its shadow falls. */
 	private under(t: Movable): number | undefined {

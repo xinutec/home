@@ -14,6 +14,8 @@ const FRICTION = 0.8;
 const BOUNCE = 0.1;
 /** How fast a spin dies away (1/s): a ball on carpet rolls a little, then stops. */
 const SPIN_DAMPING = 0.8;
+/** Metres deep a door or drawer presses into a thing before it is jammed. */
+const JAM = 0.005;
 /** Metres the physics' tolerances scale by: the size of most things in it. At its
  *  default, a metre, a 25 cm cabinet rocked on its foot and walked off a shelf. */
 const LENGTH_UNIT = 0.1;
@@ -39,8 +41,17 @@ export class Dynamics {
 	private readonly R: typeof RAPIER;
 	private left = 0;
 	private walker?: RAPIER.RigidBody;
-	/** Each door and drawer: its body, a mesh it moves as, and where it was last put. */
-	private readonly joints: { body: RAPIER.RigidBody; mesh: THREE.Mesh; at: THREE.Matrix4 }[] = [];
+	/** Each door and drawer: its key, body and shape, a mesh it moves as, and where
+	 *  it was last put. */
+	private readonly joints: {
+		key: string;
+		body: RAPIER.RigidBody;
+		shape: RAPIER.Collider;
+		mesh: THREE.Mesh;
+		at: THREE.Matrix4;
+		/** How deep it was in a thing when last asked. */
+		depth: number;
+	}[] = [];
 
 	/** The room as drawn (`meshes`): what moves on a joint (`userData.moves`) a body
 	 *  of its own, the rest fixed. */
@@ -61,11 +72,14 @@ export class Dynamics {
 		this.world.createCollider(R.ColliderDesc.trimesh(vertices, indices, flags));
 		// A joint's meshes as they stand shut (their parent's frame: their own matrix
 		// is the joint's move from shut), its body moved as they move.
-		for (const parts of byJoint.values()) {
+		for (const [key, parts] of byJoint) {
 			const shut = soup(parts, (m) => m.parent?.matrixWorld ?? new THREE.Matrix4());
 			const body = this.world.createRigidBody(R.RigidBodyDesc.kinematicPositionBased());
-			this.world.createCollider(R.ColliderDesc.trimesh(shut.vertices, shut.indices, flags), body);
-			this.joints.push({ body, mesh: parts[0], at: new THREE.Matrix4() });
+			const shape = this.world.createCollider(
+				R.ColliderDesc.trimesh(shut.vertices, shut.indices, flags),
+				body,
+			);
+			this.joints.push({ key, body, shape, mesh: parts[0], at: new THREE.Matrix4(), depth: 0 });
 		}
 	}
 
@@ -152,6 +166,27 @@ export class Dynamics {
 			this.left -= STEP;
 		}
 		return [...this.bodies.values()].some((b) => !b.isSleeping());
+	}
+
+	/** The doors and drawers pressing into a thing they cannot push away (caught
+	 *  between them and the room): deeper in it than JAM, and deeper than when last
+	 *  asked. One pushed freely moves on within a step, and is never so deep; one
+	 *  moving away, though still in it, is not pressing. */
+	jammed(): string[] {
+		return this.joints
+			.filter((j) => {
+				let depth = 0;
+				this.world.contactPairsWith(j.shape, (other) => {
+					if (!other.parent()?.isDynamic()) return;
+					this.world.contactPair(j.shape, other, (m) => {
+						for (let i = 0; i < m.numContacts(); i++) depth = Math.max(depth, -m.contactDist(i));
+					});
+				});
+				const pressing = depth > JAM && depth > j.depth;
+				j.depth = depth;
+				return pressing;
+			})
+			.map((j) => j.key);
 	}
 
 	/** Where `key` is now: its place and turn into `object`. */

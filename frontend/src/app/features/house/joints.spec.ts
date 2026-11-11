@@ -44,6 +44,25 @@ describe('joints', () => {
 		expect(bounds(meshes, `${SIDEBOARD}/drawer-left`).containsPoint(knob)).toBe(true);
 	});
 
+	it('stops a drawer jammed while shutting where it last stood clear, and a tap then opens it', () => {
+		const { joints } = drawn();
+		const key = `${SIDEBOARD}/drawer-right`;
+		joints.set(key, joints.openAt(key));
+		joints.toggle(key, 0);
+		// Shutting, a frame at a time; jammed after the frame at 300 ms.
+		for (let t = 16; t <= 300; t += 16) joints.update(t);
+		const clear = joints.value(key);
+		joints.update(316);
+		joints.stop(key);
+		expect(joints.value(key)).toBe(clear);
+		expect(joints.update(1000)).toBe(false);
+		expect(joints.value(key)).toBe(clear);
+		// Tapped again: it opens, away from what jammed it.
+		joints.toggle(key, 2000);
+		joints.update(5000);
+		expect(joints.value(key)).toBe(joints.openAt(key));
+	});
+
 	it('slides a drawer out its whole travel, and back', () => {
 		const { meshes, joints } = drawn();
 		const key = `${SIDEBOARD}/drawer-right`;

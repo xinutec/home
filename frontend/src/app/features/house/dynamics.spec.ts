@@ -162,3 +162,46 @@ describe('Dynamics, with a drawer', () => {
 		expect(box.position.y).toBeGreaterThan(0.29);
 	});
 });
+
+describe('Dynamics, a joint jammed', () => {
+	/** A door 40 cm wide and tall, on its joint, swept along -x from x 0.5 to `to`
+	 *  over a second, a 10 cm box on the floor before it at x 0.3, and, if `wall`, a
+	 *  wall at x 0.1 behind the box. Whether the door was jammed on the way. */
+	async function sweep(wall: boolean, to: number): Promise<boolean> {
+		const floor = new THREE.Mesh(new THREE.BoxGeometry(10, 0.1, 10));
+		floor.position.y = -0.05;
+		const fixed = [floor];
+		if (wall) {
+			const w = new THREE.Mesh(new THREE.BoxGeometry(0.02, 1, 1));
+			w.position.x = 0.09;
+			fixed.push(w);
+		}
+		for (const m of fixed) m.updateMatrixWorld();
+		const door = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.4, 0.4).translate(0.5, 0.2, 0));
+		door.userData['moves'] = 'cupboard/door';
+		door.updateMatrixWorld();
+		const dynamics = new Dynamics(await loadRapier(), [...fixed, door]);
+		const corners: number[] = [];
+		for (const x of [-0.05, 0.05])
+			for (const y of [0, 0.1]) for (const z of [-0.05, 0.05]) corners.push(x, y, z);
+		const box = new THREE.Object3D();
+		box.position.set(0.3, 0, 0);
+		dynamics.add('box', box, Float32Array.from(corners), { kg: 0.3 });
+		let jammed = false;
+		for (let i = 1; i <= 60; i++) {
+			door.position.x = (to - 0.5) * (i / 60);
+			door.updateMatrixWorld();
+			dynamics.step(1 / 60);
+			if (dynamics.jammed().includes('cupboard/door')) jammed = true;
+		}
+		return jammed;
+	}
+
+	it('is not jammed sweeping a thing across the floor', async () => {
+		expect(await sweep(false, 0.0)).toBe(false);
+	});
+
+	it('is jammed pressing a thing into a wall', async () => {
+		expect(await sweep(true, 0.12)).toBe(true);
+	});
+});

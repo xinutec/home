@@ -6,6 +6,7 @@ import { Dynamics, loadRapier } from './dynamics';
 import type { HouseScene } from './house.model';
 import { MaterialLibrary } from './materials';
 import { mergeStatic } from './merge';
+import { Joints } from './joints';
 import { Movables } from './movables';
 import { buildHouse } from './room-builder';
 import { oneSided } from './sides';
@@ -207,5 +208,51 @@ describe('Movables', () => {
 			if (m.userData['movable'] === 'living-jbl-speaker') speaker.expandByObject(m);
 		expect(speaker.min.y).toBeGreaterThan(-0.005);
 		expect(speaker.min.y).toBeLessThan(0.02);
+	});
+
+	it('in the real house, a drawer shut on a box too tall for it stops on it, and the box stays', async () => {
+		const scene = withModels(json as unknown as HouseScene);
+		const stage = { scene: new THREE.Scene(), own: <T>(r: T) => r };
+		buildHouse(stage, scene, new MaterialLibrary(stage.own, false), false, false);
+		oneSided(stage.scene, () => undefined);
+		const fixed = mergeStatic(stage.scene, () => undefined);
+		const joints = new Joints(scene, fixed);
+		const key = 'living-sideboard/drawer-left';
+		joints.set(key, joints.openAt(key));
+		// A box 20 cm tall standing in it: the drawer is 17 cm deep, so it stands out.
+		const cushion = new THREE.Mesh(
+			new THREE.BoxGeometry(0.2, 0.2, 0.2),
+			new THREE.MeshStandardMaterial(),
+		);
+		cushion.position.set(-0.92, 0.61 + 0.1, 0.2);
+		cushion.userData['movable'] = 'cushion';
+		stage.scene.add(cushion);
+		const movables = new Movables(
+			drawsNothing(),
+			stage.scene,
+			[cushion],
+			() => undefined,
+			[],
+			undefined,
+			(r) => r,
+			async () => new Dynamics(await loadRapier(), fixed),
+			() => ({ kg: 0.3 }),
+		);
+		const camera = eye(-0.9);
+		await movables.start();
+		expect(settle(movables, camera)).toBeLessThan(600);
+		const lying = cushion.getWorldPosition(new THREE.Vector3());
+		// Tapped shut, the room view's frame loop running.
+		joints.toggle(key, 10_000);
+		for (let t = 10_000; t < 13_000; t += 16) {
+			joints.update(t);
+			movables.update(t, camera);
+			for (const k of movables.jammed()) joints.stop(k);
+		}
+		// Stopped short, the cushion still in it, not thrown out nor into the cupboard.
+		expect(joints.openness(key)).toBeGreaterThan(0.1);
+		const now = cushion.getWorldPosition(new THREE.Vector3());
+		expect(now.distanceTo(lying)).toBeLessThan(0.2);
+		expect(now.y).toBeGreaterThan(0.6);
 	});
 });

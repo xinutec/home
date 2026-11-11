@@ -276,6 +276,8 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		view.beforeRender = (now) => {
 			const opening = joints.update(now);
 			const carried = movables.update(now, view.camera, walker.standing);
+			// A door or drawer stops on what it cannot push away, as a real one does.
+			for (const key of movables.jammed()) joints.stop(key);
 			show();
 			return opening || carried;
 		};
