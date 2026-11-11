@@ -430,6 +430,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		);
 		view.useMover(walker);
 		stage.glow(this.glow());
+		if (this.auto) this.auto.frame = () => stage.frame();
 		this.stage = stage;
 		view.useStage(stage);
 		if (this.query.stats) this.measure(view);
@@ -521,7 +522,9 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		view.renderer.toneMappingExposure = this.query.exposure ?? (applied ? BAKED_EXPOSURE : 1);
 		if (applied && this.query.exposure === undefined && AutoExposure.supported(view.renderer)) {
 			const auto = view.own(
-				new AutoExposure(view.renderer, view.scene, view.camera, AUTO_KEY, BAKED_EXPOSURE),
+				new AutoExposure(view.renderer, view.camera, AUTO_KEY, BAKED_EXPOSURE, () =>
+					view.requestFrame(),
+				),
 			);
 			this.auto = auto;
 			const canvas = view.renderer.domElement;

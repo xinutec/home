@@ -39,6 +39,9 @@ export interface ImageStage {
 	balance(light: [number, number, number], white: [number, number, number]): void;
 	/** How much light the lens scatters: 0 none, 1 the most (the glow setting). */
 	glow(glow: number): void;
+	/** The last frame's light before the tone curve, once one is drawn: what the
+	 *  exposure meters (`AutoExposure.frame`). */
+	frame(): THREE.Texture | undefined;
 	settling(): boolean;
 }
 
@@ -183,6 +186,9 @@ function swapIn(text: string, from: string, to: string, what: string): string {
  */
 class CameraPass extends OutputPass {
 	private readonly gain = new THREE.Vector3(1, 1, 1);
+	/** The frame it last took, its light before the tone curve; the passes after
+	 *  write the other buffer, so it holds until the next frame. */
+	lastFrame?: THREE.Texture;
 	private wanted?: [number, number, number];
 	private last?: number;
 	private readonly levels: THREE.WebGLRenderTarget[] = [];
@@ -311,6 +317,7 @@ class CameraPass extends OutputPass {
 		if (!this.settling) this.last = undefined;
 		// No glow, no blur to make.
 		if (this.share.value > 0) this.bloom(renderer, readBuffer);
+		this.lastFrame = readBuffer.texture;
 		super.render(renderer, writeBuffer, readBuffer, deltaTime, maskActive);
 	}
 
@@ -402,5 +409,6 @@ export function imageStage(
 		balance: (light, white) => lens.see(light, white),
 		glow: (glow) => lens.glow(glow),
 		settling: () => lens.settling,
+		frame: () => lens.lastFrame,
 	};
 }
