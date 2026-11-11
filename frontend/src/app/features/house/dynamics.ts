@@ -39,16 +39,34 @@ export class Dynamics {
 	private readonly R: typeof RAPIER;
 	private left = 0;
 	private walker?: RAPIER.RigidBody;
+	/** Each door and drawer: its body, a mesh it moves as, and where it was last put. */
+	private readonly joints: { body: RAPIER.RigidBody; mesh: THREE.Mesh; at: THREE.Matrix4 }[] = [];
 
-	constructor(R: typeof RAPIER, fixed: THREE.Mesh[]) {
+	/** The room as drawn (`meshes`): what moves on a joint (`userData.moves`) a body
+	 *  of its own, the rest fixed. */
+	constructor(R: typeof RAPIER, meshes: THREE.Mesh[]) {
 		this.R = R;
 		this.world = new R.World({ x: 0, y: -9.81, z: 0 });
 		this.world.timestep = STEP;
 		this.world.lengthUnit = LENGTH_UNIT;
-		const { vertices, indices } = soup(fixed);
-		this.world.createCollider(
-			R.ColliderDesc.trimesh(vertices, indices, R.TriMeshFlags.FIX_INTERNAL_EDGES),
-		);
+		const flags = R.TriMeshFlags.FIX_INTERNAL_EDGES;
+		const byJoint = new Map<string, THREE.Mesh[]>();
+		const fixed: THREE.Mesh[] = [];
+		for (const m of meshes) {
+			const key: unknown = m.userData['moves'];
+			if (typeof key === 'string') byJoint.set(key, [...(byJoint.get(key) ?? []), m]);
+			else fixed.push(m);
+		}
+		const { vertices, indices } = soup(fixed, (m) => m.matrixWorld);
+		this.world.createCollider(R.ColliderDesc.trimesh(vertices, indices, flags));
+		// A joint's meshes as they stand shut (their parent's frame: their own matrix
+		// is the joint's move from shut), its body moved as they move.
+		for (const parts of byJoint.values()) {
+			const shut = soup(parts, (m) => m.parent?.matrixWorld ?? new THREE.Matrix4());
+			const body = this.world.createRigidBody(R.RigidBodyDesc.kinematicPositionBased());
+			this.world.createCollider(R.ColliderDesc.trimesh(shut.vertices, shut.indices, flags), body);
+			this.joints.push({ body, mesh: parts[0], at: new THREE.Matrix4() });
+		}
 	}
 
 	/** Adds `key` as it stands: `object`'s place and turn, its parts' points (in its
@@ -119,6 +137,15 @@ export class Dynamics {
 
 	/** Runs the world `seconds` on, in whole steps; true while anything moves. */
 	step(seconds: number): boolean {
+		// Each door and drawer to where it is drawn now, by the next step: what it
+		// meets, it pushes, and what is in it, it carries.
+		for (const j of this.joints) {
+			if (j.mesh.matrix.equals(j.at)) continue;
+			j.at.copy(j.mesh.matrix);
+			const { position: p, quaternion: q } = j.mesh;
+			j.body.setNextKinematicTranslation({ x: p.x, y: p.y, z: p.z });
+			j.body.setNextKinematicRotation({ x: q.x, y: q.y, z: q.z, w: q.w });
+		}
 		this.left = Math.min(this.left + seconds, STEP * MAX_STEPS);
 		while (this.left >= STEP) {
 			this.world.step();
@@ -269,17 +296,21 @@ function shapeOf(R: typeof RAPIER, points: Float32Array): RAPIER.ColliderDesc | 
 	return R.ColliderDesc.convexHull(shape.hull);
 }
 
-/** `meshes`' triangles where they stand, as one list of vertices and indices. */
-function soup(meshes: THREE.Mesh[]): { vertices: Float32Array; indices: Uint32Array } {
+/** `meshes`' triangles, each placed by `place`, as one list of vertices and indices. */
+function soup(
+	meshes: THREE.Mesh[],
+	place: (m: THREE.Mesh) => THREE.Matrix4,
+): { vertices: Float32Array; indices: Uint32Array } {
 	const vertices: number[] = [];
 	const indices: number[] = [];
 	const at = new THREE.Vector3();
 	for (const m of meshes) {
 		m.updateMatrixWorld();
+		const matrix = place(m);
 		const pos = m.geometry.getAttribute('position');
 		const base = vertices.length / 3;
 		for (let i = 0; i < pos.count; i++) {
-			at.fromBufferAttribute(pos, i).applyMatrix4(m.matrixWorld);
+			at.fromBufferAttribute(pos, i).applyMatrix4(matrix);
 			vertices.push(at.x, at.y, at.z);
 		}
 		const index = m.geometry.index;

@@ -118,3 +118,47 @@ describe('Dynamics', () => {
 		expect(whaleLow).toBeGreaterThan(cushionTop - 0.005);
 	});
 });
+
+describe('Dynamics, with a drawer', () => {
+	/** A floor, and a drawer 30 cm up: a 40 cm square bottom with a front at +x, on
+	 *  its joint (`userData.moves`), shut where it is drawn. A box 10 cm square sits
+	 *  in it. */
+	async function drawer() {
+		const floor = new THREE.Mesh(new THREE.BoxGeometry(10, 0.1, 10));
+		floor.position.y = -0.05;
+		floor.updateMatrixWorld();
+		const bottom = new THREE.BoxGeometry(0.4, 0.02, 0.4).translate(0, 0.29, 0);
+		const front = new THREE.BoxGeometry(0.02, 0.2, 0.4).translate(0.21, 0.38, 0);
+		const parts = [bottom, front].map((g) => {
+			const m = new THREE.Mesh(g);
+			m.userData['moves'] = 'chest/drawer';
+			m.updateMatrixWorld();
+			return m;
+		});
+		const dynamics = new Dynamics(await loadRapier(), [floor, ...parts]);
+		const box = new THREE.Object3D();
+		box.position.set(0, 0.3, 0);
+		const half = 0.05;
+		const corners: number[] = [];
+		for (const x of [-half, half])
+			for (const y of [0, 2 * half]) for (const z of [-half, half]) corners.push(x, y, z);
+		dynamics.add('box', box, Float32Array.from(corners), { kg: 0.3 });
+		return { dynamics, parts, box };
+	}
+
+	it('carries what is in it as it is pulled out, and holds it up', async () => {
+		const { dynamics, parts, box } = await drawer();
+		// Pulled 30 cm out along +x over half a second, then left.
+		for (let i = 1; i <= 120; i++) {
+			const x = 0.3 * Math.min(1, i / 30);
+			for (const m of parts) {
+				m.position.x = x;
+				m.updateMatrixWorld();
+			}
+			dynamics.step(1 / 60);
+		}
+		dynamics.pose('box', box);
+		expect(box.position.x).toBeGreaterThan(0.2);
+		expect(box.position.y).toBeGreaterThan(0.29);
+	});
+});
