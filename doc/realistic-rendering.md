@@ -445,12 +445,13 @@ stick: a dead zone for a resting thumb, a walk (1.4 m/s) by three quarters of it
 reach, a run (2.6 m/s) at its edge. With a mouse, a click captures it (pointer
 lock) and it looks as it moves, until Esc; a dot marks the middle of the view,
 which a click or E opens; W A S D or the arrows walk, Shift runs. The walk eases
-in and out over about 0.1 s, the look never does. The walker is a column 0.2 m
-round, 0.22 to 1.75 m up, in the one physics world the doors and things are in
-(`Dynamics.walk`, Rapier's character controller; see `engine.md`), so it slides
-along a wall, an open door or round a table's edge; its feet stand on the highest
-surface under its footprint, so it steps over a rug, the hearth or a stair, and
-its shins kick what lies on the floor aside. A camera
+in and out over about 0.1 s, the look never does. The walker is a body in the one
+physics world the doors and things are in (`Dynamics.walk`; see `engine.md`):
+15 cm round at the shoulders, 10 cm at its flat foot, up to 1.45 m (its head
+ducks, as under the bulkhead at the stairs' foot). It steps and slides as a
+game's walker does: it slides along a wall, an open door or round a table's edge,
+steps up 22 cm where a foot has room (a rug, the hearth, a stair; not a pouf's
+base under its bulge), and shoves what is loose. A camera
 placed by the URL (a photo's) keeps its exact pose. The top corner says the frame
 rate while anything moves, and how long the slowest frame's work took
 (`FrameRate`; `idle` while still, as nothing is drawn then).

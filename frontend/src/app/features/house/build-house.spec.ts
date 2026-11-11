@@ -41,6 +41,40 @@ describe('buildHouse', () => {
 		expect(faceless).toEqual([]);
 	});
 
+	it('cuts the landing’s stairwell where the scene says, a notch in its edge: open over it, floor round it', () => {
+		const landing = scene.rooms.find((r) => r.name === 'landing');
+		const hole = landing?.holes?.[0];
+		expect(hole).toBeDefined();
+		const floor = meshes.filter((m) => {
+			const t = solidTag(m);
+			return t?.kind === 'floor' && m.userData['room'] === 'landing';
+		});
+		for (const m of floor) m.updateMatrixWorld();
+		const solid = (x: number, z: number) =>
+			new THREE.Raycaster(new THREE.Vector3(x, 4, z), new THREE.Vector3(0, -1, 0)).intersectObjects(
+				floor,
+				false,
+			).length > 0;
+		const [x0, x1] = [
+			Math.min(...(hole ?? []).map(([x]) => x)),
+			Math.max(...(hole ?? []).map(([x]) => x)),
+		];
+		const [z0, z1] = [
+			Math.min(...(hole ?? []).map(([, z]) => z)),
+			Math.max(...(hole ?? []).map(([, z]) => z)),
+		];
+		const open: string[] = [];
+		const shut: string[] = [];
+		for (let x = x0 + 0.05; x < x1; x += 0.1)
+			for (let z = z0 + 0.05; z < z1; z += 0.1)
+				if (solid(x, z)) shut.push(`${x.toFixed(2)},${z.toFixed(2)}`);
+		for (let x = x0 + 0.05; x < x1; x += 0.1)
+			for (let z = 3.8; z < z0 - 0.05; z += 0.1)
+				if (!solid(x, z)) open.push(`${x.toFixed(2)},${z.toFixed(2)}`);
+		expect(shut, 'floor over the stairwell').toEqual([]);
+		expect(open, 'no floor beside it').toEqual([]);
+	});
+
 	it('cuts a stairwell from a floor and a ceiling leaving no triangle without an area', () => {
 		const flat: string[] = [];
 		const [a, b, c] = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];

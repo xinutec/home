@@ -24,6 +24,7 @@ import {
 	segments,
 	wallPanels,
 	wells,
+	holds,
 } from './scene-geometry';
 import type { P3, Passage, Well } from './scene-geometry';
 import type { Pt, WallSeg } from './scene-geometry';
@@ -1229,14 +1230,59 @@ function flat(
 	const at = (p: Pt) => new THREE.Vector2(p.x, p.z);
 	// The outline closes on its first corner; the shape closes itself.
 	const shape = new THREE.Shape(pts.slice(0, -1).map(at));
-	shape.holes = holes.map((h) => new THREE.Path(h.map(at)));
-	const geom = view.own(withArea(new THREE.ShapeGeometry(shape)));
+	const geom = view.own(
+		withArea(new THREE.ShapeGeometry(holes.length === 0 ? shape : cutSquare(pts, holes))),
+	);
 	geom.rotateX(Math.PI / 2); // XY shape → XZ plane
 	const mesh = new THREE.Mesh(geom, mat);
 	mesh.position.y = y;
 	mesh.receiveShadow = true;
 	mesh.castShadow = y > 0; // the ceiling shades what is under it
 	return mesh;
+}
+
+/**
+ * The outline `pts` with `holes` cut from it, as rectangles: the grid every corner
+ * of them makes, each cell of it in the outline and in no hole, a row's cells run
+ * together. A triangulation takes a hole only inside its outline; a stairwell
+ * against a room's walls meets it, and came out a wedge, floor over half its
+ * stairs. Square corners only, as every room with a hole has.
+ */
+function cutSquare(pts: Pt[], holes: Pt[][]): THREE.Shape[] {
+	for (const outline of [pts, ...holes])
+		for (let i = 0; i < outline.length; i++) {
+			const [a, b] = [outline[i], outline[(i + 1) % outline.length]];
+			if (Math.abs(a.x - b.x) > 1e-6 && Math.abs(a.z - b.z) > 1e-6)
+				throw new Error('a floor with a hole in it has a corner that is not square');
+		}
+	const sorted = (v: number[]) =>
+		[...new Set(v.map((n) => Math.round(n * 1e6) / 1e6))].sort((a, b) => a - b);
+	const all = [pts, ...holes].flat();
+	const xs = sorted(all.map((p) => p.x));
+	const zs = sorted(all.map((p) => p.z));
+	const filled = (x: number, z: number) => holds(pts, x, z) && !holes.some((h) => holds(h, x, z));
+	const out: THREE.Shape[] = [];
+	for (let j = 0; j + 1 < zs.length; j++) {
+		const [z0, z1] = [zs[j], zs[j + 1]];
+		let from: number | undefined;
+		for (let i = 0; i + 1 <= xs.length; i++) {
+			const inside = i + 1 < xs.length && filled((xs[i] + xs[i + 1]) / 2, (z0 + z1) / 2);
+			if (inside && from === undefined) from = xs[i];
+			if (!inside && from !== undefined) {
+				const x1 = xs[i];
+				out.push(
+					new THREE.Shape([
+						new THREE.Vector2(from, z0),
+						new THREE.Vector2(x1, z0),
+						new THREE.Vector2(x1, z1),
+						new THREE.Vector2(from, z1),
+					]),
+				);
+				from = undefined;
+			}
+		}
+	}
+	return out;
 }
 
 /** `geom` unindexed, without the triangles of no area a triangulation leaves where a

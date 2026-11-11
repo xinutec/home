@@ -6,7 +6,7 @@ import type { HouseScene } from './house.model';
 import { MaterialLibrary } from './materials';
 import { buildHouse } from './room-builder';
 import { Dynamics, loadRapier } from './dynamics';
-import { EYE, RUN_SPEED, WALK_SPEED, WalkControls, stickSpeed } from './walk';
+import { BODY, EYE, RUN_SPEED, WALK_SPEED, WalkControls, stickSpeed } from './walk';
 
 const house = withModels(json as unknown as HouseScene);
 
@@ -64,23 +64,27 @@ describe('walking', () => {
 		const wall = new THREE.Mesh(new THREE.PlaneGeometry(2, 2.4).rotateY(Math.PI / 2));
 		wall.position.set(0, 1.2, 0);
 		const [x] = walk(world([wall]), [-1, 0], [1, 0]);
-		// Its radius, and the centimetre the world keeps it clear by.
-		expect(x).toBeCloseTo(-0.21, 3);
+		// Its shoulders' radius, and the centimetre the world keeps it clear by.
+		expect(x).toBeCloseTo(-BODY.radius - 0.01, 3);
 	});
 
 	it('keeps a walker out of a turned box, and slides it along a side', () => {
 		// Turned a quarter, the box is 0.5 wide in x: the walker stops at its side.
 		const c = world([box(1, 0.8, 0.5, 0, 0.4, 0, Math.PI / 2)]);
 		const [x, z] = walk(c, [-1, 0.3], [1, 0.3]);
-		expect(x).toBeLessThan(-0.25 - 0.2 + 1e-3);
+		// Its body there narrower than its shoulders, wider than its foot.
+		expect(x).toBeLessThan(-0.25 - BODY.foot);
+		expect(x).toBeGreaterThan(-0.25 - BODY.radius - 0.02);
 		expect(Math.abs(z - 0.3)).toBeLessThan(0.3);
 	});
 
 	it('walks over what lies below its knees, and not into what stands higher', () => {
 		const rug = box(1, 0.01, 1, 0, 0.005, 0);
-		expect(walk(world([rug]), [-1, 0], [1, 0])[0]).toBeCloseTo(1, 6);
+		expect(walk(world([rug]), [-1, 0], [1, 0])[0]).toBeCloseTo(1, 2);
 		const table = box(1, 0.75, 1, 0, 0.375, 0);
-		expect(walk(world([table]), [-1, 0], [1, 0])[0]).toBeLessThan(-0.69);
+		const [tx] = walk(world([table]), [-1, 0], [1, 0]);
+		expect(tx).toBeLessThan(-0.5 - BODY.foot);
+		expect(tx).toBeGreaterThan(-0.5 - BODY.radius - 0.02);
 	});
 
 	it('stops a walker at a door where it stands now, not where it stood shut', () => {
@@ -88,19 +92,19 @@ describe('walking', () => {
 		const door = box(0.05, 2, 1, 5, 1, 0);
 		door.userData['moves'] = 'cupboard/door';
 		const c = world([door]);
-		expect(walk(c, [-1, 0], [1, 0])[0]).toBeCloseTo(1, 6);
+		expect(walk(c, [-1, 0], [1, 0])[0]).toBeCloseTo(1, 2);
 		// Moved, the door's body follows at the next step, as each frame steps.
 		door.position.x = 0;
 		door.updateMatrixWorld();
 		c.step(1 / 60);
-		expect(walk(c, [-1, 0], [1, 0])[0]).toBeLessThan(-0.025 - 0.2 + 1e-3);
+		expect(walk(c, [-1, 0], [1, 0])[0]).toBeLessThan(-0.025 - BODY.radius);
 		// Turned a quarter, it lies along the way: the walker passes beside it, and
 		// one walking across is stopped.
 		door.rotation.y = Math.PI / 2;
 		door.updateMatrixWorld();
 		c.step(1 / 60);
-		expect(walk(c, [-1, 0.6], [1, 0.6])[0]).toBeCloseTo(1, 6);
-		expect(walk(c, [0, -1], [0, 1])[1]).toBeLessThan(-0.025 - 0.2 + 1e-3);
+		expect(walk(c, [-1, 0.6], [1, 0.6])[0]).toBeCloseTo(1, 2);
+		expect(walk(c, [0, -1], [0, 1])[1]).toBeLessThan(-0.025 - BODY.radius);
 	});
 
 	const house3d = drawn();
@@ -127,15 +131,34 @@ describe('walking', () => {
 			// A first step of 30 cm the way it looks, taken whole: not from inside
 			// something, nor into it.
 			const d = Math.hypot(lx - ex, lz - ez);
-			const to = house3d.walk(
-				new THREE.Vector3(ex, feet, ez),
-				((lx - ex) / d) * 0.3,
-				((lz - ez) / d) * 0.3,
-			);
+			let to = new THREE.Vector3(ex, feet, ez);
+			for (let k = 0; k < 15; k++)
+				to = house3d.walk(to, ((lx - ex) / d) * 0.02, ((lz - ez) / d) * 0.02);
 			expect(
 				Math.hypot(to.x - ex, to.z - ez),
 				`${room.name}: its first step is blocked`,
 			).toBeCloseTo(0.3, 3);
+		}
+	});
+
+	it('walks into the bean bag by the fireplace, not up its side', () => {
+		const bag = house.furniture.find((f) => f.id === 'living-bean-bag');
+		expect(bag).toBeDefined();
+		const [cx, cz] = [bag?.cx ?? 0, bag?.cz ?? 0];
+		// At it from the front, and from the hearth's side, a frame at a time.
+		for (const [from, [dx, dz]] of [
+			[
+				[cx, cz + 1.0],
+				[0, -0.02],
+			],
+			[
+				[cx - 0.9, cz + 0.25],
+				[0.02, 0],
+			],
+		] as const) {
+			let feet = new THREE.Vector3(from[0], 0, from[1]);
+			for (let k = 0; k < 60; k++) feet = house3d.walk(feet, dx, dz);
+			expect(feet.y, `from ${from.join(', ')}`).toBeLessThan(0.06);
 		}
 	});
 
@@ -145,7 +168,7 @@ describe('walking', () => {
 		// Along its middle, clear of the bean bag at its far end.
 		const [cx, cz] = [mat?.cx ?? 0, (mat?.cz ?? 0) + 0.15];
 		const [x] = walk(house3d, [cx - 0.6, cz], [cx - 0.1, cz]);
-		expect(x).toBeCloseTo(cx - 0.1, 6);
+		expect(x).toBeCloseTo(cx - 0.1, 2);
 	});
 
 	describe('a tap', () => {

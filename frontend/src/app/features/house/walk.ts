@@ -1,9 +1,12 @@
 import * as THREE from 'three';
 
-/** The walker as a column: its radius, and the heights above its feet between which
- *  anything stops it (a rug or a stair's riser does not, it steps up onto it; a
- *  coffee table, a curtain, a wall above a sill do). */
-export const BODY = { radius: 0.2, low: 0.22, high: 1.75 };
+/** The walker's body: its radius at the shoulders, about a body's depth front to
+ *  back (a person is some 25 cm deep), so it climbs a stair with its back under the
+ *  bulkhead at the flight's foot; at its feet (`foot`); the highest step it takes
+ *  (a rug, a stair's riser; not a coffee table or a sofa's seat); and how high
+ *  anything stops it, its shoulders: its head ducks, as one does under that
+ *  bulkhead. */
+export const BODY = { radius: 0.15, foot: 0.1, low: 0.22, high: 1.45 };
 /** Eye height standing, metres. */
 export const EYE = 1.6;
 

@@ -56,7 +56,7 @@ export function roomAt(rooms: Room[], x: number, z: number, y: number): string |
 }
 
 /** Whether the outline `pts` holds the point (x, z). */
-function holds(pts: Pt[], x: number, z: number): boolean {
+export function holds(pts: Pt[], x: number, z: number): boolean {
 	let inside = false;
 	for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
 		const [a, b] = [pts[i], pts[j]];
