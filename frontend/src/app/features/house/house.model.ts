@@ -21,8 +21,8 @@ export interface Furniture {
 	 *  holds it, wherever its centre of mass is. */
 	soft?: boolean;
 	/** Picked up and put down in the room view (a cushion): it is lit as it moves,
-	 *  from the light probes, not baked. */
-	movable?: boolean;
+	 *  from the light probes, not baked, and falls by its weight. */
+	movable?: Movable;
 	color?: string | null;
 	/** A key into the scene's `materials`; wins over `color` in the room view. */
 	material?: string;
@@ -213,6 +213,14 @@ export interface MaterialSpec {
 	 *  picture's top edge at the box's back), as a printed deck is. */
 	imageFace?: 'front' | 'top';
 	/** Not measured yet: where the values came from and what to measure. */
+	estimate?: string;
+}
+
+/** How a thing that can be picked up falls: its weight, and how much of its speed
+ *  it keeps off a bounce (0 a cushion, 0.6 a rubber ball; 0.1 unsaid). */
+export interface Movable {
+	kg: number;
+	bounce?: number;
 	estimate?: string;
 }
 

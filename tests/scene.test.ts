@@ -49,7 +49,7 @@ function inside([x, z]: [number, number], poly: [number, number][]): boolean {
 describe("scenes/house.json", () => {
 	it("has every estimate say what would settle it", () => {
 		const all = JSON.parse(readFileSync("scenes/house.json", "utf8")) as {
-			furniture: { estimate?: string }[];
+			furniture: { estimate?: string; movable?: { estimate?: string } }[];
 			rooms: {
 				estimate?: string;
 				openings?: { estimate?: string }[];
@@ -62,6 +62,7 @@ describe("scenes/house.json", () => {
 		};
 		const estimates = [
 			...all.furniture.map((f) => f.estimate),
+			...all.furniture.map((f) => f.movable?.estimate),
 			...all.rooms.map((r) => r.estimate),
 			...all.rooms.flatMap((r) => (r.openings ?? []).map((o) => o.estimate)),
 			...all.rooms.map((r) => r.coving?.estimate),

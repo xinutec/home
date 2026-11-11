@@ -9,11 +9,14 @@ const FEET = 0.03;
 const STEP = 1 / 60;
 /** Steps at most a frame: a frame late by more drops the rest, not the page. */
 const MAX_STEPS = 4;
-/** kg/m³ of a cushion's foam and cover, over its hull's volume. */
-const DENSITY = 25;
 const FRICTION = 0.8;
-/** How much of its speed a thing keeps off a bounce. */
-const RESTITUTION = 0.1;
+/** How much of its speed a thing keeps off a bounce, unless it says. */
+const BOUNCE = 0.1;
+/** How fast a spin dies away (1/s): a ball on carpet rolls a little, then stops. */
+const SPIN_DAMPING = 0.8;
+/** Metres the physics' tolerances scale by: the size of most things in it. At its
+ *  default, a metre, a 25 cm cabinet rocked on its foot and walked off a shelf. */
+const LENGTH_UNIT = 0.1;
 
 /** Rapier, its WebAssembly started: done when first needed, as most visits never
  *  pick anything up. */
@@ -24,8 +27,8 @@ export async function loadRapier(): Promise<typeof RAPIER> {
 
 /**
  * Things that can be picked up, as rigid bodies under gravity among the fixed room:
- * the room one triangle mesh (its doors as they stand shut), each thing the convex
- * hull of its parts. A held thing follows the hand (`hold`), and let go keeps the
+ * the room one triangle mesh (its doors as they stand shut), each thing a ball or
+ * a hull round its parts (`shapeOf`). A held thing follows the hand (`hold`), and let go keeps the
  * hand's speed (`release`); then it falls, tumbles, and comes to rest, and sleeps.
  * The walker is a body too (`walk`), its column (`BODY`, down to its feet)
  * following it, pushing what it walks into.
@@ -41,15 +44,25 @@ export class Dynamics {
 		this.R = R;
 		this.world = new R.World({ x: 0, y: -9.81, z: 0 });
 		this.world.timestep = STEP;
+		this.world.lengthUnit = LENGTH_UNIT;
 		const { vertices, indices } = soup(fixed);
-		this.world.createCollider(R.ColliderDesc.trimesh(vertices, indices));
+		this.world.createCollider(
+			R.ColliderDesc.trimesh(vertices, indices, R.TriMeshFlags.FIX_INTERNAL_EDGES),
+		);
 	}
 
 	/** Adds `key` as it stands: `object`'s place and turn, its parts' points (in its
-	 *  own frame) for its hull. Asleep: it stays as placed until disturbed. */
-	add(key: string, object: THREE.Object3D, points: Float32Array): void {
+	 *  own frame) for its shape, its weight and bounce. Awake, it settles where it
+	 *  stands and falls asleep: made asleep, it would have no contact with what is
+	 *  under it, and woken, it would fall through a thin shelf before one came. */
+	add(
+		key: string,
+		object: THREE.Object3D,
+		points: Float32Array,
+		how: { kg: number; bounce?: number },
+	): void {
 		const R = this.R;
-		const hull = R.ColliderDesc.convexHull(points);
+		const hull = shapeOf(R, points);
 		if (!hull) throw new Error(`${key}'s parts have no hull`);
 		const { x, y, z } = object.position;
 		const q = object.quaternion;
@@ -57,10 +70,13 @@ export class Dynamics {
 			R.RigidBodyDesc.dynamic()
 				.setTranslation(x, y, z)
 				.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w })
-				.setSleeping(true),
+				.setAngularDamping(SPIN_DAMPING),
 		);
 		this.world.createCollider(
-			hull.setDensity(DENSITY).setFriction(FRICTION).setRestitution(RESTITUTION),
+			hull
+				.setMass(how.kg)
+				.setFriction(FRICTION)
+				.setRestitution(how.bounce ?? BOUNCE),
 			body,
 		);
 		this.bodies.set(key, body);
@@ -129,6 +145,52 @@ export class Dynamics {
 		if (!b) throw new Error(`no body ${key}`);
 		return b;
 	}
+}
+
+/** How far a ball's points may lie from one radius, as a share of it. */
+const ROUND = 0.03;
+/** The directions a thing's outline is taken in: 8 headings round, each level,
+ *  45° up and down, and a degree off straight up and down, which picks out the rim
+ *  of a flat foot or top; and straight up and down. */
+const DIRECTIONS = [
+	new THREE.Vector3(0, 1, 0),
+	new THREE.Vector3(0, -1, 0),
+	...[0, 45, -45, 89, -89].flatMap((up) =>
+		Array.from({ length: 8 }, (_, i) =>
+			new THREE.Vector3().setFromSphericalCoords(1, ((90 - up) * Math.PI) / 180, (i * Math.PI) / 4),
+		),
+	),
+];
+
+/** The shape a thing collides as, from its parts' points (its own frame): a ball if
+ *  they lie on one, and reach it every way; else the hull of its furthest point in
+ *  each of DIRECTIONS. A box keeps its corners; a round foot becomes an octagon.
+ *  The hull of every point gives a round foot dozens of corners, and a thing on one
+ *  rocks and walks off a shelf (a candle in a jar, 3 cm on its own). */
+function shapeOf(R: typeof RAPIER, points: Float32Array): RAPIER.ColliderDesc | null {
+	const middle = new THREE.Box3().setFromArray(points).getCenter(new THREE.Vector3());
+	const p = new THREE.Vector3();
+	let [near, far] = [Infinity, 0];
+	for (let i = 0; i < points.length; i += 3) {
+		const r = p.fromArray(points, i).distanceTo(middle);
+		[near, far] = [Math.min(near, r), Math.max(far, r)];
+	}
+	const outline: number[] = [];
+	// Every way, how far from the middle it reaches: a box's corners lie on a ball,
+	// but its faces fall short of it.
+	let short = Infinity;
+	for (const d of DIRECTIONS) {
+		let [best, at] = [-Infinity, 0];
+		for (let i = 0; i < points.length; i += 3) {
+			const reach = p.fromArray(points, i).sub(middle).dot(d);
+			if (reach > best) [best, at] = [reach, i];
+		}
+		short = Math.min(short, best);
+		outline.push(points[at], points[at + 1], points[at + 2]);
+	}
+	const round = far - near < far * ROUND && short > far * (1 - ROUND);
+	if (round) return R.ColliderDesc.ball(far).setTranslation(middle.x, middle.y, middle.z);
+	return R.ColliderDesc.convexHull(Float32Array.from(outline));
 }
 
 /** `meshes`' triangles where they stand, as one list of vertices and indices. */

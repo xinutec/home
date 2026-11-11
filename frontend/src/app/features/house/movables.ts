@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { Room } from './house.model';
+import type { Movable as Falls, Room } from './house.model';
 import { ContactShadow } from './contact-shadow';
 import type { Dynamics } from './dynamics';
 import type { ProbeLight, ProbeUniforms } from './probes';
@@ -26,7 +26,7 @@ interface Movable {
 	shadow: ContactShadow;
 	/** Where its shadow was last drawn for: its matrix then. */
 	drawn?: THREE.Matrix4;
-	/** Its parts' points, in its own frame: its hull, as a body. */
+	/** Its parts' points, in its own frame: its shape, as a body. */
 	points: Float32Array;
 	/** Which room's probes it reads, and the uniforms it reads them by. */
 	room?: string;
@@ -60,6 +60,8 @@ export class Movables {
 		own: Own,
 		/** The physics they move by, made when first needed. */
 		private readonly makeDynamics: () => Promise<Dynamics>,
+		/** How each falls, by its piece's id (`Furniture.movable`). */
+		private readonly how: (key: string) => Falls,
 	) {
 		const byKey = new Map<string, THREE.Mesh[]>();
 		for (const m of meshes) {
@@ -149,7 +151,7 @@ export class Movables {
 	 *  walker meets things before it has carried any). */
 	start(): Promise<Dynamics> {
 		this.starting ??= this.makeDynamics().then((d) => {
-			for (const [key, t] of this.things) d.add(key, t.group, t.points);
+			for (const [key, t] of this.things) d.add(key, t.group, t.points, this.how(key));
 			this.dynamics = d;
 			return d;
 		});
@@ -239,15 +241,20 @@ export class Movables {
 		const probes = light.uniforms(tag);
 		t.room = tag;
 		t.probes = probes;
-		for (const m of parts) {
-			if (!(m.material instanceof THREE.MeshStandardMaterial))
-				throw new Error('a movable part is not drawn in a standard material');
-			const material = m.material.clone();
+		const lit = (from: THREE.Material, key: string) => {
+			if (!(from instanceof THREE.MeshStandardMaterial))
+				throw new Error(`${key}'s part is drawn in ${from.type}, not a standard material`);
+			const material = from.clone();
 			material.envMap = null;
 			material.onBeforeCompile = (shader) => light.patch(shader, probes, 'all');
 			material.customProgramCacheKey = () => 'moves';
-			m.material = material;
-			own(material);
+			return own(material);
+		};
+		for (const m of parts) {
+			const key = String(m.userData['movable']);
+			m.material = Array.isArray(m.material)
+				? m.material.map((from) => lit(from, key))
+				: lit(m.material, key);
 		}
 	}
 

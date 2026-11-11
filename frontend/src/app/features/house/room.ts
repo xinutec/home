@@ -227,6 +227,11 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			this.movesLight,
 			(r) => view.own(r),
 			async () => view.own(new Dynamics(await loadRapier(), lit.meshes)),
+			(key) => {
+				const how = scene.furniture.find((f) => f.id === key)?.movable;
+				if (!how) throw new Error(`${key} is not movable`);
+				return how;
+			},
 		);
 		// What moves takes the daylight by day, and every lamp at its weight.
 		const lightMoves = () =>

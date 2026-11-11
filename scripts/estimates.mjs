@@ -15,6 +15,7 @@ for (const r of scene.rooms) {
 	if (r.coving?.estimate) rows.push([`${r.name} coving`, r.coving.estimate]);
 	if (r.skirting?.estimate) rows.push([`${r.name} skirting`, r.skirting.estimate]);
 }
+for (const f of scene.furniture) if (f.movable?.estimate) rows.push([`${f.name ?? f.id} weight`, f.movable.estimate]);
 for (const [k, m] of Object.entries(scene.materials ?? {})) if (m.estimate) rows.push([`material ${k}`, m.estimate]);
 for (const [k, m] of Object.entries(scene.models ?? {})) if (m.estimate) rows.push([`model ${k}`, m.estimate]);
 for (const l of scene.lights ?? []) if (l.estimate) rows.push([l.name ?? l.id, l.estimate]);

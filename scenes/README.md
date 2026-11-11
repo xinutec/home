@@ -63,8 +63,11 @@ hand. The 3D house view (`frontend/.../features/house`) renders from these.
   says what it is; every box in the living room carries both
   (`tests/scene.test.ts`). Name a side by its wall, never "left"/"right".
 - **movable** (optional, on a piece) — it can be picked up in the room view (a
-  tap carries it, a tap again lets it fall onto what is under it). It is not baked:
-  it is lit from the light probes where it is, with a soft shadow under it.
+  tap carries it, a tap again lets it go: it falls, tumbles and comes to rest, and
+  the walker pushes it aside). `kg`, its weight; `bounce`, how much of its speed it
+  keeps off a bounce (0.1 unsaid; a rubber ball 0.6); `estimate`, as elsewhere. It
+  is not baked: it is lit from the light probes where it is, with a contact shadow
+  of its shape under it.
 - **parts** (optional) — what a piece is made of, inside its box (the box stays
   its envelope, which the overview and observe read). Each part is a box `size`
   [w, h, d] centred at `at`, in the piece's frame: origin at the envelope's floor
