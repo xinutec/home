@@ -40,7 +40,7 @@ import { nightSkyImage, overcastSky, overcastSkyImage } from './sky';
 import { ThreeView } from './three-view';
 import { Joints } from './joints';
 import { WalkControls } from './walk';
-import { Occluders } from './occluders';
+import { imageStage } from './image-stage';
 
 declare global {
 	interface Window {
@@ -154,8 +154,6 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 	private farLight?: ProbeLight;
 	/** All the light probes' light, for what moves. */
 	private movesLight?: ProbeLight;
-	/** What moves, as it shades the room and itself, once a lightmap applies. */
-	private occluders?: Occluders;
 	/** The reflections, to capture again when the light changes. */
 	private recapture?: () => void;
 	private auto?: AutoExposure;
@@ -288,7 +286,6 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		const physicsFrom = performance.now();
 		const dynamics = view.own(new Dynamics(await loadRapier(), lit.meshes));
 		const movables = new Movables(
-			view.renderer,
 			view.scene,
 			lit.movables,
 			dynamics,
@@ -299,7 +296,6 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 				if (!how) throw new Error(`${key} is not movable`);
 				return how;
 			},
-			this.occluders,
 		);
 		// What moves takes the daylight by day, and every lamp at its weight.
 		const lightMoves = () =>
@@ -385,6 +381,10 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			this.crosshair().nativeElement,
 		);
 		view.useMover(walker);
+		const host = this.host().nativeElement;
+		view.useComposer(
+			imageStage(view.renderer, view.scene, view.camera, host.clientWidth, host.clientHeight),
+		);
 		this.walking.set(true);
 		canvas.dataset['physics'] = String(Math.round(performance.now() - physicsFrom));
 		view.requestFrame();
@@ -455,15 +455,8 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			);
 			this.movesLight = view.own(new ProbeLight(map.probes, () => true));
 		}
-		if (applied && lit.movables.length > 0) this.occluders = new Occluders();
 		if (applied) {
-			const reflections = addReflections(
-				view.renderer,
-				view.scene,
-				lit,
-				this.farLight,
-				this.occluders,
-			);
+			const reflections = addReflections(view.renderer, view.scene, lit, this.farLight);
 			for (const t of reflections.owned) view.own(t);
 			this.recapture = reflections.recapture;
 		}

@@ -31,7 +31,6 @@ function room(): { cushion: THREE.Mesh; movables: Movables; dynamics: Dynamics }
 	for (const m of [floor, table]) m.updateMatrixWorld();
 	const dynamics = new Dynamics(R, [floor, table]);
 	const movables = new Movables(
-		drawsNothing(),
 		scene,
 		[cushion],
 		dynamics,
@@ -40,21 +39,6 @@ function room(): { cushion: THREE.Mesh; movables: Movables; dynamics: Dynamics }
 		() => ({ kg: 0.3 }),
 	);
 	return { cushion, movables, dynamics };
-}
-
-/** A renderer that draws nothing: the physics needs none, and there is no WebGL
- *  here; the shadows' drawing is seen on the page. */
-function drawsNothing(): THREE.WebGLRenderer {
-	const stub = {
-		autoClear: true,
-		getRenderTarget: () => null,
-		getClearColor: (c: THREE.Color) => c,
-		getClearAlpha: () => 0,
-		setClearColor: () => undefined,
-		setRenderTarget: () => undefined,
-		render: () => undefined,
-	};
-	return stub as unknown as THREE.WebGLRenderer;
 }
 
 /** Frames of 16 ms from `from` (ms) until nothing moves, at most `max`; the frames
@@ -153,7 +137,6 @@ describe('Movables', () => {
 			return m;
 		};
 		const movables = new Movables(
-			drawsNothing(),
 			stage.scene,
 			meshes,
 			new Dynamics(R, fixed),
@@ -224,7 +207,6 @@ describe('Movables', () => {
 		cushion.userData['movable'] = 'cushion';
 		stage.scene.add(cushion);
 		const movables = new Movables(
-			drawsNothing(),
 			stage.scene,
 			[cushion],
 			new Dynamics(R, fixed),

@@ -1,8 +1,7 @@
 import * as THREE from 'three';
 import type { Movable as Falls } from './house.model';
-import { ContactShadow } from './contact-shadow';
 import type { Dynamics } from './dynamics';
-import type { Occluders } from './occluders';
+import { MOVES_LAYER } from './image-stage';
 import type { ProbeLight, ProbeUniforms } from './probes';
 
 /** Metres ahead of the eye, and below it, that a held thing is carried. */
@@ -15,17 +14,10 @@ type Own = <T extends { dispose(): void }>(r: T) => T;
 interface Movable {
 	/** Its parts, placed from its foot, middle of its footprint. */
 	group: THREE.Group;
-	/** Its footprint's half-sizes, along its own x and z, and its height. */
-	half: [number, number];
+	/** Its height. */
 	height: number;
-	shadow: ContactShadow;
-	/** Where its shadow was last drawn for: its matrix then. */
-	drawn?: THREE.Matrix4;
 	/** Its parts' points, in its own frame: its shape, as a body. */
 	points: Float32Array;
-	/** The ellipsoid it shades others by: its slot, and its middle and half-axes in
-	 *  its own frame (its parts' box's). */
-	occluder?: { slot: number; middle: THREE.Vector3; radii: THREE.Vector3 };
 	/** Which room's probes it reads, and the uniforms it reads them by. */
 	room?: string;
 	probes?: ProbeUniforms;
@@ -36,8 +28,8 @@ interface Movable {
  * view walks it. A tap on one picks it up: it is carried before the eye. A tap
  * again lets it go: it falls, tumbles and comes to rest among the room and the
  * others (`Dynamics`, the room view's one world). It is lit where it is from the
- * light probes (`ProbeLight`, every source), not baked, and has a soft shadow
- * under it.
+ * light probes (`ProbeLight`, every source), not baked; what shades it, and what it
+ * shades, the image stage's occlusion draws (`imageStage`).
  */
 export class Movables {
 	private readonly things = new Map<string, Movable>();
@@ -45,7 +37,6 @@ export class Movables {
 	private last?: number;
 
 	constructor(
-		private readonly renderer: THREE.WebGLRenderer,
 		scene: THREE.Scene,
 		/** Their meshes as drawn, each saying what it is part of (`userData.movable`). */
 		meshes: THREE.Mesh[],
@@ -56,8 +47,6 @@ export class Movables {
 		own: Own,
 		/** How each falls, by its piece's id (`Furniture.movable`). */
 		how: (key: string) => Falls,
-		/** What they shade each other and the room by, if anything. */
-		private readonly occluders?: Occluders,
 	) {
 		const byKey = new Map<string, THREE.Mesh[]>();
 		for (const m of meshes) {
@@ -80,6 +69,7 @@ export class Movables {
 			for (const m of parts) {
 				m.position.sub(foot);
 				group.add(m);
+				m.layers.enable(MOVES_LAYER);
 				m.updateMatrix();
 				const pos = m.geometry.getAttribute('position');
 				for (let i = 0; i < pos.count; i++) {
@@ -87,27 +77,15 @@ export class Movables {
 					points.push(p.x, p.y, p.z);
 				}
 			}
-			const size = box.getSize(new THREE.Vector3());
-			// Wide enough for its shadow however it lies, with the blur round it.
-			const shadow = own(new ContactShadow(renderer, group, size.length() * 1.3));
-			scene.add(shadow.mesh);
-			const inOwnFrame = new THREE.Box3().setFromArray(points);
 			const thing: Movable = {
 				group,
-				half: [size.x / 2, size.z / 2],
-				height: size.y,
-				shadow,
+				height: box.max.y - box.min.y,
 				points: Float32Array.from(points),
-				occluder: occluders && {
-					slot: occluders.add(),
-					middle: inOwnFrame.getCenter(new THREE.Vector3()),
-					radii: inOwnFrame.getSize(new THREE.Vector3()).multiplyScalar(0.5),
-				},
 			};
 			if (light) this.lightFromProbes(thing, parts, own);
 			this.things.set(key, thing);
 			dynamics.add(key, group, thing.points, how(key));
-			this.place(key, thing);
+			this.place(thing);
 		}
 	}
 
@@ -167,7 +145,7 @@ export class Movables {
 		const moving = dynamics.step(dt) || this.held !== undefined;
 		for (const [key, t] of this.things) {
 			dynamics.pose(key, t.group);
-			this.place(key, t);
+			this.place(t);
 		}
 		// The clock runs on while all sleeps: the walker moving through the world is a
 		// step's worth of time like any other (a long pause is cut short by `step`).
@@ -181,39 +159,11 @@ export class Movables {
 		return this.dynamics.jammed();
 	}
 
-	/** The highest surface under a thing's footprint, below its foot (the room, its
-	 *  doors where they stand, other things): where its shadow falls. */
-	private under(key: string, t: Movable): number | undefined {
-		const { x, y, z } = t.group.position;
-		const yaw = new THREE.Euler().setFromQuaternion(t.group.quaternion, 'YXZ').y;
-		const [c, s] = [Math.cos(yaw), Math.sin(yaw)];
-		let top: number | undefined;
-		for (const [u, v] of [
-			[0, 0],
-			[1, 1],
-			[1, -1],
-			[-1, 1],
-			[-1, -1],
-		]) {
-			const [dx, dz] = [u * t.half[0] * 0.8, v * t.half[1] * 0.8];
-			const g = this.dynamics.ground(x + dx * c + dz * s, z - dx * s + dz * c, y + 1e-3, key);
-			if (g !== undefined) top = Math.max(top ?? g, g);
-		}
-		return top;
-	}
-
-	/** Its shadow on what is under it, drawn again if it has moved, and its light
-	 *  from the room it is in. */
-	private place(key: string, t: Movable): void {
+	/** Its light from the room it is in, as it moves. */
+	private place(t: Movable): void {
 		t.group.updateMatrixWorld(true);
-		const { x, y, z } = t.group.position;
-		if (!t.drawn?.equals(t.group.matrixWorld)) {
-			t.shadow.update(this.under(key, t));
-			t.drawn = t.group.matrixWorld.clone();
-			const o = t.occluder;
-			if (o) this.occluders?.place(o.slot, t.group.matrixWorld, o.middle, o.radii);
-		}
 		if (!this.light || !t.probes) return;
+		const { x, y, z } = t.group.position;
 		const tag = this.light.at(new THREE.Vector3(x, y + t.height / 2, z));
 		if (tag && tag !== t.room) {
 			this.light.aim(t.probes, tag);
@@ -237,11 +187,7 @@ export class Movables {
 				throw new Error(`${key}'s part is drawn in ${from.type}, not a standard material`);
 			const material = from.clone();
 			material.envMap = null;
-			const slot = t.occluder?.slot;
-			material.onBeforeCompile = (shader) => {
-				light.patch(shader, probes, 'all');
-				if (slot !== undefined) this.occluders?.patch(shader, { self: slot });
-			};
+			material.onBeforeCompile = (shader) => light.patch(shader, probes, 'all');
 			material.customProgramCacheKey = () => 'moves';
 			return own(material);
 		};

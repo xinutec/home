@@ -45,9 +45,8 @@ export async function loadRapier(): Promise<typeof RAPIER> {
  * a hull round its parts (`shapeOf`). A held thing follows the hand (`hold`), and let go keeps the
  * hand's speed (`release`); then it falls, tumbles, and comes to rest, and sleeps.
  * The walker walks in the same world (`walk`: step and slide, by Rapier's
- * character controller), and
- * what is under a thing is asked of it (`ground`): there is no other copy of the
- * room's shapes.
+ * character controller), and what is under its feet is asked of it (`ground`):
+ * there is no other copy of the room's shapes.
  */
 export class Dynamics {
 	private readonly world: RAPIER.World;
@@ -196,9 +195,10 @@ export class Dynamics {
 	}
 
 	/** The highest surface under [x, z] below `below`: of the room, its doors where
-	 *  they stand now, and the things in it, but `except` (a thing's key) and the
-	 *  walker. None: nothing is under it. */
-	ground(x: number, z: number, below: number, except?: string): number | undefined {
+	 *  they stand now, and the things in it, but the walker. None: nothing is under
+	 *  it. */
+	// dev-lint: allow-ts-test-only the walker calls it through its Footing (walk.ts)
+	ground(x: number, z: number, below: number): number | undefined {
 		const R = this.R;
 		const down = new R.Ray({ x, y: below, z }, { x: 0, y: -1, z: 0 });
 		const hit = this.world.castRay(
@@ -208,7 +208,7 @@ export class Dynamics {
 			undefined,
 			undefined,
 			undefined,
-			except === undefined ? undefined : this.body(except),
+			undefined,
 			(c) => !this.isWalker(c),
 		);
 		return hit ? below - hit.timeOfImpact : undefined;

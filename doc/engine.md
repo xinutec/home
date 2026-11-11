@@ -49,10 +49,13 @@ and stalls on what it cannot move, as a real one; nothing detects a jam.
 - **The lightmap stays** for what never moves: it is the best of what there is.
   Doors and drawers leave it, so the per-door and door-and-lamp layers go and the
   bake shrinks.
-- **Screen-space ambient occlusion** (GTAO, at half resolution) darkens every crease
-  and contact where it is on screen, whatever lies on what. It replaces the contact
-  shadows and the ellipsoid occluders. It sees only what is on screen; contact and
-  creases are on screen where they matter.
+- **Screen-space ambient occlusion** (GTAO, at half resolution) darkens contact
+  where it is on screen, whatever lies on what. Who may darken a pixel depends on
+  what it is: the room's surfaces have their creases in the bake, so only moving
+  things darken them (read from a depth buffer of those alone); a moving thing,
+  lit from probes that know nothing near it, is darkened by everything. It
+  replaces the contact shadows and the ellipsoid occluders. It sees only what is
+  on screen; contact is on screen where it matters.
 - **A shadow map of what moves**, from the light that dominates (the ceiling lamp
   at night, the bay by day), drawing only moving things, blended into the bake: a
   cushion casts its real shadow.
@@ -73,10 +76,11 @@ Each step lands deployed, the view working throughout, its cost read on the phon
    time (`GpuTimer`), or that the browser has no timer. Every step after is judged
    by it.
 3. **The image as a camera makes it.** Screen-space ambient occlusion (GTAO) for
-   every crease and contact, replacing the contact shadows and the ellipsoid
-   occluders; a filmic tone curve (AgX); anti-aliasing; bloom on the windows and
-   lamps. Done when the photo comparison does not get worse and the phone's frame
-   stays inside its budget.
+   contact, replacing the contact shadows and the ellipsoid occluders; a filmic
+   tone curve (AgX); anti-aliasing; bloom on the windows and lamps. Done when the
+   photo comparison does not get worse and the phone's frame stays inside its
+   budget. The occlusion and anti-aliasing (SMAA, after the tone curve) are in
+   (`imageStage`); the tone curve and bloom are next.
 4. **Shadows of what moves.** A shadow map of moving things from the light that
    dominates, blended into the bake. Done when a cushion's shadow falls where the
    path tracer puts it.

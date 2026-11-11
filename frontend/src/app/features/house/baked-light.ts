@@ -5,7 +5,6 @@ import type { Lit } from './room-builder';
 import type { ProbeLight } from './probes';
 import { SKY, windowRadiance } from './sky';
 import { GUTTER } from './unwrap';
-import type { Occluders } from './occluders';
 
 /** The merged room's fingerprint, as its lightmap stores it: every vertex's place
  *  and its lightmap coordinates. */
@@ -479,8 +478,6 @@ export function addReflections(
 	lit: Lit,
 	/** The lamps' light in rooms they are not in: a room's copies read it too. */
 	far?: ProbeLight,
-	/** The things that move, which shade the room's surfaces near them. */
-	occluders?: Occluders,
 ): { owned: { dispose(): void }[]; recapture: () => void } {
 	const owned: { dispose(): void }[] = [];
 	const byRoom = new Map<string, THREE.Mesh[]>();
@@ -546,11 +543,9 @@ export function addReflections(
 					specularOnly,
 				);
 				if (far && lampProbes) far.patch(shader, lampProbes, 'lightmap');
-				occluders?.patch(shader, 'surface');
 			};
 			// A room with far light draws with a program of its own.
-			own.customProgramCacheKey = () =>
-				(lampProbes ? 'far' : 'near') + (occluders ? ' shaded' : '');
+			own.customProgramCacheKey = () => (lampProbes ? 'far' : 'near');
 			own.needsUpdate = true;
 		}
 	return {
