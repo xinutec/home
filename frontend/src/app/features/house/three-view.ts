@@ -33,6 +33,9 @@ export class ThreeView {
 	/** Runs after each frame (auto exposure); true asks for another. */
 	afterRender?: (now: number) => boolean;
 
+	/** Told each frame's GPU time (ms) as its timer gives it (`?stats`). */
+	onGpuTime?: (ms: number) => void;
+
 	/** What moves the camera in place of the orbit controls, once set (walking):
 	 *  its update moves it for a frame and says whether it is still moving. */
 	private mover?: { update(): boolean; dispose(): void };
@@ -93,7 +96,10 @@ export class ThreeView {
 				this.gpu?.end();
 				const end = performance.now();
 				this.frames.frame(end, end - start);
-				for (const ms of this.gpu?.done() ?? []) this.frames.gpu(end, ms);
+				for (const ms of this.gpu?.done() ?? []) {
+					this.frames.gpu(end, ms);
+					this.onGpuTime?.(ms);
+				}
 				if (moving || more) this.requestFrame();
 			});
 		});

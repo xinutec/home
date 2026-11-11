@@ -320,6 +320,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			view.camera,
 			host.clientWidth,
 			host.clientHeight,
+			!!this.query.bloom,
 		);
 		view.beforeRender = (now) => {
 			// The light that fills the room the eye is in, balanced to its daylight's colour.
@@ -394,6 +395,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		);
 		view.useMover(walker);
 		view.useStage(stage);
+		if (this.query.stats) this.measure(view);
 		this.walking.set(true);
 		canvas.dataset['physics'] = String(Math.round(performance.now() - physicsFrom));
 		view.requestFrame();
@@ -483,7 +485,6 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			};
 		}
 		view.requestFrame();
-		if (this.query.stats) this.measure(view);
 	}
 
 	/** Writes the physical scene, as `trace` would draw it, as binary glTF on
@@ -592,40 +593,54 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		});
 	}
 
-	/** Draws frames back to back for 3 s after a second's warm-up (shaders compile on
-	 *  the first frames), then puts on the canvas's host what one costs: frames a
-	 *  second, draw calls, triangles and the meshes in the scene. */
+	/** Draws frames back to back, as the walker sees them (the image stage), for 3 s
+	 *  after a second's warm-up (shaders build on the first frames), then puts on the
+	 *  canvas's host what one costs: the GPU's time (`GpuTimer`: median and 90th
+	 *  percentile, none without a timer), frames a second, draw calls and triangles
+	 *  (all of a frame's passes), the meshes in the scene and the pixels. */
 	private measure(view: ThreeView): void {
 		const host = this.host().nativeElement;
-		view.paused = true;
 		const r = view.renderer;
+		const start = performance.now() + 1000;
+		const end = start + 3000;
+		const gpu: number[] = [];
 		let frames = 0;
-		let start = 0;
-		const step = (t: number) => {
-			if (!this.view) return;
-			r.render(view.scene, view.camera);
-			if (!start) start = t + 1000;
-			if (t >= start) frames++;
-			else frames = 0;
-			if (frames < 2 || t - start < 3000) {
-				requestAnimationFrame(step);
-				return;
+		const before = view.beforeRender;
+		// Counted over the whole frame, every pass's draws, not the last pass's.
+		r.info.autoReset = false;
+		view.onGpuTime = (ms) => {
+			if (performance.now() >= start) gpu.push(ms);
+		};
+		view.beforeRender = (now) => {
+			before?.(now);
+			if (now < end) {
+				r.info.reset();
+				if (now >= start) frames++;
+				return true;
 			}
+			view.beforeRender = before;
+			view.onGpuTime = undefined;
+			const { calls, triangles } = r.info.render;
+			r.info.autoReset = true;
 			let meshes = 0;
 			view.scene.traverse((o) => {
 				if (o instanceof THREE.Mesh) meshes++;
 			});
-			const fps = Math.round(((frames - 1) * 1000) / (t - start));
-			const { calls, triangles } = r.info.render;
+			gpu.sort((a, b) => a - b);
+			const at = (q: number) => Math.round(gpu[Math.floor(q * (gpu.length - 1))] * 10) / 10;
+			const timed = gpu.length > 0 ? { gpu: at(0.5), gpu90: at(0.9) } : {};
+			const fps = Math.round(frames / 3);
 			const pixels = [r.domElement.width, r.domElement.height];
-			host.dataset['stats'] = JSON.stringify({ fps, calls, triangles, meshes, pixels });
+			host.dataset['stats'] = JSON.stringify({ fps, ...timed, calls, triangles, meshes, pixels });
+			const gpuText = gpu.length > 0 ? `gpu ${at(0.5)} ms (90%: ${at(0.9)})` : 'no gpu timer';
 			this.zone.run(() =>
 				this.stats.set(
-					`${fps} fps · ${calls} draw calls · ${triangles} triangles · ${meshes} meshes · ${pixels.join('×')} px`,
+					`${fps} fps · ${gpuText} · ${calls} draw calls · ${triangles} triangles · ${meshes} meshes · ${pixels.join('×')} px`,
 				),
 			);
+			return false;
 		};
-		this.zone.runOutsideAngular(() => requestAnimationFrame(step));
+		view.requestFrame();
 	}
 
 	ngOnDestroy(): void {

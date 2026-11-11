@@ -1,4 +1,5 @@
-// What one frame of a room's everyday view costs: frames a second over 3 s of
+// What one frame of a room's everyday view costs, as the walker sees it: the
+// GPU's time (median and 90th percentile) and frames a second over 3 s of
 // back-to-back drawing, draw calls, triangles and meshes, at a phone's size.
 //
 //   node e2e/frame-cost.ts [--room living] [--deployed]

@@ -89,7 +89,16 @@ Each step lands deployed, the view working throughout, its cost read on the phon
    Tone curves measured on the same three, and kept at ACES: AgX scores 7.1, 13.8
    and 18.0 (worse on kf1, the view the model gets right; better only where its
    flat curve hides the model's faults: a curtain 20× too dark, a ceiling twice as
-   bright); Neutral 5.5, 18.6 and 26.1. Bloom is next.
+   bright); Neutral 5.5, 18.6 and 26.1.
+   White balance, bloom and the tone curve are one pass (`CameraPass`): each
+   full-screen pass at a phone's size costs for itself. Bloom (Jimenez's: the frame
+   mixed 4% toward its blur, no threshold) takes kf822 16.9 → 12.9, most of it the
+   curtain beside the window (×0.05 → ×0.50 of the photo's light), where lens
+   scatter and the curtain's own fault cannot be told apart. On the Mac it costs
+   4-5 ms a frame (`e2e/frame-cost.ts`, interleaved runs: 5.3-7.0 ms without,
+   9.2-12.7 with), the same on 8 × 8 targets as on real ones: the passes, not
+   their pixels. So it is behind `?bloom` until the phone says what it costs there
+   (`/house/living?stats` against `?stats&bloom`).
 4. **Shadows of what moves.** A shadow map of moving things from the light that
    dominates, blended into the bake. Done when a cushion's shadow falls where the
    path tracer puts it.

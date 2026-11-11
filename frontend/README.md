@@ -16,7 +16,8 @@ The Angular dashboard. Run the commands here, in the flake's dev shell.
 - `node e2e/solve-camera.ts --photo-id living-kf1` — where that photo was taken
   from, solved from its sightings, for its record's `camera`.
 - `node e2e/frame-cost.ts [--deployed]` — what one frame of the room costs at a
-  phone's size: frames a second, draw calls, triangles, meshes
+  phone's size, as the walker sees it: GPU time (median, 90%), frames a second,
+  draw calls, triangles, meshes
   (`/house/living?stats` shows the same on the device).
 - `node e2e/bake.ts [--samples 2048]` — bake the house's light into the everyday
   view's lightmap, `scenes/house.bake`; run it after every change to the
