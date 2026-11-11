@@ -39,6 +39,7 @@ import { Movables } from './movables';
 import { ProbeLight } from './probes';
 import { nightSkyImage, overcastSky, overcastSkyImage } from './sky';
 import { ThreeView } from './three-view';
+import { oneMaterialEach, picturesLoaded } from './trace-scene';
 import { Joints } from './joints';
 import { WalkControls } from './walk';
 import { type ImageStage, imageStage } from './image-stage';
@@ -261,7 +262,6 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		// Whole samples, as many as fit in a frame's budget: the default, a ninth of
 		// one a frame, holds a fast GPU to the screen's 60 Hz.
 		tracer.tiles.set(1, 1);
-		tracer.setScene(view.scene, view.camera);
 		const host = this.host().nativeElement;
 		const pixel = new Float32Array(4);
 		const step = () => {
@@ -276,7 +276,15 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			if (tracer.samples >= samples) host.dataset['traced'] = String(Math.floor(tracer.samples));
 			else requestAnimationFrame(step);
 		};
-		this.zone.runOutsideAngular(() => requestAnimationFrame(step));
+		// Once every picture is in (the tracer packs its textures once), with each mesh
+		// of several materials split (`oneMaterialEach`).
+		const start = async () => {
+			await picturesLoaded(view.scene);
+			oneMaterialEach(view.scene);
+			tracer.setScene(view.scene, view.camera);
+			requestAnimationFrame(step);
+		};
+		this.zone.runOutsideAngular(() => void start());
 	}
 
 	/** Hands the camera to a walker: from the room's own view, standing, unless the

@@ -330,6 +330,15 @@ their true values; until then raster and traced scores are not comparable.
 
 ### 4. Physically correct light, as a reference
 
+**The in-page tracer (`?trace`, `--trace N`) scrambled materials from 7 November
+(home 9378749) to 11 November.** Its library (three-gpu-pathtracer 0.0.27) gives
+each mesh one material slot but lists every material of a mesh of several (the
+whale's body and belly), so each such mesh shifted the materials of the meshes
+after it, in an order new each load; and a picture still loading was traced
+black. Fixed in `trace-scene.ts`: such meshes are split, one a material, and the
+trace waits for the pictures. Rows below traced in that window ("traced 256") are
+suspect; the tracer crate (`--tracer`) was not affected.
+
 - **Daylight:** the sun placed by date, time and the room's bearing (solar
   position), and a sky (overcast or clear, as the photo shows) entering through
   the windows.

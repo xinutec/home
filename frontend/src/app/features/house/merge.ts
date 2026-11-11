@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 /** A mesh, by three's own flag: `instanceof Mesh` types its geometry and material as any. */
-function isMesh(o: THREE.Object3D): o is THREE.Mesh {
+export function isMesh(o: THREE.Object3D): o is THREE.Mesh {
 	return 'isMesh' in o && o.isMesh === true;
 }
 
