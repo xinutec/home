@@ -89,12 +89,18 @@ const page = await ctx.newPage();
 page.on('console', (m) => {
 	if (m.type() === 'error') console.error(`page: ${m.text()}`);
 });
+// An uncaught throw, and a promise rejected unhandled, are not console messages.
+page.on('pageerror', (e) => console.error(`page: uncaught ${e.message}`));
 const trace =
 	(a.trace ? `&trace=${a.trace}` : '') +
 	(a.tone ? `&tone=${a.tone}` : '') +
 	(a.night ? '&night' : '') +
 	(a.lamps ? `&lamps=${a.lamps}` : '');
 const start = Date.now();
+// The fake clock from the first script on, running with the real one: installed
+// later, it starts the page's clock again from zero, and what kept the time before
+// (the physics, started once the room is drawn) sees time run backwards.
+if (a.tap) await page.clock.install();
 // --exposure auto leaves it to the page's meter, and prints what it read.
 const exposure = a.exposure === 'auto' ? '' : `&exposure=${a.exposure}`;
 await page.goto(
@@ -105,11 +111,8 @@ if (a.trace) await page.locator('.canvas[data-traced]').waitFor({ timeout: 3_600
 else await page.waitForTimeout(2500);
 const seconds = (Date.now() - start) / 1000;
 const canvas = page.locator('.canvas canvas');
-if (a.tap) {
-	// Installed, the fake clock still runs with the real one; paused, it runs only as told.
-	await page.clock.install();
-	await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 100);
-}
+// Paused, the clock runs only as told.
+if (a.tap) await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 100);
 for (const tap of a.tap ? a.tap.split(';') : []) {
 	const [x, y] = tap.split(',').map(Number);
 	const at = await canvas.boundingBox();
@@ -119,11 +122,13 @@ for (const tap of a.tap ? a.tap.split(';') : []) {
 writeFileSync(a.out, await canvas.screenshot());
 const box = await canvas.boundingBox();
 const meter = await canvas.getAttribute('data-meter');
+const physics = await canvas.getAttribute('data-physics');
 console.log(
 	JSON.stringify({
 		w: box?.width,
 		h: box?.height,
 		...(meter ? { meter: Number(meter) } : {}),
+		...(physics ? { physicsMs: Number(physics) } : {}),
 		...(a.trace ? { samples: Number(a.trace), seconds } : {}),
 	}),
 );
