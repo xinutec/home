@@ -95,6 +95,8 @@ export class MovingShadow {
 	private readonly depth = new THREE.DepthTexture(SIZE, SIZE);
 	private readonly target: THREE.WebGLRenderTarget;
 	private readonly depthOnly = new THREE.MeshBasicMaterial({ colorWrite: false });
+	/** Whether the map is out of date for the light (aimed since it was drawn). */
+	private stale = true;
 	readonly uniforms = {
 		movingShadowMap: { value: this.depth },
 		/** From the room to the map's clip space. */
@@ -106,6 +108,10 @@ export class MovingShadow {
 		movingShadowLight: { value: new THREE.Vector2() },
 		/** 1 while a light casts, else 0: no shadow, nothing sampled. */
 		movingShadowOn: { value: 0 },
+		/** Where in the map a shadow can fall (u, v from; u, v to): the moving things'
+		 *  outline there, widened by the softest penumbra. A pixel outside it is lit
+		 *  without a look in the map. */
+		movingShadowRect: { value: new THREE.Vector4(2, 2, -1, -1) },
 		/** The light's patches (`glowPatches`): middles, vector areas, how many. */
 		movingPatchAt: { value: Array.from({ length: MAX_PATCHES }, () => new THREE.Vector3()) },
 		movingPatchArea: { value: Array.from({ length: MAX_PATCHES }, () => new THREE.Vector3()) },
@@ -124,6 +130,7 @@ export class MovingShadow {
 	/** Casts from `source` from now on, or from nothing. */
 	aim(source: ShadowSource | undefined): void {
 		this.uniforms.movingShadowOn.value = source ? 1 : 0;
+		this.stale = true;
 		if (!source) return;
 		this.camera.position.copy(source.at);
 		this.camera.lookAt(source.at.x, source.at.y - 1, source.at.z);
@@ -144,9 +151,18 @@ export class MovingShadow {
 		this.uniforms.movingRadiance.value.set(...source.radiance);
 	}
 
-	/** Draws the map from where the moving things are now; nothing while none casts. */
-	render(renderer: THREE.WebGLRenderer, scene: THREE.Scene): void {
-		if (this.uniforms.movingShadowOn.value === 0) return;
+	/** Draws the map from where the moving things are now (their boxes in the room,
+	 *  `casters`, asked only then) if they `moved` or the light did; nothing while none casts. Most
+	 *  frames nothing moves: the map stands. */
+	render(
+		renderer: THREE.WebGLRenderer,
+		scene: THREE.Scene,
+		casters: () => THREE.Box3[],
+		moved: boolean,
+	): void {
+		if (this.uniforms.movingShadowOn.value === 0 || !(moved || this.stale)) return;
+		this.stale = false;
+		this.uniforms.movingShadowRect.value.copy(this.shadowRect(casters()));
 		const [before, background, override] = [
 			renderer.getRenderTarget(),
 			scene.background,
@@ -188,6 +204,7 @@ export class MovingShadow {
 			uniform vec2 movingShadowNearFar;
 			uniform vec2 movingShadowLight;
 			uniform float movingShadowOn;
+			uniform vec4 movingShadowRect;
 			uniform vec3 movingPatchAt[${MAX_PATCHES}];
 			uniform vec3 movingPatchArea[${MAX_PATCHES}];
 			uniform int movingPatches;
@@ -225,6 +242,8 @@ export class MovingShadow {
 				if (clip.w <= 0.0) return 1.0;
 				vec2 uv = clip.xy / clip.w * 0.5 + 0.5;
 				if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return 1.0;
+				// Where no moving thing can shade: lit, without a look in the map.
+				if (any(lessThan(uv, movingShadowRect.xy)) || any(greaterThan(uv, movingShadowRect.zw))) return 1.0;
 				float here = -(movingShadowView * vec4(at, 1.0)).z;
 				// The map's width, in metres, at this pixel's distance.
 				float wide = 2.0 * here * movingShadowLight.y;
@@ -263,6 +282,45 @@ export class MovingShadow {
 				lightMapTexel.a,
 				inverseTransformDirection(geometryNormal, viewMatrix))`,
 		);
+	}
+
+	/** Where the `casters` (boxes in the room) can shade in the map, as u, v from and
+	 *  to: their corners as the light sees them, widened by the widest penumbra one
+	 *  makes (the light's radius over its nearest distance from the light, as the map
+	 *  measures it: the penumbra's width a blocker that near throws, at most). */
+	private shadowRect(casters: THREE.Box3[]): THREE.Vector4 {
+		const rect = new THREE.Vector4(2, 2, -1, -1);
+		const toMap = this.uniforms.movingShadowMatrix.value;
+		const view = this.uniforms.movingShadowView.value;
+		const p = new THREE.Vector4();
+		let nearest = Infinity;
+		for (const box of casters)
+			for (let k = 0; k < 8; k++) {
+				const corner = new THREE.Vector3(
+					k & 1 ? box.max.x : box.min.x,
+					k & 2 ? box.max.y : box.min.y,
+					k & 4 ? box.max.z : box.min.z,
+				);
+				// Above the light, or beside it: anywhere in the map, to be safe.
+				if (-corner.clone().applyMatrix4(view).z <= this.camera.near)
+					return new THREE.Vector4(0, 0, 1, 1);
+				nearest = Math.min(nearest, -corner.clone().applyMatrix4(view).z);
+				p.set(corner.x, corner.y, corner.z, 1).applyMatrix4(toMap);
+				const [u, v] = [(p.x / p.w) * 0.5 + 0.5, (p.y / p.w) * 0.5 + 0.5];
+				rect.set(
+					Math.min(rect.x, u),
+					Math.min(rect.y, v),
+					Math.max(rect.z, u),
+					Math.max(rect.w, v),
+				);
+			}
+		if (nearest === Infinity) return rect;
+		const [radius, halfTan] = [
+			this.uniforms.movingShadowLight.value.x,
+			this.uniforms.movingShadowLight.value.y,
+		];
+		const margin = radius / (2 * nearest * halfTan);
+		return rect.set(rect.x - margin, rect.y - margin, rect.z + margin, rect.w + margin);
 	}
 
 	dispose(): void {

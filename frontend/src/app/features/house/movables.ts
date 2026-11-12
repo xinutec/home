@@ -89,6 +89,11 @@ export class Movables {
 		}
 	}
 
+	/** Where each thing is now: its box in the room. */
+	boxes(): THREE.Box3[] {
+		return [...this.things.values()].map((t) => new THREE.Box3().setFromObject(t.group));
+	}
+
 	/** Every thing that can be picked up, by its piece's id. */
 	keys(): string[] {
 		return [...this.things.keys()];

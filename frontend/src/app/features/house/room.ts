@@ -336,6 +336,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		lightMoves();
 		// The lamp the moving things' shadows are cast from: the one lighting the eye most.
 		let casting: string | undefined;
+		let wasCarried = false;
 		const show = () => {
 			const brightest = lamps?.brightestAt(view.camera.position);
 			if (brightest !== casting) {
@@ -400,7 +401,9 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			view.parts.mark('jams');
 			show();
 			view.parts.mark('light');
-			this.shadow?.render(view.renderer, view.scene);
+			// The shadow map again only as the things move (and the frame they stop).
+			this.shadow?.render(view.renderer, view.scene, () => movables.boxes(), carried || wasCarried);
+			wasCarried = carried;
 			view.parts.mark('shadow');
 			return opening || carried;
 		};
