@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Reflector } from 'three/addons/objects/Reflector.js';
+import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { partsOf, solidsOf } from './assembly';
 import type { HouseScene } from './house.model';
 import { named } from './materials';
@@ -9,9 +10,36 @@ import { named } from './materials';
 const REFLECTION_WIDTH = 384;
 /** Glass's reflectance looking straight at it; more at a glancing angle (Schlick). */
 const GLASS_REFLECTANCE = 0.04;
-/** Mip levels down the reflection is read at: a TV's glass (roughness 0.15) blurs
- *  what it reflects by a few of its pixels. */
+/** Pixels of the reflection its blur spreads over (a Gaussian's sigma): a TV's
+ *  glass (roughness 0.15) blurs the room a few metres off by centimetres. Round,
+ *  not a mip level's square, which a lamp's light far brighter than the room
+ *  showed as a white block that jumped as the eye moved. */
 const BLUR = 3.5;
+/** Taps each way from the middle of the blur, each pass: to three sigmas. */
+const BLUR_TAPS = Math.ceil(3 * BLUR);
+
+/** One pass of the blur, along `blurStep` (a pixel across, or up). */
+const blurStep = new THREE.Vector2();
+const blurPass = new THREE.ShaderMaterial({
+	uniforms: { image: { value: null }, step: { value: blurStep } },
+	vertexShader: /* glsl */ `
+		varying vec2 vUv;
+		void main() { vUv = uv; gl_Position = vec4( position.xy, 0.0, 1.0 ); }`,
+	fragmentShader: /* glsl */ `
+		uniform sampler2D image;
+		uniform vec2 step;
+		varying vec2 vUv;
+		void main() {
+			vec3 sum = vec3( 0.0 );
+			float weights = 0.0;
+			for ( int i = -${BLUR_TAPS}; i <= ${BLUR_TAPS}; i++ ) {
+				float w = exp( -0.5 * float( i * i ) / ${(BLUR * BLUR).toFixed(4)} );
+				sum += w * texture2D( image, vUv + float( i ) * step ).rgb;
+				weights += w;
+			}
+			gl_FragColor = vec4( sum / weights, 1.0 );
+		}`,
+});
 /** Metres in front of its face the pane is drawn, clear of it in the depth buffer. */
 const LIFT = 0.001;
 
@@ -64,7 +92,7 @@ const GLASS = {
 			#include <logdepthbuf_fragment>
 			float facing = clamp( dot( normalize( vToEye ), vNormal ), 0.0, 1.0 );
 			float f = ${GLASS_REFLECTANCE} + ${1 - GLASS_REFLECTANCE} * pow( 1.0 - facing, 5.0 );
-			gl_FragColor = vec4( texture2DProj( tDiffuse, vUv, ${BLUR} ).rgb * f, 1.0 );
+			gl_FragColor = vec4( texture2DProj( tDiffuse, vUv ).rgb * f, 1.0 );
 			#include <tonemapping_fragment>
 			#include <colorspace_fragment>
 		}`,
@@ -79,11 +107,14 @@ const GLASS = {
 export class PlanarReflections {
 	private readonly panes: {
 		mirror: Reflector;
+		/** Where its blur's first pass goes, across. */
+		across: THREE.WebGLRenderTarget;
 		glass: THREE.ShaderMaterial;
 		draw: Reflector['onBeforeRender'];
 	}[] = [];
 	private readonly materials: THREE.MeshStandardMaterial[] = [];
 	private readonly frustum = new THREE.Frustum();
+	private readonly quad = new FullScreenQuad(blurPass);
 	/** Three's callback is given the group drawn; a pane is drawn whole. */
 	private readonly whole = new THREE.Group();
 	private shown = true;
@@ -110,10 +141,6 @@ export class PlanarReflections {
 				const out = new THREE.Vector3(Math.sin(s.yaw), 0, Math.cos(s.yaw));
 				mirror.position.set(s.x, (s.y0 + s.y1) / 2, s.z).addScaledVector(out, s.hd + LIFT);
 				mirror.rotation.y = s.yaw;
-				// Its mipmaps made as each is drawn, to blur it by (BLUR).
-				const reflected = mirror.getRenderTarget().texture;
-				reflected.generateMipmaps = true;
-				reflected.minFilter = THREE.LinearMipmapLinearFilter;
 				const glass = mirror.material;
 				if (!(glass instanceof THREE.ShaderMaterial)) throw new Error('a pane lost its shader');
 				glass.blending = THREE.AdditiveBlending;
@@ -125,7 +152,11 @@ export class PlanarReflections {
 				mirror.onBeforeRender = () => undefined;
 				mirror.updateMatrixWorld();
 				scene.add(mirror);
-				this.panes.push({ mirror, glass, draw });
+				const target = mirror.getRenderTarget();
+				const across = new THREE.WebGLRenderTarget(target.width, target.height, {
+					type: THREE.HalfFloatType,
+				});
+				this.panes.push({ mirror, across, glass, draw });
 			}
 		for (const m of meshes) {
 			const material = m.material;
@@ -153,15 +184,39 @@ export class PlanarReflections {
 		this.frustum.setFromProjectionMatrix(
 			new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse),
 		);
-		for (const { mirror, glass, draw } of this.panes)
-			if (this.frustum.intersectsObject(mirror))
-				draw.call(mirror, renderer, this.scene, camera, mirror.geometry, glass, this.whole);
+		for (const { mirror, across, glass, draw } of this.panes) {
+			if (!this.frustum.intersectsObject(mirror)) continue;
+			draw(renderer, this.scene, camera, mirror.geometry, glass, this.whole);
+			this.blur(renderer, mirror.getRenderTarget(), across);
+		}
+	}
+
+	/** Blurs `image` round (BLUR), across into `across`, then up back into it. */
+	private blur(
+		renderer: THREE.WebGLRenderer,
+		image: THREE.WebGLRenderTarget,
+		across: THREE.WebGLRenderTarget,
+	): void {
+		const before = renderer.getRenderTarget();
+		const u = blurPass.uniforms;
+		for (const [from, to, step] of [
+			[image, across, new THREE.Vector2(1 / image.width, 0)],
+			[across, image, new THREE.Vector2(0, 1 / image.height)],
+		] as const) {
+			u['image'].value = from.texture;
+			blurStep.copy(step);
+			renderer.setRenderTarget(to);
+			this.quad.render(renderer);
+		}
+		renderer.setRenderTarget(before);
 	}
 
 	dispose(): void {
-		for (const { mirror } of this.panes) {
+		for (const { mirror, across } of this.panes) {
 			mirror.removeFromParent();
 			mirror.dispose();
+			across.dispose();
 		}
+		this.quad.dispose();
 	}
 }

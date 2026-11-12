@@ -69,8 +69,10 @@ how it is judged done.
    The TV's glass reflects the room as it is (`PlanarReflections`, a material's
    `planar`, the settings' "The TV reflects the room as it is"): the room drawn
    again from the eye mirrored in it, 384 pixels across, before the frame and only
-   with the TV in view, read 3.5 mip levels down for the glass's blur, by glass's
-   Fresnel reflectance. Against the path tracer from the sofa it blurs alike (the
+   with the TV in view, blurred round (a Gaussian, 3.5 of its pixels) for the
+   glass's roughness, by glass's Fresnel reflectance. Blurred by its mip levels
+   first, a lamp or a bright window showed in it as a white square that jumped as
+   the eye moved. Against the path tracer from the sofa it blurs alike (the
    doorway behind the eye a soft dark band); the screen's mean is 14 of 255
    (the probe's 15, the tracer's 9). On the Mac it adds 0.3 ms of GPU with the TV
    in view.
