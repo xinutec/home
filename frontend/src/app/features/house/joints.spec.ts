@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import json from '../../../../../scenes/house.json';
 import { corners, solidsOf, withModels } from './assembly';
 import type { HouseScene } from './house.model';
+import { Dynamics, loadRapier } from './dynamics';
 import { Joints, keptChanges } from './joints';
 import { MaterialLibrary } from './materials';
 import { mergeStatic } from './merge';
@@ -18,6 +19,24 @@ function drawn(): { meshes: THREE.Mesh[]; joints: Joints } {
 	buildHouse(stage, house, new MaterialLibrary(stage.own, false), false, false);
 	const meshes = mergeStatic(stage.scene, () => undefined);
 	return { meshes, joints: new Joints(house, meshes) };
+}
+
+/** The house drawn, its joints driven by the physics. */
+async function driven(): Promise<{ meshes: THREE.Mesh[]; joints: Joints; dynamics: Dynamics }> {
+	const { meshes, joints } = drawn();
+	const dynamics = new Dynamics(await loadRapier(), meshes, joints.specs());
+	joints.driveBy(dynamics);
+	return { meshes, joints, dynamics };
+}
+
+/** The room view's frames, at most `max` of 1/60 s: the physics a step on, the
+ *  joints drawn where it has them, until they rest. How many ran. */
+function run(joints: Joints, dynamics: Dynamics, max: number): number {
+	for (let i = 0; i < max; i++) {
+		dynamics.step(1 / 60);
+		if (!joints.update()) return i;
+	}
+	return max;
 }
 
 /** Where everything moving on `joint` is, in the room. */
@@ -42,25 +61,6 @@ describe('joints', () => {
 		// A knob moves with its drawer.
 		const knob = middle('drawer-left-knob');
 		expect(bounds(meshes, `${SIDEBOARD}/drawer-left`).containsPoint(knob)).toBe(true);
-	});
-
-	it('stops a drawer jammed while shutting where it last stood clear, and a tap then opens it', () => {
-		const { joints } = drawn();
-		const key = `${SIDEBOARD}/drawer-right`;
-		joints.set(key, joints.openAt(key));
-		joints.toggle(key, 0);
-		// Shutting, a frame at a time; jammed after the frame at 300 ms.
-		for (let t = 16; t <= 300; t += 16) joints.update(t);
-		const clear = joints.value(key);
-		joints.update(316);
-		joints.stop(key);
-		expect(joints.value(key)).toBe(clear);
-		expect(joints.update(1000)).toBe(false);
-		expect(joints.value(key)).toBe(clear);
-		// Tapped again: it opens, away from what jammed it.
-		joints.toggle(key, 2000);
-		joints.update(5000);
-		expect(joints.value(key)).toBe(joints.openAt(key));
 	});
 
 	it('slides a drawer out its whole travel, and back', () => {
@@ -107,30 +107,49 @@ describe('joints', () => {
 		expect(at(top, top.clone().add(new THREE.Vector3(0, 0.8, 0.3)))).toBeUndefined();
 	});
 
-	it('opens a shut joint and shuts an open one, over a moment', () => {
-		const { joints } = drawn();
+	it('opens a shut joint and shuts an open one, over a moment, by the physics', async () => {
+		const { joints, dynamics } = await driven();
 		const key = `${SIDEBOARD}/door-middle`;
-		joints.toggle(key, 0);
-		expect(joints.update(100)).toBe(true);
+		joints.toggle(key);
+		const frames = run(joints, dynamics, 6);
+		expect(frames).toBe(6);
 		const partway = joints.value(key);
 		expect(partway).toBeGreaterThan(0);
 		expect(partway).toBeLessThan(95);
-		expect(joints.update(10_000)).toBe(false);
-		expect(joints.value(key)).toBe(95);
-		joints.toggle(key, 20_000);
-		joints.update(30_000);
-		expect(joints.value(key)).toBe(0);
+		expect(run(joints, dynamics, 600)).toBeLessThan(600);
+		expect(joints.value(key)).toBeCloseTo(95, 0);
+		joints.toggle(key);
+		run(joints, dynamics, 600);
+		expect(Math.abs(joints.value(key))).toBeLessThan(1);
 	});
 
-	it('opens a door only as far as it stops, against what stands in front of it', () => {
-		const { joints } = drawn();
+	it('opens a joint resting a hair off shut, where the physics settled it', async () => {
+		const { joints, dynamics } = await driven();
+		const key = `${SIDEBOARD}/door-left`;
+		joints.set(key, -0.2);
+		joints.toggle(key);
+		run(joints, dynamics, 600);
+		expect(joints.value(key)).toBeCloseTo(-95, 0);
+	});
+
+	it('opens a door only as far as it stops, against what stands in front of it', async () => {
+		const { joints, dynamics } = await driven();
 		const key = 'living-ikea-cupboard-opposite-wall/door-b';
-		joints.toggle(key, 0);
-		joints.update(10_000);
-		expect(joints.value(key)).toBe(5);
-		expect(joints.openness(key)).toBe(1);
+		joints.toggle(key);
+		run(joints, dynamics, 600);
+		expect(joints.value(key)).toBeCloseTo(5, 0);
 		expect(joints.openAt(key)).toBe(5);
 		expect(joints.keys()).toContain(key);
+	});
+
+	it('places a joint’s parts where the physics has its body', async () => {
+		const { meshes, joints, dynamics } = await driven();
+		const key = `${SIDEBOARD}/drawer-right`;
+		const shut = bounds(meshes, key);
+		joints.toggle(key);
+		run(joints, dynamics, 600);
+		expect(bounds(meshes, key).max.z - shut.max.z).toBeCloseTo(dynamics.at(key), 3);
+		expect(dynamics.at(key)).toBeCloseTo(0.28, 2);
 	});
 
 	it('says where a joint’s parts pass through on their way open, its arc too', () => {

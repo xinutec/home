@@ -143,6 +143,18 @@ Each step lands deployed, the view working throughout, its cost read on the phon
 5. **Joints.** Doors and drawers as bodies on motorised joints; the jam check
    goes. Done when a drawer shut on a cushion stalls on it, and one pulled drags
    what is in it, with nothing in `joints.ts` that knows about either.
+   Done (12 November): each is a dynamic body on a Rapier revolute or prismatic
+   joint to the room (`Dynamics`, its `JointSpec` from `Joints.specs`), limited to
+   its travel (shut to its stop), its motor easing it toward where a tap sends it
+   (`aim`) with at most a hand's force at its edge (HAND). `Joints` sends and reads
+   (`toggle`, `update`); the timed runs and the jam check are gone. Tested in the
+   real house: the sideboard's drawer shut on a box too tall for it stalls on it,
+   and pulled out carries a box lying in it; a door swung into a box pushes it
+   across the floor and stalls on one caught against a wall. A door also stalls on
+   the walker standing in its way. They start asleep: all of them settling at once
+   cost the walk a 33 ms frame at its start on the Mac.
 6. **Doors out of the bake.** Doors and drawers lit as movables; the joint and
-   pair layers go. Done when an open door's inside matches the old bake's within
+   pair layers go. Its whole bake also takes the scene file's own `"planar": true`
+   on the `screen` material, and `PLANAR` in `planar.ts` goes (any edit to the file
+   needs a bake). Done when an open door's inside matches the old bake's within
    the comparison's tolerance, and the bake is smaller.

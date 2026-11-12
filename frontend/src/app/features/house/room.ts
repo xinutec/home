@@ -46,6 +46,7 @@ import { oneMaterialEach, picturesLoaded } from './trace-scene';
 import { Joints } from './joints';
 import { WalkControls } from './walk';
 import { imageStage } from './image-stage';
+import { PlanarReflections, withPlanar } from './planar';
 import { FEATURES, type Feature, readFeature, readFeatures, writeFeature } from './view-settings';
 
 declare global {
@@ -183,6 +184,8 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 	/** Whether the reflections are projected onto their room's box, a uniform
 	 *  every reflecting surface shares. */
 	private readonly boxedReflections = { value: readFeature('reflections') };
+	/** The flat glossy panes (the TV) reflecting the room as it is, once lit. */
+	private planar?: PlanarReflections;
 	/** Whether the exposure follows the view as it is walked (`light`). */
 	private exposureFollows = false;
 	private readonly query: CameraQuery = cameraFromQuery(window.location.search);
@@ -264,7 +267,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 				catchError(() => of(undefined)),
 			);
 		forkJoin([this.http.get<HouseScene>('/api/house'), bake]).subscribe({
-			next: ([scene, baked]) => void this.open(withModels(scene), baked),
+			next: ([scene, baked]) => void this.open(withPlanar(withModels(scene)), baked),
 			error: (e) => {
 				this.loading.set(false);
 				if (e instanceof HttpErrorResponse && e.status === 404) this.empty.set(true);
@@ -321,7 +324,8 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		// The one world the walker, the doors and the things are in, built once the
 		// room is drawn. Its build time on the host, to measure (`data-physics`, ms).
 		const physicsFrom = performance.now();
-		const dynamics = view.own(new Dynamics(await loadRapier(), lit.meshes));
+		const dynamics = view.own(new Dynamics(await loadRapier(), lit.meshes, joints.specs()));
+		joints.driveBy(dynamics);
 		const movables = new Movables(
 			view.scene,
 			lit.movables,
@@ -408,19 +412,19 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			const room = light?.at(view.camera.position);
 			if (light && room) stage?.balance(light.light(room), light.daylight(room));
 			view.parts.mark('balance');
-			const opening = joints.update(now);
-			view.parts.mark('doors');
+			// The world a step on, the doors and drawers in it, then drawn where it has them.
 			const carried = movables.update(now, view.camera);
 			view.parts.mark('physics');
-			// A door or drawer stops on what it cannot push away, as a real one does.
-			for (const key of movables.jammed()) joints.stop(key);
-			view.parts.mark('jams');
+			const opening = joints.update();
+			view.parts.mark('doors');
 			show();
 			view.parts.mark('light');
 			// The shadow map again only as the things move (and the frame they stop).
 			this.shadow?.render(view.renderer, view.scene, () => movables.boxes(), carried || wasCarried);
 			wasCarried = carried;
 			view.parts.mark('shadow');
+			this.planar?.draw(view.renderer, view.camera);
+			view.parts.mark('panes');
 			return opening || carried;
 		};
 		// The light all through: the lamps' glow, the windows, the lightmap, then what
@@ -469,7 +473,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			}
 			const joint = joints.pick(caster.ray);
 			if (!joint) return;
-			joints.toggle(joint, performance.now());
+			joints.toggle(joint);
 			view.requestFrame();
 		};
 		const walker = new WalkControls(
@@ -583,6 +587,8 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			);
 			for (const t of reflections.owned) view.own(t);
 			this.recapture = reflections.recapture;
+			this.planar = view.own(new PlanarReflections(scene, view.scene, lit.meshes));
+			this.planar.show(this.features().planar);
 		}
 		view.renderer.toneMappingExposure = this.query.exposure ?? (applied ? BAKED_EXPOSURE : 1);
 		// The exposure follows the view (`GpuExposure`, in the image stage) unless
@@ -711,6 +717,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		this.features.update((f) => ({ ...f, [feature]: on }));
 		this.shadeByThings();
 		this.boxedReflections.value = this.features().reflections;
+		this.planar?.show(this.features().planar);
 		this.view?.requestFrame();
 	}
 

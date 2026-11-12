@@ -6,6 +6,8 @@ import type { HouseScene } from './house.model';
 import { MaterialLibrary } from './materials';
 import { buildHouse } from './room-builder';
 import { Dynamics, loadRapier } from './dynamics';
+import type { JointSpec } from './dynamics';
+import { Joints } from './joints';
 import { BODY, EYE, RUN_SPEED, WALK_SPEED, WalkControls, stickSpeed } from './walk';
 
 const house = withModels(json as unknown as HouseScene);
@@ -22,11 +24,12 @@ function walk(d: Dynamics, from: [number, number], to: [number, number]): [numbe
 	return [feet.x, feet.z];
 }
 
-/** A world of `meshes` on a floor, as the room view's physics holds it. */
-function world(meshes: THREE.Mesh[]): Dynamics {
+/** A world of `meshes` on a floor, as the room view's physics holds it, those
+ *  that move on `joints`. */
+function world(meshes: THREE.Mesh[], joints: JointSpec[] = []): Dynamics {
 	const floor = box(40, 0.1, 40, 0, -0.05, 0);
 	for (const m of [floor, ...meshes]) m.updateMatrixWorld();
-	return new Dynamics(R, [floor, ...meshes]);
+	return new Dynamics(R, [floor, ...meshes], joints);
 }
 
 /** A box w × h × d with its centre at (x, y, z), turned `yaw` about the vertical. */
@@ -56,7 +59,7 @@ function drawnMeshes(): THREE.Mesh[] {
 function drawn(): Dynamics {
 	const meshes = drawnMeshes();
 	for (const m of meshes) m.updateMatrixWorld();
-	return new Dynamics(R, meshes);
+	return new Dynamics(R, meshes, new Joints(house, meshes).specs());
 }
 
 describe('walking', () => {
@@ -88,21 +91,48 @@ describe('walking', () => {
 	});
 
 	it('stops a walker at a door where it stands now, not where it stood shut', () => {
-		// Shut, the door stands aside at x = 5; opened, it swings across the way.
-		const door = box(0.05, 2, 1, 5, 1, 0);
+		// Shut, the door stands aside at z = 5; slid open, it stands across the way,
+		// clear of where the walker then stands (a door stalls on the walker).
+		const door = box(0.05, 2, 1, 0, 1, 5);
 		door.userData['moves'] = 'cupboard/door';
-		const c = world([door]);
+		const c = world(
+			[door],
+			[
+				{
+					key: 'cupboard/door',
+					type: 'slide',
+					origin: new THREE.Vector3(0, 1, 5),
+					axis: new THREE.Vector3(0, 0, -1),
+					limits: [0, 5],
+				},
+			],
+		);
 		expect(walk(c, [-1, 0], [1, 0])[0]).toBeCloseTo(1, 2);
-		// Moved, the door's body follows at the next step, as each frame steps.
-		door.position.x = 0;
-		door.updateMatrixWorld();
-		c.step(1 / 60);
+		c.aim('cupboard/door', 5);
+		for (let i = 0; i < 600 && c.step(1 / 60); i++);
+		expect(c.at('cupboard/door')).toBeCloseTo(5, 2);
 		expect(walk(c, [-1, 0], [1, 0])[0]).toBeLessThan(-0.025 - BODY.radius);
-		// Turned a quarter, it lies along the way: the walker passes beside it, and
-		// one walking across is stopped.
-		door.rotation.y = Math.PI / 2;
-		door.updateMatrixWorld();
-		c.step(1 / 60);
+	});
+
+	it('stops a walker at a door turned across its way, and lets it pass beside', () => {
+		// Hinged at its middle, turned a quarter it lies along x.
+		const door = box(0.05, 2, 1, 0, 1, 0);
+		door.userData['moves'] = 'cupboard/door';
+		const c = world(
+			[door],
+			[
+				{
+					key: 'cupboard/door',
+					type: 'hinge',
+					origin: new THREE.Vector3(0, 1, 0),
+					axis: new THREE.Vector3(0, 1, 0),
+					limits: [0, 90],
+				},
+			],
+		);
+		c.aim('cupboard/door', 90);
+		for (let i = 0; i < 600 && c.step(1 / 60); i++);
+		expect(c.at('cupboard/door')).toBeCloseTo(90, 0);
 		expect(walk(c, [-1, 0.6], [1, 0.6])[0]).toBeCloseTo(1, 2);
 		expect(walk(c, [0, -1], [0, 1])[1]).toBeLessThan(-0.025 - BODY.radius);
 	});

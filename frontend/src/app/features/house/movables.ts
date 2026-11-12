@@ -179,12 +179,6 @@ export class Movables {
 		return moving;
 	}
 
-	/** The doors and drawers pressing into a thing they cannot push away
-	 *  (`Dynamics.jammed`). */
-	jammed(): string[] {
-		return this.dynamics.jammed();
-	}
-
 	/** Its light from the room it is in, and its ellipsoid, as it moves. */
 	private place(t: Movable): void {
 		t.group.updateMatrixWorld(true);

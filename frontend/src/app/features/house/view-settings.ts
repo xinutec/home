@@ -1,5 +1,5 @@
 /** What the view's engine can do, each on or off on this device, to compare. */
-export type Feature = 'fine' | 'shadows' | 'occlusion' | 'directional' | 'reflections';
+export type Feature = 'fine' | 'shadows' | 'occlusion' | 'directional' | 'reflections' | 'planar';
 
 /** Each feature as the settings list it: its label, whether switching it reloads
  *  the page (it changes how the view is built), and what it is by default. */
@@ -14,6 +14,7 @@ export const FEATURES: readonly {
 	{ feature: 'occlusion', label: 'Daylight shade by things', reload: false, on: true },
 	{ feature: 'directional', label: '… from the window’s side', reload: false, on: true },
 	{ feature: 'reflections', label: 'Reflections from where they hang', reload: false, on: true },
+	{ feature: 'planar', label: 'The TV reflects the room as it is', reload: false, on: true },
 ];
 
 /** Where each is kept: the fine image under its first key, which says fine or fast. */
@@ -53,5 +54,6 @@ export function readFeatures(): Record<Feature, boolean> {
 		occlusion: readFeature('occlusion'),
 		directional: readFeature('directional'),
 		reflections: readFeature('reflections'),
+		planar: readFeature('planar'),
 	};
 }

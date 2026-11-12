@@ -26,8 +26,14 @@ const FRICTION = 0.8;
 const BOUNCE = 0.1;
 /** How fast a spin dies away (1/s): a ball on carpet rolls a little, then stops. */
 const SPIN_DAMPING = 0.8;
-/** Metres deep a door or drawer presses into a thing before it is jammed. */
-const JAM = 0.005;
+/** Kilograms a door or drawer weighs. */
+const JOINT_KG = 2.5;
+/** Seconds a door's or drawer's motor eases it toward where it is sent over: a
+ *  hand's push, most of its travel in half a second. */
+const EASE = 0.12;
+/** Newtons a hand pushes or pulls a door or drawer with, at its edge: what is
+ *  caught in it, the motor cannot crush. */
+const HAND = 20;
 /** Metres the physics' tolerances scale by: the size of most things in it. At its
  *  default, a metre, a 25 cm cabinet rocked on its foot and walked off a shelf. */
 const LENGTH_UNIT = 0.1;
@@ -39,10 +45,24 @@ export async function loadRapier(): Promise<typeof RAPIER> {
 	return RAPIER;
 }
 
+/** A door's or drawer's joint in the room, shut: a `hinge` about the vertical line
+ *  through `origin`, its value degrees about `axis` (three's sense); or a `slide`
+ *  along `axis` from `origin` (its part's middle), metres. It moves within `limits`,
+ *  shut first. */
+export interface JointSpec {
+	key: string;
+	type: 'hinge' | 'slide';
+	origin: THREE.Vector3;
+	axis: THREE.Vector3;
+	limits: [number, number];
+}
+
 /**
  * Things that can be picked up, as rigid bodies under gravity among the fixed room:
- * the room one triangle mesh (its doors as they stand shut), each thing a ball or
- * a hull round its parts (`shapeOf`). A held thing follows the hand (`hold`), and let go keeps the
+ * the room one triangle mesh, each thing a ball or a hull round its parts
+ * (`shapeOf`). Each door and drawer is a body on its joint (`JointSpec`), driven by
+ * a motor as a hand would push it (`aim`): it pushes what is in its way, carries
+ * what is in it, and stalls on what it cannot move. A held thing follows the hand (`hold`), and let go keeps the
  * hand's speed (`release`); then it falls, tumbles, and comes to rest, and sleeps.
  * The walker walks in the same world (`walk`: step and slide, by Rapier's
  * character controller), and what is under its feet is asked of it (`ground`):
@@ -54,21 +74,22 @@ export class Dynamics {
 	private readonly R: typeof RAPIER;
 	private left = 0;
 	private walker?: Walker;
-	/** Each door and drawer: its key, body and shape, a mesh it moves as, and where
-	 *  it was last put. */
-	private readonly joints: {
-		key: string;
-		body: RAPIER.RigidBody;
-		shape: RAPIER.Collider;
-		mesh: THREE.Mesh;
-		at: THREE.Matrix4;
-		/** How deep it was in a thing when last asked. */
-		depth: number;
-	}[] = [];
+	/** Each door and drawer by key: its body, its joint, and the motor's stiffness
+	 *  and damping for its weight. */
+	private readonly joints = new Map<
+		string,
+		{
+			spec: JointSpec;
+			body: RAPIER.RigidBody;
+			joint: RAPIER.UnitImpulseJoint;
+			stiffness: number;
+			damping: number;
+		}
+	>();
 
 	/** The room as drawn (`meshes`): what moves on a joint (`userData.moves`) a body
-	 *  of its own, the rest fixed. */
-	constructor(R: typeof RAPIER, meshes: THREE.Mesh[]) {
+	 *  of its own on it (`joints`, one for each), the rest fixed. */
+	constructor(R: typeof RAPIER, meshes: THREE.Mesh[], joints: JointSpec[] = []) {
 		this.R = R;
 		this.world = new R.World({ x: 0, y: -9.81, z: 0 });
 		this.world.timestep = STEP;
@@ -83,34 +104,114 @@ export class Dynamics {
 		}
 		const { vertices, indices } = soup(fixed, (m) => m.matrixWorld);
 		this.world.createCollider(R.ColliderDesc.trimesh(vertices, indices, flags));
-		// A joint's meshes in its first mesh's frame (placed and turned, not scaled),
-		// its body placed and turned as that mesh is, now and as it moves.
+		const room = this.world.createRigidBody(R.RigidBodyDesc.fixed());
 		for (const [key, parts] of byJoint) {
-			const frame = rigid(parts[0]);
-			const toFrame = frame.clone().invert();
-			const shut = soup(parts, (m) => toFrame.clone().multiply(m.matrixWorld));
-			const p = new THREE.Vector3();
-			const q = new THREE.Quaternion();
-			frame.decompose(p, q, new THREE.Vector3());
-			const body = this.world.createRigidBody(
-				R.RigidBodyDesc.kinematicPositionBased()
-					.setTranslation(p.x, p.y, p.z)
-					.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }),
-			);
-			const shape = this.world.createCollider(
-				R.ColliderDesc.trimesh(shut.vertices, shut.indices, flags),
-				body,
-			);
-			this.joints.push({
-				key,
-				body,
-				shape,
-				mesh: parts[0],
-				at: parts[0].matrixWorld.clone(),
-				depth: 0,
-			});
+			const spec = joints.find((j) => j.key === key);
+			if (!spec) throw new Error(`${key} moves, and no joint was given for it`);
+			this.addJoint(room, spec, parts, flags);
 		}
 		this.refresh();
+	}
+
+	/** A door or drawer, shut: a body at its joint's origin, unturned, its shape the
+	 *  meshes on it (drawn shut) and its weight JOINT_KG spread through their box; on
+	 *  its joint to the room, within its limits, its motor holding it shut. */
+	private addJoint(
+		room: RAPIER.RigidBody,
+		spec: JointSpec,
+		parts: THREE.Mesh[],
+		flags: RAPIER.TriMeshFlags,
+	): void {
+		const R = this.R;
+		const o = spec.origin;
+		const toBody = new THREE.Matrix4().makeTranslation(-o.x, -o.y, -o.z);
+		const shut = soup(parts, (m) => toBody.clone().multiply(m.matrixWorld));
+		const box = new THREE.Box3().setFromArray(shut.vertices);
+		const size = box.getSize(new THREE.Vector3());
+		const middle = box.getCenter(new THREE.Vector3());
+		const kg = JOINT_KG;
+		const spin = {
+			x: (kg * (size.y ** 2 + size.z ** 2)) / 12,
+			y: (kg * (size.x ** 2 + size.z ** 2)) / 12,
+			z: (kg * (size.x ** 2 + size.y ** 2)) / 12,
+		};
+		// Asleep: its joint holds it shut, and every door and drawer settling against
+		// its limits at once cost the walk's first frames.
+		const body = this.world.createRigidBody(
+			R.RigidBodyDesc.dynamic()
+				.setTranslation(o.x, o.y, o.z)
+				.setAdditionalMassProperties(kg, middle, spin, { x: 0, y: 0, z: 0, w: 1 })
+				.setSleeping(true),
+		);
+		this.world.createCollider(
+			R.ColliderDesc.trimesh(shut.vertices, shut.indices, flags)
+				.setDensity(0)
+				.setFriction(FRICTION),
+			body,
+		);
+		const hinge = spec.type === 'hinge';
+		const data = hinge
+			? R.JointData.revolute(o, { x: 0, y: 0, z: 0 }, spec.axis)
+			: R.JointData.prismatic(o, { x: 0, y: 0, z: 0 }, spec.axis);
+		const joint = this.world.createImpulseJoint(data, room, body, true);
+		if (!(joint instanceof R.UnitImpulseJoint)) throw new Error(`${spec.key}'s joint has no motor`);
+		const [a, b] = spec.limits.map((v) => this.toJoint(spec, v));
+		joint.setLimits(Math.min(a, b), Math.max(a, b));
+		// Its weight as the motor feels it: turned about the hinge, its spin about its
+		// middle and its middle's swing round the line; slid, its mass.
+		const reach = Math.hypot(middle.x, middle.z);
+		const weight = hinge ? spin.y + kg * reach ** 2 : kg;
+		// A hand at its edge: the corner of its box furthest from the hinge.
+		const lever = hinge
+			? Math.max(
+					...[box.min.x, box.max.x].flatMap((x) =>
+						[box.min.z, box.max.z].map((z) => Math.hypot(x, z)),
+					),
+				)
+			: 1;
+		joint.configureMotorModel(R.MotorModel.ForceBased);
+		joint.setMotorMaxForce(HAND * lever);
+		const stiffness = weight / EASE ** 2;
+		const damping = (2 * weight) / EASE;
+		joint.configureMotorPosition(a, stiffness, damping);
+		this.joints.set(spec.key, { spec, body, joint, stiffness, damping });
+	}
+
+	/** A joint's value (degrees, metres) as Rapier has it (radians, metres). */
+	private toJoint(spec: JointSpec, v: number): number {
+		return spec.type === 'hinge' ? (v * Math.PI) / 180 : v;
+	}
+
+	/** Sends the door or drawer `key` toward `value` (its joint's), as a hand pushes it. */
+	aim(key: string, value: number): void {
+		const j = this.joint(key);
+		j.joint.configureMotorPosition(this.toJoint(j.spec, value), j.stiffness, j.damping);
+		j.body.wakeUp();
+	}
+
+	/** Where the door or drawer `key` is: its joint's value (degrees, metres). */
+	at(key: string): number {
+		const { spec, body } = this.joint(key);
+		if (spec.type === 'hinge') {
+			const q = body.rotation();
+			// Turned about the vertical alone: twice the half-angle the quaternion holds.
+			return (2 * Math.atan2(q.y, q.w) * 180) / Math.PI;
+		}
+		const t = body.translation();
+		const o = spec.origin;
+		return (t.x - o.x) * spec.axis.x + (t.y - o.y) * spec.axis.y + (t.z - o.z) * spec.axis.z;
+	}
+
+	/** Whether the door or drawer `key` still moves (it sleeps once still). */
+	// dev-lint: allow-ts-test-only Joints.update calls it through its Drive interface
+	moving(key: string): boolean {
+		return !this.joint(key).body.isSleeping();
+	}
+
+	private joint(key: string) {
+		const j = this.joints.get(key);
+		if (!j) throw new Error(`no joint ${key}`);
+		return j;
 	}
 
 	/** Adds `key` as it stands: `object`'s place and turn, its parts' points (in its
@@ -230,15 +331,22 @@ export class Dynamics {
 	 *  let it, sliding along them; and whether it ended standing on something. */
 	private slide(from: THREE.Vector3, by: RAPIER.Vector): { by: THREE.Vector3; grounded: boolean } {
 		const w = this.walkerAt(from);
+		// The room and its doors stop it; what is loose it shoves as it goes.
 		w.controller.computeColliderMovement(
 			w.shape,
 			by,
-			this.R.QueryFilterFlags.EXCLUDE_DYNAMIC,
 			undefined,
-			(c) => !this.isWalker(c),
+			undefined,
+			(c) => !this.isWalker(c) && !this.isLoose(c),
 		);
 		const m = w.controller.computedMovement();
 		return { by: new THREE.Vector3(m.x, m.y, m.z), grounded: w.controller.computedGrounded() };
+	}
+
+	/** Whether `c` is a thing's that can be picked up. */
+	private isLoose(c: RAPIER.Collider): boolean {
+		const body = c.parent();
+		return !!body && [...this.bodies.values()].includes(body);
 	}
 
 	/** Whether `c` is the walker's own. */
@@ -284,47 +392,17 @@ export class Dynamics {
 		return this.walker;
 	}
 
-	/** Runs the world `seconds` on, in whole steps; true while anything moves. */
+	/** Runs the world `seconds` on, in whole steps; true while anything moves, a
+	 *  door or drawer too. */
 	step(seconds: number): boolean {
-		// Each door and drawer to where it is drawn now, by the next step: what it
-		// meets, it pushes, and what is in it, it carries.
-		for (const j of this.joints) {
-			j.mesh.updateMatrixWorld();
-			if (j.mesh.matrixWorld.equals(j.at)) continue;
-			j.at.copy(j.mesh.matrixWorld);
-			const p = new THREE.Vector3();
-			const q = new THREE.Quaternion();
-			rigid(j.mesh).decompose(p, q, new THREE.Vector3());
-			j.body.setNextKinematicTranslation({ x: p.x, y: p.y, z: p.z });
-			j.body.setNextKinematicRotation({ x: q.x, y: q.y, z: q.z, w: q.w });
-		}
 		this.left = Math.min(this.left + seconds, STEP * MAX_STEPS);
 		while (this.left >= STEP) {
 			this.world.step();
 			this.left -= STEP;
 		}
-		return [...this.bodies.values()].some((b) => !b.isSleeping());
-	}
-
-	/** The doors and drawers pressing into a thing they cannot push away (caught
-	 *  between them and the room): deeper in it than JAM, and deeper than when last
-	 *  asked. One pushed freely moves on within a step, and is never so deep; one
-	 *  moving away, though still in it, is not pressing. */
-	jammed(): string[] {
-		return this.joints
-			.filter((j) => {
-				let depth = 0;
-				this.world.contactPairsWith(j.shape, (other) => {
-					if (!other.parent()?.isDynamic()) return;
-					this.world.contactPair(j.shape, other, (m) => {
-						for (let i = 0; i < m.numContacts(); i++) depth = Math.max(depth, -m.contactDist(i));
-					});
-				});
-				const pressing = depth > JAM && depth > j.depth;
-				j.depth = depth;
-				return pressing;
-			})
-			.map((j) => j.key);
+		return [...this.bodies.values(), ...[...this.joints.values()].map((j) => j.body)].some(
+			(b) => !b.isSleeping(),
+		);
 	}
 
 	/** Where `key` is now: its place and turn into `object`. */
@@ -472,15 +550,6 @@ function shapeOf(R: typeof RAPIER, points: Float32Array): RAPIER.ColliderDesc | 
 /** The middle of the walker's body standing at `feet`: it keeps GAP over them. */
 function middleOf(feet: THREE.Vector3): { x: number; y: number; z: number } {
 	return { x: feet.x, y: feet.y + GAP + (BODY.high - GAP) / 2, z: feet.z };
-}
-
-/** Where `m` is in the room, placed and turned but not scaled: a body's frame. */
-function rigid(m: THREE.Object3D): THREE.Matrix4 {
-	m.updateMatrixWorld();
-	const p = new THREE.Vector3();
-	const q = new THREE.Quaternion();
-	m.matrixWorld.decompose(p, q, new THREE.Vector3());
-	return new THREE.Matrix4().compose(p, q, new THREE.Vector3(1, 1, 1));
 }
 
 /** `meshes`' triangles, each placed by `place`, as one list of vertices and indices. */

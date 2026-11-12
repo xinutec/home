@@ -212,6 +212,10 @@ export interface MaterialSpec {
 	/** Which face of a box the picture is on: its `front` (+z), or its `top` (+y, the
 	 *  picture's top edge at the box's back), as a printed deck is. */
 	imageFace?: 'front' | 'top';
+	/** Its part's front face (+z) is a flat glossy pane (a TV's glass) that reflects
+	 *  the room as it is from where it is seen: the room drawn again, mirrored in
+	 *  it, not the room's reflection probe. */
+	planar?: boolean;
 	/** Not measured yet: where the values came from and what to measure. */
 	estimate?: string;
 }

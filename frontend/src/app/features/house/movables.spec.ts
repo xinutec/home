@@ -139,7 +139,7 @@ describe('Movables', () => {
 		const movables = new Movables(
 			stage.scene,
 			meshes,
-			new Dynamics(R, fixed),
+			new Dynamics(R, fixed, new Joints(scene, fixed).specs()),
 			undefined,
 			(r) => r,
 			how,
@@ -189,7 +189,10 @@ describe('Movables', () => {
 		expect(speaker.min.y).toBeLessThan(0.02);
 	});
 
-	it('in the real house, a drawer shut on a box too tall for it stops on it, and the box stays', () => {
+	/** The real house as the room view builds it, a box 20 cm on a side lying in
+	 *  the sideboard's left drawer, `open` or shut, settled; the drawer driven by
+	 *  the physics. */
+	function sideboardDrawer(open: boolean, tall: number) {
 		const scene = withModels(json as unknown as HouseScene);
 		const stage = { scene: new THREE.Scene(), own: <T>(r: T) => r };
 		buildHouse(stage, scene, new MaterialLibrary(stage.own, false), false, false);
@@ -197,37 +200,64 @@ describe('Movables', () => {
 		const fixed = mergeStatic(stage.scene, () => undefined);
 		const joints = new Joints(scene, fixed);
 		const key = 'living-sideboard/drawer-left';
-		joints.set(key, joints.openAt(key));
-		// A box 20 cm tall standing in it: the drawer is 17 cm deep, so it stands out.
-		const cushion = new THREE.Mesh(
-			new THREE.BoxGeometry(0.2, 0.2, 0.2),
+		const dynamics = new Dynamics(R, fixed, joints.specs());
+		joints.driveBy(dynamics);
+		if (open) {
+			joints.toggle(key);
+			for (let t = 0; t < 2000 && dynamics.step(1 / 60); t += 16) joints.update();
+		}
+		// Shut, the drawer stands 0.28 m further in than open.
+		const box = new THREE.Mesh(
+			new THREE.BoxGeometry(0.2, tall, 0.2),
 			new THREE.MeshStandardMaterial(),
 		);
-		cushion.position.set(-0.92, 0.61 + 0.1, 0.2);
-		cushion.userData['movable'] = 'cushion';
-		stage.scene.add(cushion);
+		box.position.set(-0.92, 0.61 + tall / 2, open ? 0.2 : -0.08);
+		box.userData['movable'] = 'box';
+		stage.scene.add(box);
 		const movables = new Movables(
 			stage.scene,
-			[cushion],
-			new Dynamics(R, fixed),
+			[box],
+			dynamics,
 			undefined,
 			(r) => r,
-			() => ({ kg: 0.3 }),
+			() => ({
+				kg: 0.3,
+			}),
 		);
 		const camera = eye(-0.9);
-		expect(settle(movables, camera)).toBeLessThan(600);
-		const lying = cushion.getWorldPosition(new THREE.Vector3());
-		// Tapped shut, the room view's frame loop running.
-		joints.toggle(key, 10_000);
-		for (let t = 10_000; t < 13_000; t += 16) {
-			joints.update(t);
-			movables.update(t, camera);
-			for (const k of movables.jammed()) joints.stop(k);
-		}
-		// Stopped short, the cushion still in it, not thrown out nor into the cupboard.
+		expect(settle(movables, camera, 600, 10_000)).toBeLessThan(600);
+		/** The room view's frames for `ms`: the physics, then the joints where it has them. */
+		const frames = (ms: number) => {
+			for (let t = 20_000; t < 20_000 + ms; t += 16) {
+				movables.update(t, camera);
+				joints.update();
+			}
+		};
+		return { joints, key, box, frames };
+	}
+
+	it('in the real house, a drawer shut on a box too tall for it stalls on it, and the box stays', () => {
+		// 20 cm tall: the drawer is 17 cm deep, so it stands out.
+		const { joints, key, box, frames } = sideboardDrawer(true, 0.2);
+		const lying = box.getWorldPosition(new THREE.Vector3());
+		joints.toggle(key);
+		frames(3000);
+		// Stopped short, the box still in it, not thrown out nor into the cupboard.
 		expect(joints.openness(key)).toBeGreaterThan(0.1);
-		const now = cushion.getWorldPosition(new THREE.Vector3());
+		const now = box.getWorldPosition(new THREE.Vector3());
 		expect(now.distanceTo(lying)).toBeLessThan(0.2);
+		expect(now.y).toBeGreaterThan(0.6);
+	});
+
+	it('in the real house, a drawer pulled out carries what lies in it', () => {
+		const { joints, key, box, frames } = sideboardDrawer(false, 0.1);
+		const lying = box.getWorldPosition(new THREE.Vector3());
+		joints.toggle(key);
+		frames(3000);
+		expect(joints.openness(key)).toBeGreaterThan(0.95);
+		const now = box.getWorldPosition(new THREE.Vector3());
+		// Out with the drawer, toward the room (+z), still lying in it.
+		expect(now.z - lying.z).toBeGreaterThan(0.2);
 		expect(now.y).toBeGreaterThan(0.6);
 	});
 });

@@ -121,8 +121,8 @@ describe('Dynamics', () => {
 
 describe('Dynamics, with a drawer', () => {
 	/** A floor, and a drawer 30 cm up: a 40 cm square bottom with a front at +x, on
-	 *  its joint (`userData.moves`), shut where it is drawn. A box 10 cm square sits
-	 *  in it. */
+	 *  its joint (`userData.moves`), sliding 30 cm along +x, shut where it is drawn.
+	 *  A box 10 cm square sits in it. */
 	async function drawer() {
 		const floor = new THREE.Mesh(new THREE.BoxGeometry(10, 0.1, 10));
 		floor.position.y = -0.05;
@@ -135,7 +135,19 @@ describe('Dynamics, with a drawer', () => {
 			m.updateMatrixWorld();
 			return m;
 		});
-		const dynamics = new Dynamics(await loadRapier(), [floor, ...parts]);
+		const dynamics = new Dynamics(
+			await loadRapier(),
+			[floor, ...parts],
+			[
+				{
+					key: 'chest/drawer',
+					type: 'slide',
+					origin: new THREE.Vector3(0, 0.3, 0),
+					axis: new THREE.Vector3(1, 0, 0),
+					limits: [0, 0.3],
+				},
+			],
+		);
 		const box = new THREE.Object3D();
 		box.position.set(0, 0.3, 0);
 		const half = 0.05;
@@ -143,65 +155,90 @@ describe('Dynamics, with a drawer', () => {
 		for (const x of [-half, half])
 			for (const y of [0, 2 * half]) for (const z of [-half, half]) corners.push(x, y, z);
 		dynamics.add('box', box, Float32Array.from(corners), { kg: 0.3 });
-		return { dynamics, parts, box };
+		return { dynamics, box };
 	}
 
-	it('carries what is in it as it is pulled out, and holds it up', async () => {
-		const { dynamics, parts, box } = await drawer();
-		// Pulled 30 cm out along +x over half a second, then left.
-		for (let i = 1; i <= 120; i++) {
-			const x = 0.3 * Math.min(1, i / 30);
-			for (const m of parts) {
-				m.position.x = x;
-				m.updateMatrixWorld();
-			}
-			dynamics.step(1 / 60);
-		}
+	it('is pulled out by its motor, carrying what is in it, and holds it up', async () => {
+		const { dynamics, box } = await drawer();
+		dynamics.aim('chest/drawer', 0.3);
+		for (let i = 0; i < 180; i++) dynamics.step(1 / 60);
+		expect(dynamics.at('chest/drawer')).toBeCloseTo(0.3, 2);
 		dynamics.pose('box', box);
 		expect(box.position.x).toBeGreaterThan(0.2);
 		expect(box.position.y).toBeGreaterThan(0.29);
 	});
+
+	it('goes most of its way in half a second, and comes to rest', async () => {
+		const { dynamics } = await drawer();
+		dynamics.aim('chest/drawer', 0.3);
+		for (let i = 0; i < 30; i++) dynamics.step(1 / 60);
+		expect(dynamics.at('chest/drawer')).toBeGreaterThan(0.2);
+		let steps = 0;
+		while (dynamics.moving('chest/drawer') && steps < 600) {
+			dynamics.step(1 / 60);
+			steps++;
+		}
+		expect(steps).toBeLessThan(600);
+	});
 });
 
-describe('Dynamics, a joint jammed', () => {
-	/** A door 40 cm wide and tall, on its joint, swept along -x from x 0.5 to `to`
-	 *  over a second, a 10 cm box on the floor before it at x 0.3, and, if `wall`, a
-	 *  wall at x 0.1 behind the box. Whether the door was jammed on the way. */
-	async function sweep(wall: boolean, to: number): Promise<boolean> {
+describe('Dynamics, a door on its hinge', () => {
+	/** A door 40 cm wide and tall at x 0.1..0.5, hinged at its +x edge, a 10 cm box
+	 *  on the floor beside it at `boxAt` (x, z), and, if `wall`, a wall behind the
+	 *  box, its face at z 0.25. Swung 90° toward +z. Where the door ends (degrees) and the box. */
+	async function swing(wall: boolean, boxAt: [number, number]) {
 		const floor = new THREE.Mesh(new THREE.BoxGeometry(10, 0.1, 10));
 		floor.position.y = -0.05;
 		const fixed = [floor];
 		if (wall) {
-			const w = new THREE.Mesh(new THREE.BoxGeometry(0.02, 1, 1));
-			w.position.x = 0.09;
+			const w = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 0.02));
+			w.position.set(0.3, 0.5, 0.26);
 			fixed.push(w);
 		}
 		for (const m of fixed) m.updateMatrixWorld();
-		const door = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.4, 0.4).translate(0.5, 0.2, 0));
+		const door = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.02).translate(0.3, 0.21, 0));
 		door.userData['moves'] = 'cupboard/door';
 		door.updateMatrixWorld();
-		const dynamics = new Dynamics(await loadRapier(), [...fixed, door]);
+		const dynamics = new Dynamics(
+			await loadRapier(),
+			[...fixed, door],
+			[
+				{
+					key: 'cupboard/door',
+					type: 'hinge',
+					origin: new THREE.Vector3(0.5, 0.21, 0),
+					axis: new THREE.Vector3(0, 1, 0),
+					limits: [0, 90],
+				},
+			],
+		);
 		const corners: number[] = [];
 		for (const x of [-0.05, 0.05])
 			for (const y of [0, 0.1]) for (const z of [-0.05, 0.05]) corners.push(x, y, z);
 		const box = new THREE.Object3D();
-		box.position.set(0.3, 0, 0);
+		box.position.set(boxAt[0], 0, boxAt[1]);
 		dynamics.add('box', box, Float32Array.from(corners), { kg: 0.3 });
-		let jammed = false;
-		for (let i = 1; i <= 60; i++) {
-			door.position.x = (to - 0.5) * (i / 60);
-			door.updateMatrixWorld();
-			dynamics.step(1 / 60);
-			if (dynamics.jammed().includes('cupboard/door')) jammed = true;
-		}
-		return jammed;
+		// Turned +90° about +y, the door's free edge (x 0.1) swings round to +z.
+		dynamics.aim('cupboard/door', 90);
+		for (let i = 0; i < 240; i++) dynamics.step(1 / 60);
+		dynamics.pose('box', box);
+		return { angle: dynamics.at('cupboard/door'), box: box.position.clone() };
 	}
 
-	it('is not jammed sweeping a thing across the floor', async () => {
-		expect(await sweep(false, 0.0)).toBe(false);
+	it('swings open to where it is sent', async () => {
+		expect((await swing(false, [2, 2])).angle).toBeCloseTo(90, 0);
 	});
 
-	it('is jammed pressing a thing into a wall', async () => {
-		expect(await sweep(true, 0.12)).toBe(true);
+	it('pushes a thing in its way across the floor', async () => {
+		const { angle, box } = await swing(false, [0.2, 0.12]);
+		expect(angle).toBeGreaterThan(80);
+		expect(box.distanceTo(new THREE.Vector3(0.2, 0, 0.12))).toBeGreaterThan(0.05);
+	});
+
+	it('stalls on a thing caught between it and a wall, and does not crush it', async () => {
+		// Its near side 15 cm out: the door meets it at about 30° open.
+		const { angle, box } = await swing(true, [0.2, 0.19]);
+		expect(angle).toBeLessThan(45);
+		expect(box.z).toBeLessThan(0.21);
 	});
 });

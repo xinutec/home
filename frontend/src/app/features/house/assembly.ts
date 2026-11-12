@@ -132,6 +132,20 @@ function motion(parts: Part[], part: Part, key: (p: Part) => string, state: Join
 	return m;
 }
 
+/** Where a part's own joint is in the room: a hinge's line (a point on it, and
+ *  up), or a slide's direction from the part's middle, shut. */
+export function jointInRoom(
+	f: Furniture,
+	part: Part,
+): { origin: [number, number, number]; axis: [number, number, number] } {
+	const j = part.joint;
+	if (!j) throw new Error(`${pieceId(f)}/${part.id} has no joint`);
+	const frame = pieceMove(f);
+	if (j.type === 'hinge') return { origin: apply(frame, ...j.pivot), axis: [0, 1, 0] };
+	const turn = { ...frame, tx: 0, ty: 0, tz: 0 };
+	return { origin: apply(frame, ...part.at), axis: apply(turn, ...j.axis) };
+}
+
 /** Every part of a piece, placed in the room. */
 export function solidsOf(f: Furniture, state: JointState = {}): Solid[] {
 	const piece = pieceId(f);

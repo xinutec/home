@@ -1,32 +1,20 @@
 import * as THREE from 'three';
-import { partsOf, pieceId, solidsOf } from './assembly';
+import { jointInRoom, partsOf, pieceId, solidsOf } from './assembly';
 import type { JointState, Solid } from './assembly';
 import type { LightChange } from './bake-file';
+import type { JointSpec } from './dynamics';
 import type { Furniture, HouseScene, Joint } from './house.model';
-
-/** Milliseconds a joint takes over its whole travel: a door swung, a drawer pulled. */
-const TRAVEL_MS = 700;
 
 /** Places along a joint's travel its reach is taken at: a door's arc, to within
  *  a millimetre or so of its corner's path. */
 const REACH_STEPS = 24;
-
-/** A joint on its way: from a value, to one, starting when, for how long. */
-interface Run {
-	from: number;
-	to: number;
-	start: number;
-	ms: number;
-}
+/** How little a joint moves (degrees, metres) for it to be left where it is drawn:
+ *  a tenth of a millimetre at a door's edge. */
+const STILL = 1e-4;
 
 /** A solid's place in the room, as a matrix. */
 function pose(s: Solid): THREE.Matrix4 {
 	return new THREE.Matrix4().makeRotationY(s.yaw).setPosition(s.x, (s.y0 + s.y1) / 2, s.z);
-}
-
-/** Eased in and out: a hand starts and stops a door gently. */
-function ease(t: number): number {
-	return t * t * (3 - 2 * t);
 }
 
 /**
@@ -34,15 +22,14 @@ function ease(t: number): number {
  * meshes `mergeStatic` keeps for its joint (`userData.moves`), drawn at rest where
  * they stand shut: a joint's value places them by the move its part makes from
  * there, as the physics places the part (`solidsOf`). One opens to its stop, where
- * it meets something (as the gate found it), else its travel's end.
+ * it meets something (as the gate found it), else its travel's end. Opened and
+ * shut by the physics (`driveBy`), where a motor moves each as a hand would.
  */
 export class Joints {
 	private readonly state: JointState = {};
-	private readonly runs = new Map<string, Run>();
-	/** Where each running joint stood the frame before: clear of what jams it next. */
-	private readonly before = new Map<string, number>();
-	/** Where a joint stopped by a jam was going, so a tap turns it back. */
-	private readonly stoppedShort = new Map<string, number>();
+	/** What moves the joints, and where each was last sent. */
+	private drive?: Drive;
+	private readonly aims = new Map<string, number>();
 	private readonly joints = new Map<string, { piece: Furniture; part: string; joint: Joint }>();
 	private readonly moving = new Map<string, THREE.Mesh[]>();
 
@@ -132,41 +119,54 @@ export class Joints {
 		}
 	}
 
-	/** Opens a joint that is shut or shutting, shuts one that is open or opening. */
-	toggle(key: string, now: number): void {
-		const { range } = this.joint(key).joint;
-		const [closed, open] = [range[0], this.openAt(key)];
-		const run = this.runs.get(key);
-		const from = this.value(key);
-		const short = this.stoppedShort.get(key);
-		this.stoppedShort.delete(key);
-		const opening = run ? run.to !== open : short !== undefined ? short !== open : from === closed;
-		const to = opening ? open : closed;
-		const ms = (TRAVEL_MS * Math.abs(to - from)) / Math.abs(range[1] - range[0]);
-		this.runs.set(key, { from, to, start: now, ms });
+	/** Each joint with something drawn on it, as the physics puts it in the room. */
+	specs(): JointSpec[] {
+		return this.keys().map((key) => {
+			const { piece, part, joint } = this.joint(key);
+			const p = partsOf(piece).find((q) => q.id === part);
+			if (!p) throw new Error(`no part ${key}`);
+			const { origin, axis } = jointInRoom(piece, p);
+			return {
+				key,
+				type: joint.type,
+				origin: new THREE.Vector3(...origin),
+				axis: new THREE.Vector3(...axis),
+				limits: [this.closedAt(key), this.openAt(key)],
+			};
+		});
 	}
 
-	/** Moves every joint on its way to where it is at `now`; true while any still moves. */
-	update(now: number): boolean {
-		for (const [key, run] of this.runs) {
-			this.before.set(key, this.value(key));
-			const t = run.ms > 0 ? Math.min(1, (now - run.start) / run.ms) : 1;
-			this.set(key, t >= 1 ? run.to : run.from + (run.to - run.from) * ease(Math.max(0, t)));
-			if (t >= 1) this.runs.delete(key);
+	/** Opened and shut from now on by `drive` (the physics). */
+	driveBy(drive: Drive): void {
+		this.drive = drive;
+	}
+
+	/** Opens a joint that is shut or shutting, shuts one that is open or opening, or
+	 *  stopped on its way there. */
+	toggle(key: string): void {
+		if (!this.drive) throw new Error('nothing drives the joints');
+		const [closed, open] = [this.closedAt(key), this.openAt(key)];
+		// Never sent: where it stands, nearer shut or open (at rest it settles a
+		// hair off either).
+		const going = this.aims.get(key) ?? (this.openness(key) < 0.5 ? closed : open);
+		const to = going === open ? closed : open;
+		this.aims.set(key, to);
+		this.drive.aim(key, to);
+	}
+
+	/** Each joint where the physics has it now, sent somewhere or pushed; true while
+	 *  any still moves. */
+	update(): boolean {
+		const drive = this.drive;
+		if (!drive) return false;
+		let moving = false;
+		for (const key of this.keys()) {
+			if (!drive.moving(key)) continue;
+			moving = true;
+			const v = drive.at(key);
+			if (Math.abs(v - this.value(key)) > STILL) this.set(key, v);
 		}
-		return this.runs.size > 0;
-	}
-
-	/** Stops a running joint that has met something it cannot push away (a cushion
-	 *  caught between a drawer and its cupboard): back where it stood the frame
-	 *  before, and there it stays, as a drawer stops on what is in its way. */
-	stop(key: string): void {
-		const run = this.runs.get(key);
-		if (!run) return;
-		this.runs.delete(key);
-		this.stoppedShort.set(key, run.to);
-		const back = this.before.get(key);
-		if (back !== undefined) this.set(key, back);
+		return moving;
 	}
 
 	private joint(key: string): { piece: Furniture; part: string; joint: Joint } {
@@ -174,6 +174,14 @@ export class Joints {
 		if (!j) throw new Error(`no joint ${key}`);
 		return j;
 	}
+}
+
+/** What moves the joints (`Dynamics`): sends one toward a value, says where it is
+ *  and whether it still moves. */
+export interface Drive {
+	aim(key: string, value: number): void;
+	at(key: string): number;
+	moving(key: string): boolean;
 }
 
 /**

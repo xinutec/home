@@ -70,6 +70,9 @@ export class MaterialLibrary {
 		// under its picture, whether the picture is loaded here or not, so the room is
 		// built alike in the page and in Node).
 		mat.userData['albedo'] = mat.color.clone();
+		// Kept by its copies (Material.copy copies userData): its probe's reflection
+		// gives way to the pane's own (`PlanarReflections`).
+		if (spec.planar) mat.userData['planar'] = true;
 		if (spec.image) mat.color.set(0xffffff);
 		if (spec.image && this.textures) {
 			const map = new THREE.TextureLoader().load(`/api/house/images/${spec.image}`, () =>

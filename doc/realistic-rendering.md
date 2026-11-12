@@ -66,6 +66,14 @@ how it is judged done.
    went from a red smear to dark with the tracer's faint band, and the fireplace
    iron took the rug's blue as the tracer's does. Each room's probe now stands
    PROBE_HEIGHT over its own floor (upstairs ones stood below theirs).
+   The TV's glass reflects the room as it is (`PlanarReflections`, a material's
+   `planar`, the settings' "The TV reflects the room as it is"): the room drawn
+   again from the eye mirrored in it, 384 pixels across, before the frame and only
+   with the TV in view, read 3.5 mip levels down for the glass's blur, by glass's
+   Fresnel reflectance. Against the path tracer from the sofa it blurs alike (the
+   doorway behind the eye a soft dark band); the screen's mean is 14 of 255
+   (the probe's 15, the tracer's 9). On the Mac it adds 0.3 ms of GPU with the TV
+   in view.
 
 ## Where it stands
 
