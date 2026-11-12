@@ -35,8 +35,8 @@ instant to epoch ms once, in `ApiService`.
 
 ## Deploy
 
-Push to main → CI builds and pushes `xinutec/home:latest` → `scripts/deploy.sh`
-(`kubectl -n home rollout restart` on isis). Label and offset changes need no
+Push to main → CI builds and pushes `xinutec/home:latest` →
+`kubes/deploy.sh home` from the kubes checkout (the deploy plan's roll-forward). Label and offset changes need no
 migration: the DB is raw.
 
 ## Smart-plug energy monitoring (postponed)

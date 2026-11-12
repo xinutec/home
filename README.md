@@ -64,4 +64,4 @@ First time:
    enable their launchd timers.
 
 Every change: push to `main` (CI builds `xinutec/home:latest`), then
-`scripts/deploy.sh`.
+`kubes/deploy.sh home` from the kubes checkout once that run is green.
