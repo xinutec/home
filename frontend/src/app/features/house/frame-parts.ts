@@ -1,11 +1,12 @@
-/** A frame's work, ms, past which it is reported: a 60 Hz frame's budget and a bit;
- *  at 120 Hz a frame past it has cost the screen at least two refreshes. */
+/** Milliseconds a frame is shown after the one before it past which it is reported:
+ *  a 60 Hz frame's budget and a bit; at 120 Hz it has missed at least two refreshes. */
 export const SLOW_MS = 20;
 /** Milliseconds between batches sent, and the most slow frames one carries. */
 const SEND_EVERY_MS = 10_000;
 const MOST_A_BATCH = 50;
 
-/** One slow frame: when (epoch ms), where, how long, and each part's share. */
+/** One slow frame: when (epoch ms), where, how long after the one before it it was
+ *  shown, and how long each part of its work took on the CPU. */
 export interface SlowFrame {
 	at: number;
 	room: string;
@@ -61,7 +62,7 @@ export class SlowFrames {
 		document.addEventListener('visibilitychange', this.hidden);
 	}
 
-	/** A frame drawn, its work `ms` long, by part. */
+	/** A frame shown `ms` after the one before it, its work by part. */
 	frame(ms: number, parts: Record<string, number>): void {
 		this.frames++;
 		if (ms <= SLOW_MS || this.slow.length >= MOST_A_BATCH) return;

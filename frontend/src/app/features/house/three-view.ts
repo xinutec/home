@@ -40,14 +40,19 @@ export class ThreeView {
 	/** Each frame's work timed by part: the loop marks its own, `beforeRender` may
 	 *  mark finer ones (`parts.mark`). */
 	readonly parts = new FrameParts();
-	/** Told each frame's work (ms) and its parts, as it ends. */
-	onFrame?: (ms: number, parts: Record<string, number>) => void;
+	/** Told each frame, as it ends: how long after the frame before it it was shown
+	 *  (its work, where it followed none), and its work's parts. */
+	onFrame?: (seen: number, parts: Record<string, number>) => void;
 
 	/** What moves the camera in place of the orbit controls, once set (walking):
 	 *  its update moves it for a frame and says whether it is still moving. */
 	private mover?: { update(): boolean; dispose(): void };
 
 	private frame = 0;
+	/** When the last frame was shown (the browser's frame time), and whether it asked
+	 *  for the next straight on: then the next one's gap is what the eye sees. */
+	private shownAt?: number;
+	private followed = false;
 	/** When the view last changed for a reason of its own (ms): the image stage
 	 *  settles after it (`ImageStage.settling`). */
 	private active = 0;
@@ -89,8 +94,12 @@ export class ThreeView {
 		if (this.paused || this.framePending) return;
 		this.framePending = true;
 		this.zone.runOutsideAngular(() => {
-			this.frame = requestAnimationFrame(() => {
+			this.frame = requestAnimationFrame((shown) => {
 				const start = performance.now();
+				// What the eye sees: how long after the frame before this one is shown, if
+				// it followed straight on; the GPU falling behind lengthens it.
+				const gap = this.followed && this.shownAt !== undefined ? shown - this.shownAt : undefined;
+				this.shownAt = shown;
 				this.parts.begin(start);
 				this.framePending = false;
 				let moving = false;
@@ -111,16 +120,17 @@ export class ThreeView {
 				const more = this.afterRender?.(performance.now()) ?? false;
 				if (more) this.active = start;
 				this.gpu?.end();
-				this.parts.mark('meter');
+				this.parts.mark('after');
 				const end = performance.now();
-				this.frames.frame(end, end - start);
+				this.frames.frame(end, end - start, gap);
 				const work = this.parts.end(end);
-				this.onFrame?.(work.ms, work.parts);
+				this.onFrame?.(gap ?? work.ms, work.parts);
 				for (const ms of this.gpu?.done() ?? []) {
 					this.frames.gpu(end, ms);
 					this.onGpuTime?.(ms);
 				}
-				if (moving || more) this.requestFrame();
+				this.followed = moving || more;
+				if (this.followed) this.requestFrame();
 			});
 		});
 	}

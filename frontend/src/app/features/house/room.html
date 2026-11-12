@@ -25,18 +25,6 @@
 		</button>
 		@if (settingsOpen()) {
 			<div class="settings" role="group" aria-label="View settings">
-				<div class="setting">
-					<label for="glow-slider">Glow</label>
-					<mat-slider min="0" max="1" step="0.05">
-						<input
-							id="glow-slider"
-							aria-label="Glow"
-							matSliderThumb
-							[value]="glow()"
-							(valueChange)="setGlow($event)"
-						/>
-					</mat-slider>
-				</div>
 				@if (who(); as w) {
 					@if (w.signedIn) {
 						<p class="settings-note">Sending performance reports as {{ w.name }}</p>

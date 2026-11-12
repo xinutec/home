@@ -14,7 +14,6 @@ import { catchError, filter, forkJoin, map, of, tap } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
-import { MatSliderModule } from '@angular/material/slider';
 import { ActivatedRoute } from '@angular/router';
 import { scaffoldTitle } from '@xinutec/ui-scaffold';
 import * as THREE from 'three';
@@ -45,7 +44,6 @@ import { oneMaterialEach, picturesLoaded } from './trace-scene';
 import { Joints } from './joints';
 import { WalkControls } from './walk';
 import { type ImageStage, imageStage } from './image-stage';
-import { readGlow, writeGlow } from './glow-setting';
 
 declare global {
 	interface Window {
@@ -123,7 +121,7 @@ const TRACE_BUDGET_MS = 30;
 	selector: 'app-room',
 	templateUrl: './room.html',
 	styleUrl: './room.scss',
-	imports: [MatButtonModule, MatIconModule, MatProgressBarModule, MatSliderModule],
+	imports: [MatButtonModule, MatIconModule, MatProgressBarModule],
 })
 export class RoomPage implements AfterViewInit, OnDestroy {
 	readonly empty = signal(false);
@@ -138,19 +136,18 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 	readonly mouse = typeof matchMedia === 'function' && matchMedia('(pointer: fine)').matches;
 	/** Whether the walker has looked or moved yet: the hint shows until then. */
 	readonly moved = signal(false);
-	/** Frames a second while the view moves, and the slowest frame; `idle` while still. */
+	/** Frames a second while the view moves, the longest gap between frames shown, the
+	 *  most CPU work one took; `idle` while still. */
 	readonly fps = signal('');
 	/** With `?stats`: what one frame costs, once measured. */
 	readonly stats = signal('');
-	/** The view's settings panel, open or not, and its glow (0 to 1: how much light
-	 *  the lens scatters round bright things), kept on the device. */
+	/** The view's settings panel, open or not. */
 	readonly settingsOpen = signal(false);
 	/** Who is signed in here, once asked (`/api/me`): the view's slow frames are
 	 *  sent only from a signed-in browser (`SlowFrames`). */
 	readonly who = signal<{ signedIn: boolean; name?: string } | undefined>(undefined);
 	/** Sign-in, coming back to this view as it was opened. */
 	readonly signInUrl = `/login?return_to=${encodeURIComponent(location.pathname + location.search)}`;
-	readonly glow = signal(readGlow());
 	/** What draws the walked view, once walking. */
 	private stage?: ImageStage;
 	readonly room = inject(ActivatedRoute).snapshot.paramMap.get('room') ?? '';
@@ -203,7 +200,9 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 						? ''
 						: ` · gpu ${r.gpu} ms`
 					: ' · no gpu timer';
-				const text = r ? `${r.fps} fps · slowest ${r.slowest} ms${gpu}` : 'idle';
+				const text = r
+					? `${r.fps} fps · slowest ${r.slowest} ms · work ${r.work} ms${gpu}`
+					: 'idle';
 				if (text !== this.fps()) this.zone.run(() => this.fps.set(text));
 			}, FPS_READ_MS);
 		});
@@ -446,7 +445,6 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			this.crosshair().nativeElement,
 		);
 		view.useMover(walker);
-		stage.glow(this.glow());
 		this.stage = stage;
 		view.useStage(stage);
 		if (this.query.stats) this.measure(view);
@@ -660,14 +658,6 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			next: (me) => this.who.set(me),
 			error: (e: unknown) => console.warn('could not ask who is signed in', e),
 		});
-	}
-
-	/** Sets the glow from the settings' slider: drawn at once, kept for next time. */
-	setGlow(glow: number): void {
-		this.glow.set(glow);
-		writeGlow(glow);
-		this.stage?.glow(glow);
-		this.view?.requestFrame();
 	}
 
 	/** Draws frames back to back, as the walker sees them (the image stage), for 3 s

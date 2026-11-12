@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { type GpuExposure, easeExposure } from './exposure';
@@ -37,8 +36,6 @@ export interface ImageStage {
 	 *  in, to the colour of `white` (that room's daylight, which the paints were
 	 *  fitted under, as the phone balanced it), eased as the exposure is. */
 	balance(light: [number, number, number], white: [number, number, number]): void;
-	/** How much light the lens scatters: 0 none, 1 the most (the glow setting). */
-	glow(glow: number): void;
 	/** Whether it still settles, the view last changed `quiet` ms ago. */
 	settling(quiet: number, now: number): boolean;
 	/** Aims the exposure at `key` (the evening's, the day's), where it follows the
@@ -152,19 +149,6 @@ class ReceiverGTAOPass extends GTAOPass {
 	}
 }
 
-/** The most of the light a lens may scatter round it (its point spread), as the
- *  glow setting's top: the image is mixed that far toward its blur, so no light is
- *  added or taken. Jimenez's 4% (Call of Duty: Advanced Warfare, SIGGRAPH 2014) is
- *  half of it. It looked a bit much, and on a phone at 120 Hz it costs frames
- *  their time, so the setting starts at none (`GLOW_DEFAULT`). */
-const BLOOM_MOST = 0.08;
-/** The glow setting a first visit starts at, of BLOOM_MOST. */
-export const GLOW_DEFAULT = 0;
-/** Levels the blur is built from, each a quarter the last's width (a pass each,
- *  and on a phone each pass costs for itself, however small): the widest, at 1/64
- *  of the screen, spreads a window's glow a tenth of the view. */
-const BLOOM_LEVELS = 3;
-
 /** `text` with `from` once replaced by `to`; three's shader changing under us throws. */
 function swapIn(text: string, from: string, to: string, what: string): string {
 	if (!text.includes(from)) throw new Error(`three's ${what} shader has no ${from}`);
@@ -172,114 +156,38 @@ function swapIn(text: string, from: string, to: string, what: string): string {
 }
 
 /**
- * What a camera does with the light, in one pass over the frame (three's tone curve
- * and exposure, `OutputPass`, with two steps put before them):
- *
- * - White balance: the frame's light scaled so that the light filling the room
- *   comes out the colour of a white light (`see`), eased toward it as the exposure
- *   is. A warm lamp's room comes out near the daylight's colour, as a phone shows
- *   it; the light is known, so no colour in the view (a blue rug) is taken for it.
- * - Bloom, as a lens scatters light: the frame quartered in width BLOOM_LEVELS
- *   times (the first weighted against single bright pixels so a lamp's glint does
- *   not flicker), each level added back up into the one above it through a tent
- *   filter, and the frame mixed toward the sum by the glow setting. Every pixel
- *   scatters; only the brightest (windows, lamps) scatter enough to see.
+ * What a camera does with the light, in one pass over the frame: three's tone curve
+ * (`OutputPass`), with the white balance and the exposure before it. The white
+ * balance scales the frame's light so that the light filling the room comes out the
+ * colour of a white light (`see`), eased as the exposure is: a warm lamp's room
+ * comes out near the daylight's colour, as a phone shows it; the light is known, so
+ * no colour in the view (a blue rug) is taken for it.
  */
 class CameraPass extends OutputPass {
 	private readonly gain = new THREE.Vector3(1, 1, 1);
 	private wanted?: [number, number, number];
 	private last?: number;
-	private readonly levels: THREE.WebGLRenderTarget[] = [];
-	/** A texel of the level each step reads. */
-	private readonly downTexel = new THREE.Vector2();
-	private readonly upTexel = new THREE.Vector2();
-	private readonly down = new FullScreenQuad(
-		new THREE.ShaderMaterial({
-			uniforms: {
-				tDiffuse: { value: null },
-				texel: { value: this.downTexel },
-				first: { value: 0 },
-			},
-			vertexShader: QUAD_VERTEX,
-			fragmentShader: `
-				uniform sampler2D tDiffuse;
-				uniform vec2 texel;
-				uniform float first;
-				varying vec2 vUv;
-				vec3 at(float x, float y) { return texture2D(tDiffuse, vUv + texel * vec2(x, y)).rgb; }
-				// A tap's weight: on the first level, less the brighter it is (Karis).
-				float w(vec3 c) { return first > 0.5 ? 1.0 / (1.0 + dot(c, vec3(0.2126, 0.7152, 0.0722))) : 1.0; }
-				void main() {
-					// Four taps, each between four texels: the 4 × 4 texels this pixel covers.
-					vec3 a = at(-1.0, -1.0), b = at(1.0, -1.0), c = at(-1.0, 1.0), d = at(1.0, 1.0);
-					float wa = w(a), wb = w(b), wc = w(c), wd = w(d);
-					gl_FragColor = vec4((a * wa + b * wb + c * wc + d * wd) / (wa + wb + wc + wd), 1.0);
-				}`,
-		}),
-	);
-	private readonly up = new FullScreenQuad(
-		new THREE.ShaderMaterial({
-			uniforms: { tDiffuse: { value: null }, texel: { value: this.upTexel } },
-			vertexShader: QUAD_VERTEX,
-			fragmentShader: `
-				uniform sampler2D tDiffuse;
-				uniform vec2 texel;
-				varying vec2 vUv;
-				vec3 at(float x, float y) { return texture2D(tDiffuse, vUv + texel * vec2(x, y)).rgb; }
-				void main() {
-					vec3 s = at(-1.0, -1.0) + at(1.0, -1.0) + at(-1.0, 1.0) + at(1.0, 1.0);
-					s += 2.0 * (at(0.0, -1.0) + at(-1.0, 0.0) + at(1.0, 0.0) + at(0.0, 1.0));
-					s += 4.0 * at(0.0, 0.0);
-					gl_FragColor = vec4(s / 16.0, 1.0);
-				}`,
-			// Added onto the level above, which holds that level's own copy.
-			blending: THREE.AdditiveBlending,
-			depthTest: false,
-			depthWrite: false,
-		}),
-	);
 
 	/** `exposure`: the view-following one, which this pass applies, else the
 	 *  renderer's fixed `toneMappingExposure` alone. */
 	constructor(private readonly exposure?: GpuExposure) {
 		super();
-		for (let i = 0; i < BLOOM_LEVELS; i++)
-			this.levels.push(
-				new THREE.WebGLRenderTarget(1, 1, {
-					type: THREE.HalfFloatType,
-					minFilter: THREE.LinearFilter,
-					magFilter: THREE.LinearFilter,
-					depthBuffer: false,
-				}),
-			);
 		const m = this.material;
 		m.uniforms['gain'] = { value: this.gain };
 		m.uniforms['exposureMap'] = { value: exposure?.texture ?? null };
-		m.uniforms['tBloom'] = { value: this.levels[0].texture };
-		m.uniforms['bloomShare'] = this.share;
 		m.fragmentShader = swapIn(
 			m.fragmentShader,
 			'uniform sampler2D tDiffuse;',
-			`uniform sampler2D tDiffuse;\nuniform vec3 gain;\nuniform sampler2D tBloom;\nuniform float bloomShare;${exposure ? '\nuniform sampler2D exposureMap;' : ''}`,
+			`uniform sampler2D tDiffuse;\nuniform vec3 gain;${exposure ? '\nuniform sampler2D exposureMap;' : ''}`,
 			'output',
 		);
 		m.fragmentShader = swapIn(
 			m.fragmentShader,
 			'gl_FragColor = texture2D( tDiffuse, vUv );',
 			`gl_FragColor = texture2D( tDiffuse, vUv );
-			// The levels summed, each a whole image's light: their mean is one.
-			vec3 bloom = texture2D( tBloom, vUv ).rgb / ${BLOOM_LEVELS.toFixed(1)};
-			gl_FragColor.rgb = mix( gl_FragColor.rgb, bloom, bloomShare ) * gain${exposure ? ' * texture2D( exposureMap, vec2( 0.5 ) ).r' : ''};`,
+			gl_FragColor.rgb *= gain${exposure ? ' * texture2D( exposureMap, vec2( 0.5 ) ).r' : ''};`,
 			'output',
 		);
-	}
-
-	/** The share of the light scattered, as the glow setting puts it. */
-	private readonly share = { value: GLOW_DEFAULT * BLOOM_MOST };
-
-	/** Scatters `glow` (0 to 1) of BLOOM_MOST from the next frame. */
-	glow(glow: number): void {
-		this.share.value = Math.min(1, Math.max(0, glow)) * BLOOM_MOST;
 	}
 
 	/** Whether the white balance still eases toward the light last seen. */
@@ -296,13 +204,6 @@ class CameraPass extends OutputPass {
 		if (first) this.gain.fromArray(this.wanted);
 	}
 
-	override setSize(width: number, height: number): void {
-		super.setSize(width, height);
-		this.levels.forEach((t, i) =>
-			t.setSize(Math.max(1, width >> (2 * i + 2)), Math.max(1, height >> (2 * i + 2))),
-		);
-	}
-
 	override render(
 		renderer: THREE.WebGLRenderer,
 		writeBuffer: THREE.WebGLRenderTarget,
@@ -316,68 +217,18 @@ class CameraPass extends OutputPass {
 		const w = this.wanted;
 		if (w) this.gain.fromArray(this.gain.toArray().map((g, c) => easeExposure(g, w[c], dt)));
 		if (!this.settling) this.last = undefined;
-		// No glow, no blur to make.
-		if (this.share.value > 0) this.bloom(renderer, readBuffer);
 		this.exposure?.update(renderer, readBuffer.texture, now);
 		if (this.exposure) this.material.uniforms['exposureMap'].value = this.exposure.texture;
 		super.render(renderer, writeBuffer, readBuffer, deltaTime, maskActive);
 	}
-
-	override dispose(): void {
-		super.dispose();
-		for (const t of this.levels) t.dispose();
-		for (const q of [this.down, this.up]) {
-			shaderOf(q).dispose();
-			q.dispose();
-		}
-	}
-
-	/** The frame's blur, summed over its levels, into the first level. */
-	private bloom(renderer: THREE.WebGLRenderer, frame: THREE.WebGLRenderTarget): void {
-		const down = shaderOf(this.down);
-		let from = frame;
-		this.levels.forEach((to, i) => {
-			down.uniforms['tDiffuse'].value = from.texture;
-			this.downTexel.set(1 / from.width, 1 / from.height);
-			down.uniforms['first'].value = i === 0 ? 1 : 0;
-			renderer.setRenderTarget(to);
-			this.down.render(renderer);
-			from = to;
-		});
-		const up = shaderOf(this.up);
-		const autoClear = renderer.autoClear;
-		renderer.autoClear = false;
-		for (let i = this.levels.length - 1; i > 0; i--) {
-			const [to, small] = [this.levels[i - 1], this.levels[i]];
-			up.uniforms['tDiffuse'].value = small.texture;
-			this.upTexel.set(1 / small.width, 1 / small.height);
-			renderer.setRenderTarget(to);
-			this.up.render(renderer);
-		}
-		renderer.autoClear = autoClear;
-	}
 }
-
-function shaderOf(quad: FullScreenQuad): THREE.ShaderMaterial {
-	const m = quad.material;
-	if (!(m instanceof THREE.ShaderMaterial)) throw new Error('an image stage pass lost its shader');
-	return m;
-}
-
-/** A full-screen quad's vertex shader: its corners as they are. */
-const QUAD_VERTEX = `
-	varying vec2 vUv;
-	void main() {
-		vUv = uv;
-		gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-	}`;
 
 /**
  * The image as a camera makes it from the room's light: the room drawn into a
  * buffer that keeps light past white (half floats), then darkened where things
  * meet (ground-truth ambient occlusion, GTAO, on the screen, by who may darken
- * whom: `ReceiverGTAOPass`), then white balanced, scattered as a lens does and put
- * through the tone curve and exposure the renderer is set to, in one pass
+ * whom: `ReceiverGTAOPass`), then white balanced, exposed and put through the tone
+ * curve, in one pass
  * (`CameraPass`), then its edges smoothed (SMAA).
  */
 export function imageStage(
@@ -411,7 +262,6 @@ export function imageStage(
 	return {
 		composer,
 		balance: (light, white) => lens.see(light, white),
-		glow: (glow) => lens.glow(glow),
 		settling: (quiet, now) => lens.settling || !!exposure?.settling(quiet, now),
 		aimExposure: (key) => exposure?.aim(key),
 	};

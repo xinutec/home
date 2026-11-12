@@ -90,19 +90,10 @@ Each step lands deployed, the view working throughout, its cost read on the phon
    and 18.0 (worse on kf1, the view the model gets right; better only where its
    flat curve hides the model's faults: a curtain 20× too dark, a ceiling twice as
    bright); Neutral 5.5, 18.6 and 26.1.
-   White balance, bloom and the tone curve are one pass (`CameraPass`): each
-   full-screen pass at a phone's size costs for itself. Bloom (Jimenez's: the frame
-   mixed 4% toward its blur, no threshold) takes kf822 16.9 → 12.9, most of it the
-   curtain beside the window (×0.05 → ×0.50 of the photo's light), where lens
-   scatter and the curtain's own fault cannot be told apart. On the Mac it costs
-   4-5 ms a frame (`e2e/frame-cost.ts`, interleaved runs: 5.3-7.0 ms without,
-   9.2-12.7 with), the same on 8 × 8 targets as on real ones: the passes, not
-   their pixels. On the phone it costs about 0.4 ms (Pixel 9, `?stats` at its
-   120 Hz: 116 fps without, 111 with; its browser has no GPU timer), so it is on,
-   at a strength the viewer sets: the view's settings (top left) have a Glow
-   slider, kept on the device, from none (no bloom passes at all) to 8%. It starts
-   at none: 4% looked a bit much, and walking on the phone felt jittery at 60-80
-   fps on its 120 Hz screen.
+   White balance, exposure and the tone curve are one pass (`CameraPass`): each
+   full-screen pass at a phone's size costs for itself. Bloom was built (the frame
+   mixed toward its blur, Jimenez's) and taken out again (12 November): it looked
+   a bit much, and walking on the phone felt slower with it.
 4. **Shadows of what moves.** A shadow map of moving things from the light that
    dominates, blended into the bake. Done when a cushion's shadow falls where the
    path tracer puts it.
