@@ -1,15 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { easeExposure, logAverage } from './exposure';
-
-describe('logAverage', () => {
-	it('is the geometric mean of luminance, so one bright window does not swamp the room', () => {
-		const grey = (l: number) => [l, l, l, 1];
-		expect(logAverage([...grey(0.01), ...grey(0.01)])).toBeCloseTo(0.01);
-		// One pixel 100 times brighter than three others raises the mean ~3.2 times, not 25.
-		const room = [...grey(0.01), ...grey(0.01), ...grey(0.01), ...grey(1)];
-		expect(logAverage(room) / 0.01).toBeCloseTo(Math.pow(100, 1 / 4));
-	});
-});
+import { easeExposure } from './exposure';
 
 describe('easeExposure', () => {
 	it('goes evenly in stops, most of the way in its adapt time', () => {

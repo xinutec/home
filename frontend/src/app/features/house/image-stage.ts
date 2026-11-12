@@ -5,7 +5,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
-import { easeExposure } from './exposure';
+import { type GpuExposure, easeExposure } from './exposure';
 
 /** The layer the things that move are drawn on as well (`Movables`): the occlusion
  *  pass draws them alone by it. */
@@ -39,10 +39,11 @@ export interface ImageStage {
 	balance(light: [number, number, number], white: [number, number, number]): void;
 	/** How much light the lens scatters: 0 none, 1 the most (the glow setting). */
 	glow(glow: number): void;
-	/** The last frame's light before the tone curve, once one is drawn: what the
-	 *  exposure meters (`AutoExposure.frame`). */
-	frame(): THREE.Texture | undefined;
-	settling(): boolean;
+	/** Whether it still settles, the view last changed `quiet` ms ago. */
+	settling(quiet: number, now: number): boolean;
+	/** Aims the exposure at `key` (the evening's, the day's), where it follows the
+	 *  view. */
+	aimExposure(key: number): void;
 }
 
 /** The gains, red, green and blue, that make `light` (linear RGB) the colour of
@@ -186,9 +187,6 @@ function swapIn(text: string, from: string, to: string, what: string): string {
  */
 class CameraPass extends OutputPass {
 	private readonly gain = new THREE.Vector3(1, 1, 1);
-	/** The frame it last took, its light before the tone curve; the passes after
-	 *  write the other buffer, so it holds until the next frame. */
-	lastFrame?: THREE.Texture;
 	private wanted?: [number, number, number];
 	private last?: number;
 	private readonly levels: THREE.WebGLRenderTarget[] = [];
@@ -241,7 +239,9 @@ class CameraPass extends OutputPass {
 		}),
 	);
 
-	constructor() {
+	/** `exposure`: the view-following one, which this pass applies, else the
+	 *  renderer's fixed `toneMappingExposure` alone. */
+	constructor(private readonly exposure?: GpuExposure) {
 		super();
 		for (let i = 0; i < BLOOM_LEVELS; i++)
 			this.levels.push(
@@ -254,12 +254,13 @@ class CameraPass extends OutputPass {
 			);
 		const m = this.material;
 		m.uniforms['gain'] = { value: this.gain };
+		m.uniforms['exposureMap'] = { value: exposure?.texture ?? null };
 		m.uniforms['tBloom'] = { value: this.levels[0].texture };
 		m.uniforms['bloomShare'] = this.share;
 		m.fragmentShader = swapIn(
 			m.fragmentShader,
 			'uniform sampler2D tDiffuse;',
-			'uniform sampler2D tDiffuse;\nuniform vec3 gain;\nuniform sampler2D tBloom;\nuniform float bloomShare;',
+			`uniform sampler2D tDiffuse;\nuniform vec3 gain;\nuniform sampler2D tBloom;\nuniform float bloomShare;${exposure ? '\nuniform sampler2D exposureMap;' : ''}`,
 			'output',
 		);
 		m.fragmentShader = swapIn(
@@ -268,7 +269,7 @@ class CameraPass extends OutputPass {
 			`gl_FragColor = texture2D( tDiffuse, vUv );
 			// The levels summed, each a whole image's light: their mean is one.
 			vec3 bloom = texture2D( tBloom, vUv ).rgb / ${BLOOM_LEVELS.toFixed(1)};
-			gl_FragColor.rgb = mix( gl_FragColor.rgb, bloom, bloomShare ) * gain;`,
+			gl_FragColor.rgb = mix( gl_FragColor.rgb, bloom, bloomShare ) * gain${exposure ? ' * texture2D( exposureMap, vec2( 0.5 ) ).r' : ''};`,
 			'output',
 		);
 	}
@@ -317,7 +318,8 @@ class CameraPass extends OutputPass {
 		if (!this.settling) this.last = undefined;
 		// No glow, no blur to make.
 		if (this.share.value > 0) this.bloom(renderer, readBuffer);
-		this.lastFrame = readBuffer.texture;
+		this.exposure?.update(renderer, readBuffer.texture, now);
+		if (this.exposure) this.material.uniforms['exposureMap'].value = this.exposure.texture;
 		super.render(renderer, writeBuffer, readBuffer, deltaTime, maskActive);
 	}
 
@@ -384,6 +386,8 @@ export function imageStage(
 	camera: THREE.PerspectiveCamera,
 	width: number,
 	height: number,
+	/** The exposure following the view, unless it is fixed (`?exposure`). */
+	exposure?: GpuExposure,
 ): ImageStage {
 	const target = new THREE.WebGLRenderTarget(width, height, { type: THREE.HalfFloatType });
 	const composer = new EffectComposer(renderer, target);
@@ -398,7 +402,7 @@ export function imageStage(
 	ao.updatePdMaterial({ samples: DENOISE_SAMPLES });
 	ao.blendIntensity = AO_STRENGTH;
 	composer.addPass(ao);
-	const lens = new CameraPass();
+	const lens = new CameraPass(exposure);
 	composer.addPass(lens);
 	// Edges smoothed in the finished image, after the tone curve: smoothed before it
 	// (multisampling the buffer), a sliver of window or sky in an edge, its light
@@ -408,7 +412,7 @@ export function imageStage(
 		composer,
 		balance: (light, white) => lens.see(light, white),
 		glow: (glow) => lens.glow(glow),
-		settling: () => lens.settling,
-		frame: () => lens.lastFrame,
+		settling: (quiet, now) => lens.settling || !!exposure?.settling(quiet, now),
+		aimExposure: (key) => exposure?.aim(key),
 	};
 }

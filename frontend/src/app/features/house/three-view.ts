@@ -48,6 +48,9 @@ export class ThreeView {
 	private mover?: { update(): boolean; dispose(): void };
 
 	private frame = 0;
+	/** When the view last changed for a reason of its own (ms): the image stage
+	 *  settles after it (`ImageStage.settling`). */
+	private active = 0;
 	/** What draws the frame, if not the renderer straight to the canvas. */
 	private stage?: ImageStage;
 	private framePending = false;
@@ -98,12 +101,15 @@ export class ThreeView {
 				this.parts.mark('before');
 				// The GPU timed over what it draws for the frame and for its metering.
 				this.gpu?.begin();
+				// The last time something other than the image's settling moved the view.
+				if (moving) this.active = start;
 				if (this.stage) {
 					this.stage.composer.render();
-					if (this.stage.settling()) moving = true;
+					if (this.stage.settling(start - this.active, start)) moving = true;
 				} else this.renderer.render(this.scene, this.camera);
 				this.parts.mark('draw');
 				const more = this.afterRender?.(performance.now()) ?? false;
+				if (more) this.active = start;
 				this.gpu?.end();
 				this.parts.mark('meter');
 				const end = performance.now();

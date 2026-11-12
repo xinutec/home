@@ -27,7 +27,7 @@ import { LiveLight, addReflections, applyLightmap, showDaylight } from './baked-
 import { withModels } from './assembly';
 import type { HouseScene } from './house.model';
 import { cameraFromQuery } from './camera';
-import { AutoExposure } from './exposure';
+import { GpuExposure } from './exposure';
 import type { CameraQuery } from './camera';
 import { buildInterior } from './room-builder';
 import { type BakeStore, type LastBake, bakeHouse, fetchLastBake, lampRegions } from './house-bake';
@@ -99,9 +99,9 @@ function base64(bytes: Uint8Array): string {
 /** The everyday view's exposure in baked light (the sky's zenith is 1): between
  *  what compare-view solves against keyframes 1 and 822 (180, 80). */
 const BAKED_EXPOSURE = 150;
-/** The log-average linear light auto exposure brings to the screen's middle: keyframe
- *  1's view meters 0.00136 (`data-meter`), so the living room keeps about its fitted
- *  exposure, and the kitchen, metering ten times brighter, gets a tenth of it. */
+/** The log-average linear light the exposure brings to the screen's middle
+ *  (`GpuExposure`): keyframe 1's view metered 0.00136, so the living room keeps about
+ *  its fitted exposure, and the kitchen, metering ten times brighter, gets a tenth. */
 const AUTO_KEY = 0.2;
 /** AUTO_KEY in the evening: a lamp-lit room is darker than a daylit one, and a
  *  camera keeps it so. */
@@ -174,7 +174,8 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 	private movesLight?: ProbeLight;
 	/** The reflections, to capture again when the light changes. */
 	private recapture?: () => void;
-	private auto?: AutoExposure;
+	/** Whether the exposure follows the view as it is walked (`light`). */
+	private exposureFollows = false;
 	private readonly query: CameraQuery = cameraFromQuery(window.location.search);
 	private fpsTimer = 0;
 
@@ -348,12 +349,23 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			);
 		};
 		const host = this.host().nativeElement;
+		// Exposure from here on is the image stage's, multiplied in its camera pass.
+		const exposure = this.exposureFollows
+			? view.own(
+					new GpuExposure(
+						lamps?.evening ? EVENING_KEY : AUTO_KEY,
+						view.renderer.toneMappingExposure,
+					),
+				)
+			: undefined;
+		if (exposure) view.renderer.toneMappingExposure = 1;
 		const stage = imageStage(
 			view.renderer,
 			view.scene,
 			view.camera,
 			host.clientWidth,
 			host.clientHeight,
+			exposure,
 		);
 		view.beforeRender = (now) => {
 			// The light that fills the room the eye is in, balanced to its daylight's colour.
@@ -384,7 +396,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			showDaylight(view.scene, lamps.evening ? 0 : 1);
 			show();
 			this.recapture?.();
-			this.auto?.aim(lamps.evening ? EVENING_KEY : AUTO_KEY);
+			stage.aimExposure(lamps.evening ? EVENING_KEY : AUTO_KEY);
 			view.requestFrame();
 		};
 		if (lamps && this.query.night) lamps.allOn();
@@ -435,7 +447,6 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		);
 		view.useMover(walker);
 		stage.glow(this.glow());
-		if (this.auto) this.auto.frame = () => stage.frame();
 		this.stage = stage;
 		view.useStage(stage);
 		if (this.query.stats) this.measure(view);
@@ -525,20 +536,12 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			this.recapture = reflections.recapture;
 		}
 		view.renderer.toneMappingExposure = this.query.exposure ?? (applied ? BAKED_EXPOSURE : 1);
-		if (applied && this.query.exposure === undefined && AutoExposure.supported(view.renderer)) {
-			const auto = view.own(
-				new AutoExposure(view.renderer, view.camera, AUTO_KEY, BAKED_EXPOSURE, () =>
-					view.requestFrame(),
-				),
-			);
-			this.auto = auto;
-			const canvas = view.renderer.domElement;
-			view.afterRender = (now) => {
-				const easing = auto.update(now);
-				canvas.dataset['meter'] = auto.meter.toPrecision(3);
-				return easing;
-			};
-		}
+		// The exposure follows the view (`GpuExposure`, in the image stage) unless
+		// the URL fixed it; without float targets, it stays as fitted.
+		this.exposureFollows =
+			applied &&
+			this.query.exposure === undefined &&
+			view.renderer.extensions.has('EXT_color_buffer_float');
 		view.requestFrame();
 	}
 

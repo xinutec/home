@@ -174,8 +174,12 @@ export class Dynamics {
 	walk(feet: THREE.Vector3, dx: number, dz: number): THREE.Vector3 {
 		const across = { x: dx, y: 0, z: dz };
 		const flat = feet.clone().add(this.slide(feet, across).by);
-		const up = this.slide(feet, { x: 0, y: BODY.low, z: 0 }).by;
 		const length = Math.hypot(dx, dz);
+		// A step up is tried only where the flat move was held back: in the open the
+		// flat move went the whole way, and the four queries more cost most where they
+		// find most (beside the carved bay sofa, 5-10 ms a step on the Mac).
+		const held = Math.hypot(flat.x - feet.x, flat.z - feet.z) < length * 0.99;
+		const up = held ? this.slide(feet, { x: 0, y: BODY.low, z: 0 }).by : new THREE.Vector3();
 		if (up.y > 0 && length > 0 && this.roomFor(feet.clone().add(up), dx / length, dz / length)) {
 			const high = feet.clone().add(up);
 			const over = high.clone().add(this.slide(high, across).by);

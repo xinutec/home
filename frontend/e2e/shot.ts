@@ -101,7 +101,7 @@ const start = Date.now();
 // later, it starts the page's clock again from zero, and what kept the time before
 // (the physics, started once the room is drawn) sees time run backwards.
 if (a.tap) await page.clock.install();
-// --exposure auto leaves it to the page's meter, and prints what it read.
+// --exposure auto leaves it to the page's meter.
 const exposure = a.exposure === 'auto' ? '' : `&exposure=${a.exposure}`;
 await page.goto(
 	`${ORIGIN}/house/${a.room}?eye=${a.eye}&look=${a.look}&fov=${a.fov}${exposure}${trace}`,
@@ -121,7 +121,6 @@ for (const tap of a.tap ? a.tap.split(';') : []) {
 }
 writeFileSync(a.out, await canvas.screenshot());
 const box = await canvas.boundingBox();
-const meter = await canvas.getAttribute('data-meter');
 const physics = await canvas.getAttribute('data-physics');
 // The corner's frame rate, and the GPU's time where the browser can say it.
 const corner = await page
@@ -133,7 +132,6 @@ console.log(
 	JSON.stringify({
 		w: box?.width,
 		h: box?.height,
-		...(meter ? { meter: Number(meter) } : {}),
 		...(physics ? { physicsMs: Number(physics) } : {}),
 		...(corner ? { corner: corner.trim() } : {}),
 		...(a.trace ? { samples: Number(a.trace), seconds } : {}),
