@@ -90,6 +90,15 @@ Each step lands deployed, the view working throughout, its cost read on the phon
    and 18.0 (worse on kf1, the view the model gets right; better only where its
    flat curve hides the model's faults: a curtain 20× too dark, a ceiling twice as
    bright); Neutral 5.5, 18.6 and 26.1.
+   **On a phone the image stage cost its frames** (12 November, the phone's slow-
+   frame reports: frames shown 25-50 ms apart, three to six refreshes of its 120 Hz
+   screen, while the CPU's work stayed at 2-5 ms). It draws the room twice and runs
+   six full-screen passes where the view had one; at a phone's size the Mac's GPU
+   takes 5.6-6.1 ms a frame for it against 1.1-1.3 ms drawn straight to the screen,
+   and a phone's pays far more a pass. So it is a setting, off by default (the
+   view's settings: Fine image); the default draws the room straight to the screen
+   (the canvas's own anti-aliasing, exposure by `MeteredExposure`, no white balance
+   or contact shading). Each cost below was judged on the Mac, which hid this.
    White balance, exposure and the tone curve are one pass (`CameraPass`): each
    full-screen pass at a phone's size costs for itself. Bloom was built (the frame
    mixed toward its blur, Jimenez's) and taken out again (12 November): it looked

@@ -14,6 +14,7 @@ import { catchError, filter, forkJoin, map, of, tap } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { ActivatedRoute } from '@angular/router';
 import { scaffoldTitle } from '@xinutec/ui-scaffold';
 import * as THREE from 'three';
@@ -26,7 +27,7 @@ import { LiveLight, addReflections, applyLightmap, showDaylight } from './baked-
 import { withModels } from './assembly';
 import type { HouseScene } from './house.model';
 import { cameraFromQuery } from './camera';
-import { GpuExposure } from './exposure';
+import { GpuExposure, MeteredExposure } from './exposure';
 import type { CameraQuery } from './camera';
 import { buildInterior } from './room-builder';
 import { type BakeStore, type LastBake, bakeHouse, fetchLastBake, lampRegions } from './house-bake';
@@ -43,7 +44,8 @@ import { ThreeView } from './three-view';
 import { oneMaterialEach, picturesLoaded } from './trace-scene';
 import { Joints } from './joints';
 import { WalkControls } from './walk';
-import { type ImageStage, imageStage } from './image-stage';
+import { imageStage } from './image-stage';
+import { readFine, writeFine } from './image-setting';
 
 declare global {
 	interface Window {
@@ -121,7 +123,7 @@ const TRACE_BUDGET_MS = 30;
 	selector: 'app-room',
 	templateUrl: './room.html',
 	styleUrl: './room.scss',
-	imports: [MatButtonModule, MatIconModule, MatProgressBarModule],
+	imports: [MatButtonModule, MatIconModule, MatProgressBarModule, MatSlideToggleModule],
 })
 export class RoomPage implements AfterViewInit, OnDestroy {
 	readonly empty = signal(false);
@@ -148,8 +150,8 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 	readonly who = signal<{ signedIn: boolean; name?: string } | undefined>(undefined);
 	/** Sign-in, coming back to this view as it was opened. */
 	readonly signInUrl = `/login?return_to=${encodeURIComponent(location.pathname + location.search)}`;
-	/** What draws the walked view, once walking. */
-	private stage?: ImageStage;
+	/** Whether this device draws the fine image (`readFine`). */
+	readonly fine = readFine();
 	readonly room = inject(ActivatedRoute).snapshot.paramMap.get('room') ?? '';
 
 	private http = inject(HttpClient);
@@ -348,29 +350,46 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			);
 		};
 		const host = this.host().nativeElement;
-		// Exposure from here on is the image stage's, multiplied in its camera pass.
-		const exposure = this.exposureFollows
-			? view.own(
-					new GpuExposure(
-						lamps?.evening ? EVENING_KEY : AUTO_KEY,
-						view.renderer.toneMappingExposure,
-					),
+		// The fine image through the image stage, its exposure multiplied in its camera
+		// pass; else the room straight to the screen, its exposure metered.
+		const exposure =
+			this.exposureFollows && this.fine
+				? view.own(
+						new GpuExposure(
+							lamps?.evening ? EVENING_KEY : AUTO_KEY,
+							view.renderer.toneMappingExposure,
+						),
+					)
+				: undefined;
+		if (exposure) view.renderer.toneMappingExposure = 1;
+		const stage = this.fine
+			? imageStage(
+					view.renderer,
+					view.scene,
+					view.camera,
+					host.clientWidth,
+					host.clientHeight,
+					exposure,
 				)
 			: undefined;
-		if (exposure) view.renderer.toneMappingExposure = 1;
-		const stage = imageStage(
-			view.renderer,
-			view.scene,
-			view.camera,
-			host.clientWidth,
-			host.clientHeight,
-			exposure,
-		);
+		const metered =
+			this.exposureFollows && !this.fine
+				? view.own(
+						new MeteredExposure(
+							view.renderer,
+							view.scene,
+							view.camera,
+							lamps?.evening ? EVENING_KEY : AUTO_KEY,
+							view.renderer.toneMappingExposure,
+						),
+					)
+				: undefined;
+		if (metered) view.afterRender = (now) => metered.update(now);
 		view.beforeRender = (now) => {
 			// The light that fills the room the eye is in, balanced to its daylight's colour.
 			const light = this.movesLight;
 			const room = light?.at(view.camera.position);
-			if (light && room) stage.balance(light.light(room), light.daylight(room));
+			if (light && room) stage?.balance(light.light(room), light.daylight(room));
 			view.parts.mark('balance');
 			const opening = joints.update(now);
 			view.parts.mark('doors');
@@ -395,7 +414,8 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			showDaylight(view.scene, lamps.evening ? 0 : 1);
 			show();
 			this.recapture?.();
-			stage.aimExposure(lamps.evening ? EVENING_KEY : AUTO_KEY);
+			stage?.aimExposure(lamps.evening ? EVENING_KEY : AUTO_KEY);
+			metered?.aim(lamps.evening ? EVENING_KEY : AUTO_KEY);
 			view.requestFrame();
 		};
 		if (lamps && this.query.night) lamps.allOn();
@@ -445,8 +465,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			this.crosshair().nativeElement,
 		);
 		view.useMover(walker);
-		this.stage = stage;
-		view.useStage(stage);
+		if (stage) view.useStage(stage);
 		if (this.query.stats) this.measure(view);
 		// Slow frames, to the server: what stutters on a phone, as it happens.
 		const slow = view.own(new SlowFrames(this.room));
@@ -647,6 +666,13 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 				(e: unknown) => (host.dataset['baked'] = JSON.stringify({ error: String(e) })),
 			);
 		});
+	}
+
+	/** Switches the fine image on or off, kept on this device: the page reloads to
+	 *  draw the other way. */
+	setFine(fine: boolean): void {
+		writeFine(fine);
+		location.reload();
 	}
 
 	/** Opens or closes the view's settings; opening asks who is signed in. */

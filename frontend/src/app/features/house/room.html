@@ -25,6 +25,9 @@
 		</button>
 		@if (settingsOpen()) {
 			<div class="settings" role="group" aria-label="View settings">
+				<mat-slide-toggle [checked]="fine" (change)="setFine($event.checked)">
+					Fine image (slower)
+				</mat-slide-toggle>
 				@if (who(); as w) {
 					@if (w.signedIn) {
 						<p class="settings-note">Sending performance reports as {{ w.name }}</p>
