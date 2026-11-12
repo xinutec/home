@@ -68,7 +68,7 @@ export function buildInterior(
 		lit ?? {
 			meshes: [],
 			movables: [],
-			centres: new Map(),
+			extents: new Map(),
 			atlas: {
 				width: 0,
 				height: 0,
@@ -119,7 +119,7 @@ export function litRoom(
 		movables: stage.scene.children.filter(
 			(o): o is THREE.Mesh => o instanceof THREE.Mesh && o.userData['movable'] !== undefined,
 		),
-		centres: roomCentres(scene),
+		extents: roomExtents(scene),
 		atlas: unwrap(
 			meshes.map((m) => m.geometry),
 			LIGHTMAP_TEXEL,
@@ -304,12 +304,20 @@ function shellKind(o: THREE.Object3D): Exclude<SolidTag['kind'], 'part' | 'passa
 	throw new Error(`a room's shell made a mesh it did not name: ${o.type}`);
 }
 
-/** Each room's middle, by its outline's bounds: where its reflections are seen from. */
-function roomCentres(scene: HouseScene): Map<string, Pt> {
-	const out = new Map<string, Pt>();
+/** Each room's box, by its outline's bounds, floor to ceiling: its reflections are
+ *  seen from its middle and projected onto it. */
+function roomExtents(scene: HouseScene): Map<string, THREE.Box3> {
+	const out = new Map<string, THREE.Box3>();
 	for (const r of scene.rooms) {
-		const b = bounds(roomPerimeter(r));
-		if (r.name && b) out.set(r.name, { x: b.cx, z: b.cz });
+		const pts = roomPerimeter(r);
+		if (!r.name || pts.length === 0) continue;
+		const floor = r.floor ?? 0;
+		const box = new THREE.Box3();
+		for (const p of pts) {
+			box.expandByPoint(new THREE.Vector3(p.x, floor, p.z));
+			box.expandByPoint(new THREE.Vector3(p.x, floor + scene.height, p.z));
+		}
+		out.set(r.name, box);
 	}
 	return out;
 }
@@ -1196,8 +1204,8 @@ const LIGHTMAP_TEXEL = 0.02;
  *  the lightmap (its geometries' `uv1`). */
 export interface Lit {
 	meshes: THREE.Mesh[];
-	/** Each room's middle, by name: its meshes carry `userData.room`. */
-	centres: Map<string, Pt>;
+	/** Each room's box, floor to ceiling, by name: its meshes carry `userData.room`. */
+	extents: Map<string, THREE.Box3>;
 	atlas: Atlas;
 	/** What can be picked up, as drawn, apart from `meshes`: no lightmap, no bake. */
 	movables: THREE.Mesh[];

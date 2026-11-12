@@ -532,6 +532,9 @@ export function addReflections(
 	shadow?: MovingShadow,
 	/** What the moving things shade what is near them by, by day. */
 	occluders?: Occluders,
+	/** Whether each room's reflection is projected onto its box, seen from where
+	 *  the surface is, not from the room's middle (a uniform the settings switch). */
+	boxed: { value: boolean } = { value: true },
 ): { owned: { dispose(): void }[]; recapture: () => void } {
 	const owned: { dispose(): void }[] = [];
 	const byRoom = new Map<string, THREE.Mesh[]>();
@@ -542,11 +545,11 @@ export function addReflections(
 	// Every probe is captured before any surface reflects: none sees another's reflections.
 	const cameras = new Map<string, THREE.CubeCamera>();
 	for (const [room, meshes] of byRoom) {
-		const at = lit.centres.get(room);
-		const centre = at
-			? new THREE.Vector3(at.x, PROBE_HEIGHT, at.z)
-			: new THREE.Box3().setFromObject(meshes[0]).getCenter(new THREE.Vector3());
-		if (!at) centre.y = PROBE_HEIGHT;
+		const box = lit.extents.get(room);
+		const centre = (box ?? new THREE.Box3().setFromObject(meshes[0])).getCenter(
+			new THREE.Vector3(),
+		);
+		centre.y = (box?.min.y ?? 0) + PROBE_HEIGHT;
 		// A render target holds linear radiance: three tone maps only the screen.
 		const cube = new THREE.WebGLCubeRenderTarget(PROBE_SIZE, { type: THREE.HalfFloatType });
 		const camera = new THREE.CubeCamera(0.05, 50, cube);
@@ -591,11 +594,15 @@ export function addReflections(
 			reflecting.push([own, room]);
 			own.envMapIntensity = 1;
 			const lampProbes = far?.has(room) ? far.uniforms(room) : undefined;
+			const box = lit.extents.get(room);
+			const from = cameras.get(room)?.position;
+			const room3 = box && from ? { box, from } : undefined;
 			own.onBeforeCompile = (shader) => {
 				shader.fragmentShader = shader.fragmentShader.replace(
 					'#include <lights_fragment_maps>',
 					specularOnly,
 				);
+				if (room3) projectOntoBox(shader, room3.box, room3.from, boxed);
 				if (far && lampProbes) far.patch(shader, lampProbes, 'lightmap');
 				// After the far light: the shadow takes off the lightmap's light alone.
 				shadow?.patch(shader);
@@ -603,7 +610,10 @@ export function addReflections(
 			};
 			// A room with far light draws with a program of its own.
 			own.customProgramCacheKey = () =>
-				(lampProbes ? 'far' : 'near') + (shadow ? ' shaded' : '') + (occluders ? ' occluded' : '');
+				(lampProbes ? 'far' : 'near') +
+				(shadow ? ' shaded' : '') +
+				(occluders ? ' occluded' : '') +
+				(room3 ? ' boxed' : '');
 			own.needsUpdate = true;
 		}
 	return {
@@ -620,6 +630,59 @@ export function addReflections(
  *  normalized as games do it: scaled by the surface's baked light over the probe's
  *  light from the same side, at most 1, so a surface in shadow (a sofa's arm with
  *  the bay behind it) does not reflect the windows the probe sees in full. */
+/**
+ * Box projection (parallax-corrected cube maps): a reflection looked up not along
+ * its direction from the probe, but toward where it meets the room's `box` from
+ * the surface, as seen from the probe at `from`. A TV on a wall then reflects the
+ * window across from it, not what the room's middle sees that way.
+ */
+function projectOntoBox(
+	shader: THREE.WebGLProgramParametersWithUniforms,
+	box: THREE.Box3,
+	from: THREE.Vector3,
+	on: { value: boolean },
+): void {
+	shader.uniforms['reflectBoxed'] = on;
+	shader.uniforms['reflectBoxMin'] = { value: box.min };
+	shader.uniforms['reflectBoxMax'] = { value: box.max };
+	shader.uniforms['reflectFrom'] = { value: from };
+	shader.vertexShader = swapOnce(
+		`varying vec3 vReflectAt;\n${shader.vertexShader}`,
+		'#include <project_vertex>',
+		`#include <project_vertex>
+		vReflectAt = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;`,
+	);
+	shader.fragmentShader = swapOnce(
+		shader.fragmentShader,
+		'#include <envmap_physical_pars_fragment>',
+		`varying vec3 vReflectAt;
+		uniform bool reflectBoxed;
+		uniform vec3 reflectBoxMin;
+		uniform vec3 reflectBoxMax;
+		uniform vec3 reflectFrom;
+		// Where the ray from here along dir leaves the box, as the probe sees it.
+		vec3 boxProjected( vec3 dir ) {
+			vec3 at = clamp( vReflectAt, reflectBoxMin, reflectBoxMax );
+			vec3 d = mix( dir, vec3( 1e-5 ), lessThan( abs( dir ), vec3( 1e-5 ) ) );
+			vec3 out3 = max( ( reflectBoxMax - at ) / d, ( reflectBoxMin - at ) / d );
+			float t = min( min( out3.x, out3.y ), out3.z );
+			return normalize( at + dir * t - reflectFrom );
+		}
+		\n${swapOnce(
+			THREE.ShaderChunk.envmap_physical_pars_fragment,
+			'reflectVec = transformDirectionByInverseViewMatrix( reflectVec, viewMatrix );',
+			`reflectVec = transformDirectionByInverseViewMatrix( reflectVec, viewMatrix );
+			if ( reflectBoxed ) reflectVec = boxProjected( reflectVec );`,
+		)}`,
+	);
+}
+
+/** `text` with `from` once replaced by `to`; three's shader changing under us throws. */
+function swapOnce(text: string, from: string, to: string): string {
+	if (!text.includes(from)) throw new Error(`three's shader has no ${from}`);
+	return text.replace(from, to);
+}
+
 export function specularOnlyChunk(): string {
 	const chunk = THREE.ShaderChunk.lights_fragment_maps;
 	const normalized = `#ifdef USE_LIGHTMAP

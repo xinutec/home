@@ -58,9 +58,14 @@ how it is judged done.
 3. **Tilted parts**, so the chairs' and bay sofa's arms can slope (the chairs' elbow
    rests fall toward the back, the front scrolls rise to 0.71); and a wedge for the
    big sofa's back frame (6 cm at its top, thicker below).
-4. **Reflections, further**: box projection, so the TV and glass reflect the room
-   from where they hang; the clear panes reflecting at all (drawn nearly invisible
-   in baked light); the fireplace iron's real sheen, from the photos.
+4. **Reflections, further**: the clear panes reflecting at all (drawn nearly
+   invisible in baked light); the fireplace iron's real sheen, from the photos.
+   Box projection is in (12 November, `projectOntoBox`, the settings' "Reflections
+   from where they hang"): each room's reflection is looked up where the ray meets
+   the room's box, floor to ceiling. Against the path tracer from the sofa, the TV
+   went from a red smear to dark with the tracer's faint band, and the fireplace
+   iron took the rug's blue as the tracer's does. Each room's probe now stands
+   PROBE_HEIGHT over its own floor (upstairs ones stood below theirs).
 
 ## Where it stands
 

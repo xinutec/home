@@ -180,6 +180,9 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 	private movesLight?: ProbeLight;
 	/** The reflections, to capture again when the light changes. */
 	private recapture?: () => void;
+	/** Whether the reflections are projected onto their room's box, a uniform
+	 *  every reflecting surface shares. */
+	private readonly boxedReflections = { value: readFeature('reflections') };
 	/** Whether the exposure follows the view as it is walked (`light`). */
 	private exposureFollows = false;
 	private readonly query: CameraQuery = cameraFromQuery(window.location.search);
@@ -571,6 +574,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 				this.farLight,
 				this.shadow,
 				this.occluders,
+				this.boxedReflections,
 			);
 			for (const t of reflections.owned) view.own(t);
 			this.recapture = reflections.recapture;
@@ -701,6 +705,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		}
 		this.features.update((f) => ({ ...f, [feature]: on }));
 		this.shadeByThings();
+		this.boxedReflections.value = this.features().reflections;
 		this.view?.requestFrame();
 	}
 
