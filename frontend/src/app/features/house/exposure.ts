@@ -201,6 +201,18 @@ export class MeteredExposure {
 		return easing;
 	}
 
+	/** Builds the shaders its copy draws with (linear, into a float target, which
+	 *  the screen's are not), so its first metering does not stall a frame. */
+	async warm(): Promise<void> {
+		const r = this.renderer;
+		const before = r.getRenderTarget();
+		r.setRenderTarget(this.target);
+		// The programs are made for the target set now; only their readiness waits.
+		const ready = r.compileAsync(this.scene, this.camera);
+		r.setRenderTarget(before);
+		await ready;
+	}
+
 	/** Aims at `key` from now on, metering again at once. */
 	aim(key: number): void {
 		this.key = key;

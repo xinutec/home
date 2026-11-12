@@ -61,6 +61,10 @@ export class ThreeView {
 	private framePending = false;
 	private readonly owned: { dispose(): void }[] = [];
 	private readonly resize: ResizeObserver;
+	/** Hidden, no frame is shown: the next one's gap is not the eye's. */
+	private readonly hidden = () => {
+		if (document.visibilityState === 'hidden') this.followed = false;
+	};
 
 	constructor(
 		private readonly host: HTMLElement,
@@ -82,6 +86,7 @@ export class ThreeView {
 
 		this.resize = new ResizeObserver(() => this.onResize());
 		this.resize.observe(host);
+		document.addEventListener('visibilitychange', this.hidden);
 	}
 
 	/** Kept for disposal when the view closes. */
@@ -155,6 +160,7 @@ export class ThreeView {
 		cancelAnimationFrame(this.frame);
 		this.mover?.dispose();
 		this.resize.disconnect();
+		document.removeEventListener('visibilitychange', this.hidden);
 		this.controls.dispose();
 		// A renderer's dispose frees only its own state; geometries, materials and
 		// textures stay on the GPU until each is disposed.

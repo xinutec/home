@@ -485,6 +485,11 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			tapped,
 			this.crosshair().nativeElement,
 		);
+		// Every shader the walk draws with, built before its first frame (the
+		// moving things' and the meter's are new): built in a frame, they stalled it
+		// 0.3-0.6 s on a phone.
+		await view.renderer.compileAsync(view.scene, view.camera);
+		await metered?.warm();
 		view.useMover(walker);
 		if (stage) view.useStage(stage);
 		if (this.query.stats) this.measure(view);
