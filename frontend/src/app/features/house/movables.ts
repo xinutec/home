@@ -110,6 +110,11 @@ export class Movables {
 		return [...this.things.values()].map((t) => new THREE.Box3().setFromObject(t.group));
 	}
 
+	/** The light changed (a lamp, the evening): each thing shades by it now. */
+	relight(): void {
+		for (const t of this.things.values()) this.shadeBy(t);
+	}
+
 	/** Every thing that can be picked up, by its piece's id. */
 	keys(): string[] {
 		return [...this.things.keys()];
@@ -187,6 +192,7 @@ export class Movables {
 		if (o && !o.at?.equals(t.group.matrixWorld)) {
 			this.occluders?.place(o.slot, t.group.matrixWorld, o.middle, o.radii);
 			o.at = t.group.matrixWorld.clone();
+			this.shadeBy(t);
 		}
 		if (!this.light || !t.probes) return;
 		const { x, y, z } = t.group.position;
@@ -195,6 +201,16 @@ export class Movables {
 			this.light.aim(t.probes, tag);
 			t.room = tag;
 		}
+	}
+
+	/** A thing's ellipsoid shades by the light where it is: which way it comes from,
+	 *  and how much from that way (the probes', as last shown). */
+	private shadeBy(t: Movable): void {
+		const o = t.occluder;
+		if (!o || !this.occluders) return;
+		const middle = o.middle.clone().applyMatrix4(t.group.matrixWorld);
+		const d = this.light?.directionAt(middle);
+		if (d) this.occluders.light(o.slot, d.from, d.directionality);
 	}
 
 	/** Lights a thing's parts from the probes: each a material of its own, which

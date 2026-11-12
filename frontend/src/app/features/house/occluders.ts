@@ -6,6 +6,11 @@ export const MAX_OCCLUDERS = 16;
 /** Of the light a thing blocks, the share it takes away: the rest it reflects back
  *  (a pale cushion lights what it shades), as the contact shadow's DARKNESS. */
 const STRENGTH = 0.85;
+/** The half-angle of the cone of light a thing hides (radians) when the light
+ *  comes from all round, and when all from one way: a window two metres wide seen
+ *  from three metres in spans about 0.4 either way of its middle. */
+const CONE_WIDEST = 1.5;
+const CONE_NARROWEST = 0.4;
 /** Radii from its middle at which a thing's shade starts to fade, and is gone: each
  *  pixel then pays only for the things near it. At 2 radii a sphere still takes a
  *  quarter of the light from a surface facing it, so it fades, not stops. */
@@ -27,7 +32,26 @@ export class Occluders {
 		occluderCount: { value: 0 },
 		/** 1 while they shade (by day), 0 while not (evening: the lamps cast shadows). */
 		occludersOn: { value: 1 },
+		/** Each slot's light where the thing is (`light`): which way it comes from
+		 *  (xyz, in the room), and how much from that one way (w, 0 to 1). */
+		occluderLight: {
+			value: Array.from({ length: MAX_OCCLUDERS }, () => new THREE.Vector4(0, 1, 0, 0)),
+		},
+		/** 1 while they shade by the light's direction, 0 as if from all round. */
+		occluderDirectional: { value: 1 },
 	};
+
+	/** Shades by the light's direction where it is (the probes'), or as if the light
+	 *  came evenly from all round: to compare. */
+	set directional(on: boolean) {
+		this.uniforms.occluderDirectional.value = on ? 1 : 0;
+	}
+
+	/** Slot `i`'s light where its thing is: which way it comes `from`, and how much
+	 *  from that one way (`ProbeLight.directionAt`). */
+	light(i: number, from: THREE.Vector3, directionality: number): void {
+		this.uniforms.occluderLight.value[i].set(from.x, from.y, from.z, directionality);
+	}
 
 	/** Shades by day, not in the evening, when the lamps cast the things' shadows. */
 	set on(on: boolean) {
@@ -68,6 +92,8 @@ export class Occluders {
 		shader.uniforms['occluders'] = this.uniforms.occluders;
 		shader.uniforms['occluderCount'] = this.uniforms.occluderCount;
 		shader.uniforms['occludersOn'] = this.uniforms.occludersOn;
+		shader.uniforms['occluderLight'] = this.uniforms.occluderLight;
+		shader.uniforms['occluderDirectional'] = this.uniforms.occluderDirectional;
 		// A uniform, not written into the code: every thing's parts share one program.
 		shader.uniforms['occluderSelf'] = { value: receiver === 'surface' ? -1 : receiver.self };
 		shader.vertexShader = swap(
@@ -89,6 +115,19 @@ export class Occluders {
 			uniform int occluderCount;
 			uniform int occluderSelf;
 			uniform float occludersOn;
+			uniform vec4 occluderLight[${MAX_OCCLUDERS}];
+			uniform float occluderDirectional;
+			// The share of a cone of light, from \`from\` (unit space) at half-angle
+			// \`cone\`, that the unit sphere hides from q: the two discs' overlap as
+			// seen from q, at most the sphere's size against the cone's.
+			float coneOcclusion(vec3 q, vec3 from, float cone) {
+				float d = length(q);
+				float sphere = asin(min(1.0 / d, 1.0));
+				float apart = acos(clamp(dot(-q / d, from), -1.0, 1.0));
+				float overlap = 1.0 - smoothstep(abs(cone - sphere), cone + sphere, apart);
+				float s = sin(sphere) / sin(cone);
+				return overlap * min(1.0, s * s);
+			}
 			// The share of the light from all round a surface at p facing n loses to the
 			// unit sphere at the origin: exact, the sphere above, below or across its horizon.
 			float sphereOcclusion(vec3 p, vec3 n) {
@@ -119,6 +158,16 @@ export class Occluders {
 					vec3 f = normalize(r2 * (mat3(m) * n));
 					float fade = 1.0 - smoothstep(${(FADE ** 2).toFixed(1)}, ${(REACH ** 2).toFixed(1)}, h2);
 					float cut = fade * sphereOcclusion(q, f);
+					// Light mostly from one way (a window): the thing hides what comes
+					// from there, a cone the narrower the more one-way, on a surface
+					// facing it.
+					vec4 light = occluderLight[i];
+					if (occluderDirectional > 0.5 && light.w > 0.0) {
+						vec3 from = normalize(mat3(m) * light.xyz);
+						float cone = mix(${CONE_WIDEST.toFixed(3)}, ${CONE_NARROWEST.toFixed(3)}, light.w);
+						float facing = smoothstep(0.0, 0.3, dot(n, light.xyz));
+						cut = mix(cut, fade * facing * coneOcclusion(q, from, cone), light.w);
+					}
 					left *= 1.0 - ${STRENGTH.toFixed(3)} * cut;
 				}
 				return left;

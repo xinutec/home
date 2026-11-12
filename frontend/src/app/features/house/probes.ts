@@ -129,6 +129,30 @@ export interface ProbeUniforms {
 	probeFaces: { value: THREE.Data3DTexture[] };
 }
 
+/**
+ * Which way a probe's light comes from, and how much from one way: its six faces'
+ * light (`FACES`' order, luminance), each face's facing weighted by its light and
+ * summed. Light from all round cancels (0); light from one way, which only the face
+ * toward it receives, gives 1. `from` points toward where the light comes from.
+ */
+export function lightDirection(faces: ArrayLike<number>): {
+	from: THREE.Vector3;
+	directionality: number;
+} {
+	const v = new THREE.Vector3();
+	let total = 0;
+	FACES.forEach((f, k) => {
+		const e = Math.max(faces[k], 0);
+		v.x += f[0] * e;
+		v.y += f[1] * e;
+		v.z += f[2] * e;
+		total += e;
+	});
+	const length = v.length();
+	if (total <= 0 || length === 0) return { from: new THREE.Vector3(0, 1, 0), directionality: 0 };
+	return { from: v.divideScalar(length), directionality: Math.min(length / total, 1) };
+}
+
 /** The probe textures' names in the shader, a face each (`FACES`' order). */
 const FACE_NAMES = ['probePX', 'probeNX', 'probePY', 'probeNY', 'probePZ', 'probeNZ'];
 
@@ -151,6 +175,8 @@ export class ProbeLight {
 			/** Its light as last shown, and its daylight alone, each averaged over its
 			 *  probes and their faces. */
 			mean: [number, number, number];
+			/** Its light as last shown, every probe's every face (`light`'s order). */
+			shown?: Float32Array;
 			daylight: [number, number, number];
 		}
 	>();
@@ -201,6 +227,7 @@ export class ProbeLight {
 				if (w.every((c) => c === 0)) continue;
 				for (let i = 0; i < sum.length; i++) sum[i] += g.light[i] * w[i % 3];
 			}
+			room.shown = sum;
 			room.mean = [0, 0, 0];
 			for (let i = 0; i < sum.length; i++) room.mean[i % 3] += sum[i] / (sum.length / 3);
 			room.faces.forEach((t, f) => {
@@ -241,6 +268,28 @@ export class ProbeLight {
 		const r = this.rooms.get(room);
 		if (!r) throw new Error(`no light probes in ${room}`);
 		return r.daylight;
+	}
+
+	/** Which way the light comes from at `p`, and how much from one way
+	 *  (`lightDirection`), from the probe nearest it in the room it is in, as last
+	 *  shown; none before a `show`. */
+	directionAt(p: THREE.Vector3): { from: THREE.Vector3; directionality: number } | undefined {
+		const tag = this.at(p);
+		const r = tag === undefined ? undefined : this.rooms.get(tag);
+		if (!r?.shown) return undefined;
+		const dims = r.grids[0].dims;
+		const cell = [0, 1, 2].map((c) => {
+			const t = (p.getComponent(c) - r.min.getComponent(c)) / r.size.getComponent(c);
+			return Math.min(dims[c] - 1, Math.max(0, Math.floor(t * dims[c])));
+		});
+		const i = cell[0] + dims[0] * (cell[1] + dims[1] * cell[2]);
+		const n = dims[0] * dims[1] * dims[2];
+		const shown = r.shown;
+		const faces = FACES.map((_, f) => {
+			const k = (f * n + i) * 3;
+			return 0.2126 * shown[k] + 0.7152 * shown[k + 1] + 0.0722 * shown[k + 2];
+		});
+		return lightDirection(faces);
 	}
 
 	/** Whether `room` has probes here. */

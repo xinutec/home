@@ -46,7 +46,7 @@ import { oneMaterialEach, picturesLoaded } from './trace-scene';
 import { Joints } from './joints';
 import { WalkControls } from './walk';
 import { imageStage } from './image-stage';
-import { readFine, writeFine } from './image-setting';
+import { FEATURES, type Feature, readFeature, readFeatures, writeFeature } from './view-settings';
 
 declare global {
 	interface Window {
@@ -151,8 +151,11 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 	readonly who = signal<{ signedIn: boolean; name?: string } | undefined>(undefined);
 	/** Sign-in, coming back to this view as it was opened. */
 	readonly signInUrl = `/login?return_to=${encodeURIComponent(location.pathname + location.search)}`;
-	/** Whether this device draws the fine image (`readFine`). */
-	readonly fine = readFine();
+	/** Which of the engine's features are on on this device (`view-settings`), and
+	 *  the list the settings show; whether it draws the fine image. */
+	readonly features = signal(readFeatures());
+	readonly featureList = FEATURES;
+	readonly fine = readFeature('fine');
 	readonly room = inject(ActivatedRoute).snapshot.paramMap.get('room') ?? '';
 
 	private http = inject(HttpClient);
@@ -330,7 +333,8 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			this.occluders,
 		);
 		// What moves takes the daylight by day, and every lamp at its weight.
-		const lightMoves = () =>
+		// The things' shade follows the light's direction where they are.
+		const lightMoves = () => {
 			this.movesLight?.show((source) =>
 				source === undefined
 					? lamps?.evening
@@ -338,12 +342,16 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 						: [1, 1, 1]
 					: (lamps?.weight(source) ?? [0, 0, 0]),
 			);
+			movables.relight();
+		};
 		lightMoves();
 		// The lamp the moving things' shadows are cast from: the one lighting the eye most.
 		let casting: string | undefined;
 		let wasCarried = false;
 		const show = () => {
-			const brightest = lamps?.brightestAt(view.camera.position);
+			const brightest = this.features().shadows
+				? lamps?.brightestAt(view.camera.position)
+				: undefined;
 			if (brightest !== casting) {
 				casting = brightest;
 				this.shadow?.aim(casting === undefined ? undefined : lamps?.source(casting));
@@ -421,7 +429,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			lightMoves();
 			showDaylight(view.scene, lamps.evening ? 0 : 1);
 			// By day the things shade what is near them; in the evening the lamps cast.
-			if (this.occluders) this.occluders.on = !lamps.evening;
+			this.shadeByThings();
 			show();
 			this.recapture?.();
 			stage?.aimExposure(lamps.evening ? EVENING_KEY : AUTO_KEY);
@@ -552,7 +560,10 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			this.movesLight = view.own(new ProbeLight(map.probes, () => true));
 		}
 		if (applied) {
-			if (lit.movables.length > 0 && !this.fine) this.occluders = new Occluders();
+			if (lit.movables.length > 0 && !this.fine) {
+				this.occluders = new Occluders();
+				this.shadeByThings();
+			}
 			const reflections = addReflections(
 				view.renderer,
 				view.scene,
@@ -680,11 +691,26 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		});
 	}
 
-	/** Switches the fine image on or off, kept on this device: the page reloads to
-	 *  draw the other way. */
-	setFine(fine: boolean): void {
-		writeFine(fine);
-		location.reload();
+	/** Switches `feature` on or off, kept on this device: at once, or by reloading
+	 *  the page where it changes how the view is built. */
+	setFeature(feature: Feature, on: boolean): void {
+		writeFeature(feature, on);
+		if (FEATURES.find((f) => f.feature === feature)?.reload) {
+			location.reload();
+			return;
+		}
+		this.features.update((f) => ({ ...f, [feature]: on }));
+		this.shadeByThings();
+		this.view?.requestFrame();
+	}
+
+	/** The things' daylight shade as the settings and the hour have it: by day only,
+	 *  the lamps casting in the evening. */
+	private shadeByThings(): void {
+		if (!this.occluders) return;
+		const f = this.features();
+		this.occluders.on = f.occlusion && !this.lamps?.evening;
+		this.occluders.directional = f.directional;
 	}
 
 	/** Opens or closes the view's settings; opening asks who is signed in. */

@@ -111,6 +111,14 @@ Each step lands deployed, the view working throughout, its cost read on the phon
    daylight from the windows as the lamps cast was tried and dropped: a two-metre
    window seen from one point makes the shadow map's soft shadows far too wide and
    stair-stepped.
+   The shade follows the window's light (capsule indirect shadows, as Unreal has
+   them): where a thing is, its probe's six faces give which way the light comes
+   from and how much from that way (`lightDirection`, 0 from all round to 1 from
+   one way); the even shade is blended by that toward the share of a cone of light
+   from there the ellipsoid hides (`coneOcclusion`, the cone narrower the more one-
+   way). Near the bay a thing's shade falls away from the window.
+   Each feature can be switched off to compare (`view-settings`, the view's
+   settings): Fine image (reloads), lamp shadows, daylight shade, its direction.
 4. **Shadows of what moves.** A shadow map of moving things from the light that
    dominates, blended into the bake. Done when a cushion's shadow falls where the
    path tracer puts it.

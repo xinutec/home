@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import json from '../../../../../scenes/house.json';
 import type { HouseScene } from './house.model';
 import { FACES } from './bake-file';
-import { PROBE_STEP, fillGaps, probePoints, roomBoxes } from './probes';
+import { PROBE_STEP, fillGaps, lightDirection, probePoints, roomBoxes } from './probes';
 
 const house = json as unknown as HouseScene;
 
@@ -47,5 +47,22 @@ describe('roomBoxes', () => {
 		// Upstairs from its floor to its ceiling.
 		const landing = boxes.get('landing');
 		expect([landing?.min.y, landing?.max.y]).toEqual([2.6, 2.6 + house.height]);
+	});
+});
+
+describe('lightDirection', () => {
+	it('is none from light all round, and the one way light comes from all of', () => {
+		expect(lightDirection([1, 1, 1, 1, 1, 1]).directionality).toBeCloseTo(0);
+		// Light from +x alone: only the face toward +x receives it.
+		const one = lightDirection([2, 0, 0, 0, 0, 0]);
+		expect(one.directionality).toBeCloseTo(1);
+		expect(one.from.x).toBeCloseTo(1);
+	});
+
+	it('leans toward a window: more from it than from the room behind', () => {
+		// A window toward -z: that face gets three times the others.
+		const d = lightDirection([1, 1, 1, 1, 1, 3]);
+		expect(d.from.z).toBeCloseTo(-1);
+		expect(d.directionality).toBeCloseTo(2 / 8);
 	});
 });
