@@ -54,12 +54,14 @@ export function applyLightmap(
 		if (Array.isArray(material) || done.has(material)) continue;
 		done.add(material);
 		if (material instanceof THREE.MeshPhysicalMaterial && material.transmission > 0) {
-			// Glass, cheaply: a frosted pane as the light it lets in, a clear one nearly invisible.
+			// Glass, cheaply: a frosted pane as the light it lets in, a clear one not drawn.
 			const frosted = material.roughness > 0.1;
 			const glow = frosted ? windowRadiance(material.transmission) : 0;
 			material.transmission = 0;
-			material.transparent = !frosted;
-			material.opacity = frosted ? 1 : 0.12;
+			// Clear glass not drawn: it passes about 92% of the light (4% reflected at
+			// each face), which against the sky beyond is white either way; drawn, it
+			// blends after the tone curve straight to the screen and greys that sky.
+			material.visible = frosted;
 			material.emissive.setRGB(SKY[0] * glow, SKY[1] * glow, SKY[2] * glow);
 			// The daylight it lets in, for the evening to take away (`showDaylight`).
 			material.userData['daylight'] = material.emissive.clone();
@@ -81,9 +83,29 @@ export function applyLightmap(
 	});
 	for (const l of lights) l.removeFromParent();
 	scene.environment = null;
-	scene.background = new THREE.Color(SKY[0], SKY[1], SKY[2]);
+	// The sky beyond the clear panes, as a dome drawn like the room (exposed and tone
+	// mapped with it), not as the background, which three draws as it is: grey where
+	// the room's exposure makes the sky white.
+	scene.background = null;
+	const dome = new THREE.Mesh(
+		new THREE.SphereGeometry(SKY_DOME_RADIUS, 32, 16),
+		new THREE.MeshBasicMaterial({
+			color: new THREE.Color(SKY[0], SKY[1], SKY[2]),
+			side: THREE.BackSide,
+			depthWrite: false,
+			fog: false,
+		}),
+	);
+	dome.name = SKY_DOME;
+	dome.renderOrder = -1;
+	scene.add(dome);
 	return texture;
 }
+
+/** The sky dome's name in the scene, and its radius: well inside the camera's far
+ *  plane, well outside the house. */
+const SKY_DOME = 'sky-dome';
+const SKY_DOME_RADIUS = 100;
 
 /** Where texels are drawn as points, one pixel each at its centre, in clip space. */
 export function texelPoints(
@@ -190,8 +212,11 @@ export function showDaylight(scene: THREE.Scene, daylight: number): void {
 		const day: unknown = m.userData['daylight'];
 		if (day instanceof THREE.Color) m.emissive.copy(day).multiplyScalar(daylight);
 	});
+	const dome = scene.getObjectByName(SKY_DOME);
+	if (!(dome instanceof THREE.Mesh) || !(dome.material instanceof THREE.MeshBasicMaterial))
+		throw new Error('no sky dome: the lightmap was not applied');
 	const sky = new THREE.Color(SKY[0], SKY[1], SKY[2]).multiplyScalar(daylight);
-	scene.background = sky.lerp(new THREE.Color(...NIGHT_SKY), 1 - daylight);
+	dome.material.color.copy(sky.lerp(new THREE.Color(...NIGHT_SKY), 1 - daylight));
 }
 
 /** Entries a row of the changes' list texture. */
