@@ -21,20 +21,26 @@ const BLUR_TAPS = Math.ceil(3 * BLUR);
 /** One pass of the blur, along `blurStep` (a pixel across, or up). */
 const blurStep = new THREE.Vector2();
 const blurPass = new THREE.ShaderMaterial({
-	uniforms: { image: { value: null }, step: { value: blurStep } },
+	uniforms: { image: { value: null }, step: { value: blurStep }, damping: { value: 0 } },
 	vertexShader: /* glsl */ `
 		varying vec2 vUv;
 		void main() { vUv = uv; gl_Position = vec4( position.xy, 0.0, 1.0 ); }`,
 	fragmentShader: /* glsl */ `
 		uniform sampler2D image;
 		uniform vec2 step;
+		uniform float damping;
 		varying vec2 vUv;
 		void main() {
 			vec3 sum = vec3( 0.0 );
 			float weights = 0.0;
 			for ( int i = -${BLUR_TAPS}; i <= ${BLUR_TAPS}; i++ ) {
-				float w = exp( -0.5 * float( i * i ) / ${(BLUR * BLUR).toFixed(4)} );
-				sum += w * texture2D( image, vUv + float( i ) * step ).rgb;
+				vec3 c = texture2D( image, vUv + float( i ) * step ).rgb;
+				// Each pixel weighed down by its own brightness (Karis's average): a lone
+				// one far brighter than the room (a sliver of window past an edge) does
+				// not spread into a spot; a lamp or window many pixels wide keeps its own.
+				float w = exp( -0.5 * float( i * i ) / ${(BLUR * BLUR).toFixed(4)} )
+					/ ( 1.0 + dot( c, vec3( 0.2126, 0.7152, 0.0722 ) ) * damping );
+				sum += w * c;
 				weights += w;
 			}
 			gl_FragColor = vec4( sum / weights, 1.0 );
@@ -134,7 +140,9 @@ export class PlanarReflections {
 				const mirror = new Reflector(new THREE.PlaneGeometry(w, h), {
 					textureWidth: REFLECTION_WIDTH,
 					textureHeight: Math.round((REFLECTION_WIDTH * h) / w),
-					multisample: 0,
+					// Four samples a pixel: a sliver thinner than one fades in and out as the
+					// eye moves, where one sample switched it on and off.
+					multisample: 4,
 					shader: GLASS,
 				});
 				// Its front, +z turned by the part's yaw, a hair out from the face.
@@ -199,11 +207,13 @@ export class PlanarReflections {
 	): void {
 		const before = renderer.getRenderTarget();
 		const u = blurPass.uniforms;
-		for (const [from, to, step] of [
-			[image, across, new THREE.Vector2(1 / image.width, 0)],
-			[across, image, new THREE.Vector2(0, 1 / image.height)],
+		// Damped across only, by brightness as the eye would see it (1 is white).
+		for (const [from, to, step, damping] of [
+			[image, across, new THREE.Vector2(1 / image.width, 0), renderer.toneMappingExposure],
+			[across, image, new THREE.Vector2(0, 1 / image.height), 0],
 		] as const) {
 			u['image'].value = from.texture;
+			u['damping'].value = damping;
 			blurStep.copy(step);
 			renderer.setRenderTarget(to);
 			this.quad.render(renderer);

@@ -72,7 +72,10 @@ how it is judged done.
    with the TV in view, blurred round (a Gaussian, 3.5 of its pixels) for the
    glass's roughness, by glass's Fresnel reflectance. Blurred by its mip levels
    first, a lamp or a bright window showed in it as a white square that jumped as
-   the eye moved. Against the path tracer from the sofa it blurs alike (the
+   the eye moved. It is drawn four samples a pixel and its blur weighs each pixel
+   down by its brightness (Karis's average): a sliver of window past an edge, one
+   pixel of it, flashed as a white spot for a frame. That also narrows a window's
+   reflection to its own shape, where the blur had spread it into a wide blob. Against the path tracer from the sofa it blurs alike (the
    doorway behind the eye a soft dark band); the screen's mean is 14 of 255
    (the probe's 15, the tracer's 9). On the Mac it adds 0.3 ms of GPU with the TV
    in view.
