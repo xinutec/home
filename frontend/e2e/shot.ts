@@ -11,7 +11,7 @@
 // --after ms (1500) after each for it to move: its clock is held, so a short
 // --after catches one exactly partway. Held, the clock leaves --exposure auto
 // metering wrongly (a carried cushion's frames came out far too bright): give an
-// exposure.
+// exposure. --wait ms (2500) is how long the page runs before the shot. --off a,b switches those of the view's features off (view-settings).
 import { chromium } from '@playwright/test';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { extname, join } from 'node:path';
@@ -31,6 +31,8 @@ const { values: a } = parseArgs({
 		lamps: { type: 'string' },
 		tap: { type: 'string' },
 		after: { type: 'string', default: '1500' },
+		off: { type: 'string' },
+		wait: { type: 'string', default: '2500' },
 	},
 });
 const ORIGIN = 'https://home.xinutec.org';
@@ -85,6 +87,10 @@ await ctx.route('**/api/house', (r) =>
 		contentType: 'application/json',
 	}),
 );
+// As the settings keep them on this device (view-settings.ts's keys).
+await ctx.addInitScript((off: string[]) => {
+	for (const f of off) localStorage.setItem(`house.${f}`, 'off');
+}, a.off?.split(',') ?? []);
 const page = await ctx.newPage();
 page.on('console', (m) => {
 	if (m.type() === 'error') console.error(`page: ${m.text()}`);
@@ -108,7 +114,7 @@ await page.goto(
 	{ waitUntil: 'networkidle' },
 );
 if (a.trace) await page.locator('.canvas[data-traced]').waitFor({ timeout: 3_600_000 });
-else await page.waitForTimeout(2500);
+else await page.waitForTimeout(Number(a.wait));
 const seconds = (Date.now() - start) / 1000;
 const canvas = page.locator('.canvas canvas');
 // Paused, the clock runs only as told.

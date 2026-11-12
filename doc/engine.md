@@ -119,6 +119,12 @@ Each step lands deployed, the view working throughout, its cost read on the phon
    way). Near the bay a thing's shade falls away from the window.
    Each feature can be switched off to compare (`view-settings`, the view's
    settings): Fine image (reloads), lamp shadows, daylight shade, its direction.
+   The fine image drawn only once the view is still, faded in, the fast one while
+   walking, was built and dropped (12 November): still, it differed from the fast
+   view only by the contact shading on the moving things, and that came out as
+   grain on the cabinet top and the jar's rim at night, at half resolution and at
+   full; SMAA left thin lines more broken than the canvas's anti-aliasing. The
+   patch is in scratch (engine-still/still-stage.patch).
 4. **Shadows of what moves.** A shadow map of moving things from the light that
    dominates, blended into the bake. Done when a cushion's shadow falls where the
    path tracer puts it.
