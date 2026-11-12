@@ -1,9 +1,12 @@
 import * as THREE from 'three';
 import type { Movable as Falls } from './house.model';
 import type { Dynamics } from './dynamics';
+import type { Occluders } from './occluders';
 import { MOVES_LAYER } from './image-stage';
 import type { ProbeLight, ProbeUniforms } from './probes';
 
+/** A box's half-sizes to the half-axes of the ellipsoid of its volume, (6/π)^(1/3). */
+const BOX_TO_ELLIPSOID = Math.cbrt(6 / Math.PI);
 /** Metres ahead of the eye, and below it, that a held thing is carried. */
 const HOLD_AHEAD = 0.55;
 const HOLD_BELOW = 0.35;
@@ -18,6 +21,9 @@ interface Movable {
 	height: number;
 	/** Its parts' points, in its own frame: its shape, as a body. */
 	points: Float32Array;
+	/** The ellipsoid it shades what is near it by: its slot, and its middle and
+	 *  half-axes in its own frame (its parts' box's); where it was last placed. */
+	occluder?: { slot: number; middle: THREE.Vector3; radii: THREE.Vector3; at?: THREE.Matrix4 };
 	/** Which room's probes it reads, and the uniforms it reads them by. */
 	room?: string;
 	probes?: ProbeUniforms;
@@ -47,6 +53,8 @@ export class Movables {
 		own: Own,
 		/** How each falls, by its piece's id (`Furniture.movable`). */
 		how: (key: string) => Falls,
+		/** What they shade what is near them by, by day, if anything. */
+		private readonly occluders?: Occluders,
 	) {
 		const byKey = new Map<string, THREE.Mesh[]>();
 		for (const m of meshes) {
@@ -77,10 +85,18 @@ export class Movables {
 					points.push(p.x, p.y, p.z);
 				}
 			}
+			const inOwnFrame = new THREE.Box3().setFromArray(points);
 			const thing: Movable = {
 				group,
 				height: box.max.y - box.min.y,
 				points: Float32Array.from(points),
+				occluder: occluders && {
+					slot: occluders.add(),
+					middle: inOwnFrame.getCenter(new THREE.Vector3()),
+					// The ellipsoid of its box's volume: the inscribed one leaves a box's
+					// corners and the edges of its foot uncovered.
+					radii: inOwnFrame.getSize(new THREE.Vector3()).multiplyScalar(0.5 * BOX_TO_ELLIPSOID),
+				},
 			};
 			if (light) this.lightFromProbes(thing, parts, own);
 			this.things.set(key, thing);
@@ -164,9 +180,14 @@ export class Movables {
 		return this.dynamics.jammed();
 	}
 
-	/** Its light from the room it is in, as it moves. */
+	/** Its light from the room it is in, and its ellipsoid, as it moves. */
 	private place(t: Movable): void {
 		t.group.updateMatrixWorld(true);
+		const o = t.occluder;
+		if (o && !o.at?.equals(t.group.matrixWorld)) {
+			this.occluders?.place(o.slot, t.group.matrixWorld, o.middle, o.radii);
+			o.at = t.group.matrixWorld.clone();
+		}
 		if (!this.light || !t.probes) return;
 		const { x, y, z } = t.group.position;
 		const tag = this.light.at(new THREE.Vector3(x, y + t.height / 2, z));
@@ -192,7 +213,12 @@ export class Movables {
 				throw new Error(`${key}'s part is drawn in ${from.type}, not a standard material`);
 			const material = from.clone();
 			material.envMap = null;
-			material.onBeforeCompile = (shader) => light.patch(shader, probes, 'all');
+			const slot = t.occluder?.slot;
+			material.onBeforeCompile = (shader) => {
+				light.patch(shader, probes, 'all');
+				// Shaded by the others, not by itself.
+				if (slot !== undefined) this.occluders?.patch(shader, { self: slot });
+			};
 			material.customProgramCacheKey = () => 'moves';
 			return own(material);
 		};

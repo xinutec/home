@@ -35,6 +35,7 @@ import { decodeStage, encodeStage } from './stage-file';
 import type { Lit } from './room-builder';
 import { Lamps } from './lamps';
 import { MovingShadow } from './moving-shadow';
+import { Occluders } from './occluders';
 import { SlowFrames } from './frame-parts';
 import { Dynamics, loadRapier } from './dynamics';
 import { Movables } from './movables';
@@ -167,6 +168,9 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 	private lamps?: Lamps;
 	/** The moving things' shadows from the lamp lighting the view most, with the lamps. */
 	private shadow?: MovingShadow;
+	/** What the moving things shade what is near them by, by day, in the fast view
+	 *  (the fine one's contact shading does it there). */
+	private occluders?: Occluders;
 	/** The lamps' light in rooms they are not in, once a lightmap with it applies. */
 	private farLight?: ProbeLight;
 	/** All the light probes' light, for what moves. */
@@ -323,6 +327,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 				if (!how) throw new Error(`${key} is not movable`);
 				return how;
 			},
+			this.occluders,
 		);
 		// What moves takes the daylight by day, and every lamp at its weight.
 		const lightMoves = () =>
@@ -415,6 +420,8 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			this.farLight?.show((source) => (source === undefined ? [0, 0, 0] : lamps.weight(source)));
 			lightMoves();
 			showDaylight(view.scene, lamps.evening ? 0 : 1);
+			// By day the things shade what is near them; in the evening the lamps cast.
+			if (this.occluders) this.occluders.on = !lamps.evening;
 			show();
 			this.recapture?.();
 			stage?.aimExposure(lamps.evening ? EVENING_KEY : AUTO_KEY);
@@ -545,12 +552,14 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 			this.movesLight = view.own(new ProbeLight(map.probes, () => true));
 		}
 		if (applied) {
+			if (lit.movables.length > 0 && !this.fine) this.occluders = new Occluders();
 			const reflections = addReflections(
 				view.renderer,
 				view.scene,
 				lit,
 				this.farLight,
 				this.shadow,
+				this.occluders,
 			);
 			for (const t of reflections.owned) view.own(t);
 			this.recapture = reflections.recapture;

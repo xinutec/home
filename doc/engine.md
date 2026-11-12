@@ -103,6 +103,14 @@ Each step lands deployed, the view working throughout, its cost read on the phon
    full-screen pass at a phone's size costs for itself. Bloom was built (the frame
    mixed toward its blur, Jimenez's) and taken out again (12 November): it looked
    a bit much, and walking on the phone felt slower with it.
+   By day the fast view grounds the moving things with ellipsoid occlusion
+   (`Occluders`, back on 12 November without the contact-shadow squares that hung
+   in the air): each thing an ellipsoid of its box's volume, darkening what is near
+   it by the share of its surroundings it hides, in closed form; off in the evening
+   (the lamps cast) and in the fine view (its contact shading does it). Casting the
+   daylight from the windows as the lamps cast was tried and dropped: a two-metre
+   window seen from one point makes the shadow map's soft shadows far too wide and
+   stair-stepped.
 4. **Shadows of what moves.** A shadow map of moving things from the light that
    dominates, blended into the bake. Done when a cushion's shadow falls where the
    path tracer puts it.

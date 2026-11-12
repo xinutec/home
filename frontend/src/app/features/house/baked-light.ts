@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { type LightChange, type Lightmap, checksum, pairOf } from './bake-file';
 import type { Lit } from './room-builder';
 import type { MovingShadow } from './moving-shadow';
+import type { Occluders } from './occluders';
 import type { ProbeLight } from './probes';
 import { NIGHT_SKY, SKY, windowRadiance } from './sky';
 import { GUTTER } from './unwrap';
@@ -529,6 +530,8 @@ export function addReflections(
 	far?: ProbeLight,
 	/** The moving things' shadows, which take the casting lamp's light off. */
 	shadow?: MovingShadow,
+	/** What the moving things shade what is near them by, by day. */
+	occluders?: Occluders,
 ): { owned: { dispose(): void }[]; recapture: () => void } {
 	const owned: { dispose(): void }[] = [];
 	const byRoom = new Map<string, THREE.Mesh[]>();
@@ -596,9 +599,11 @@ export function addReflections(
 				if (far && lampProbes) far.patch(shader, lampProbes, 'lightmap');
 				// After the far light: the shadow takes off the lightmap's light alone.
 				shadow?.patch(shader);
+				occluders?.patch(shader, 'surface');
 			};
 			// A room with far light draws with a program of its own.
-			own.customProgramCacheKey = () => (lampProbes ? 'far' : 'near') + (shadow ? ' shaded' : '');
+			own.customProgramCacheKey = () =>
+				(lampProbes ? 'far' : 'near') + (shadow ? ' shaded' : '') + (occluders ? ' occluded' : '');
 			own.needsUpdate = true;
 		}
 	return {
