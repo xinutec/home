@@ -72,6 +72,15 @@ Each step lands deployed, the view working throughout, its cost read on the phon
 1. **One model.** Done (11 November): the walker steps and slides in the physics
    world (`Dynamics.walk`), what is under a thing and which probes light it are
    asked of that world and of the probes' own grids; `Collider` is gone.
+   The walker moves up and down only straight (`sweep`, its shape cast up or
+   down, 13 November): the controller's slide, asked to drop it 3 m onto the
+   floor, carried it along whatever slope it met first (a sofa's rounded seat, a
+   skirting's top), up to 0.9 m sideways in a frame: the view seemed to teleport.
+   It stands only on ground within 45° of level (as Rapier's controller), and
+   slips down steeper ground no faster than it walks. A wandering walk of 16,000
+   frames through every room (`walk.spec`'s, 700 of them) went no further in any
+   frame than asked; the same walk on the old code jumped 0.76 m. Each step costs
+   a third of what it did (7.5 ms against 21.5 in Node).
 2. **The GPU's time on screen.** Done: the corner says the slowest frame's GPU
    time (`GpuTimer`), or that the browser has no timer. Every step after is judged
    by it.

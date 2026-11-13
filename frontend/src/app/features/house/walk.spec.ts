@@ -4,7 +4,9 @@ import json from '../../../../../scenes/house.json';
 import { withModels } from './assembly';
 import type { HouseScene } from './house.model';
 import { MaterialLibrary } from './materials';
+import { mergeStatic } from './merge';
 import { buildHouse } from './room-builder';
+import { oneSided } from './sides';
 import { Dynamics, loadRapier } from './dynamics';
 import type { JointSpec } from './dynamics';
 import { Joints } from './joints';
@@ -145,6 +147,50 @@ describe('walking', () => {
 		const [blocked] = walk(house3d, [0.4, 0.4], [-2.5, 0.4]);
 		expect(blocked).toBeGreaterThan(-1.32);
 	});
+
+	it('drops a walker straight down onto a gentle slope under it, not along it', () => {
+		// A slab tilted 20° about z, its top 10 cm under the walker's feet: clear of
+		// its foot's edge, which lands first, 4 cm up the slope from its middle.
+		const slope = new THREE.Mesh(new THREE.BoxGeometry(2, 0.1, 2));
+		slope.position.set(0, 0.5, 0);
+		slope.rotation.z = Math.PI / 9;
+		const c = world([slope]);
+		const top = c.ground(0, 0, 2) ?? 0;
+		const feet = new THREE.Vector3(0, top + 0.1, 0);
+		const to = c.walk(feet, 0.01, 0);
+		expect(Math.hypot(to.x - feet.x, to.z - feet.z)).toBeLessThanOrEqual(0.01 + 1e-6);
+		expect(to.y).toBeLessThan(feet.y - 0.03);
+	});
+
+	it('in the real house, a wandering walk never goes further in a frame than asked', () => {
+		// As the room view builds it, merged. From the living room the walk climbs onto
+		// the bay sofa and off it again: off it, the walker slid along the seat's
+		// rounded edge 0.9 m in one frame (step 580).
+		const stage = { scene: new THREE.Scene(), own: <T>(r: T) => r };
+		buildHouse(stage, house, new MaterialLibrary(stage.own, false), false, false);
+		oneSided(stage.scene, () => undefined);
+		const fixed = mergeStatic(stage.scene, () => undefined);
+		const d = new Dynamics(R, fixed, new Joints(house, fixed).specs());
+		let seed = 1;
+		const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+		let feet = new THREE.Vector3(0.4, d.ground(0.4, 1.5, 1.5) ?? 0, 1.5);
+		let heading = random() * Math.PI * 2;
+		let stuck = 0;
+		let furthest = 0;
+		for (let i = 0; i < 700; i++) {
+			heading += (random() - 0.5) * 0.3;
+			const step = (random() < 0.5 ? WALK_SPEED : RUN_SPEED) * (random() < 0.1 ? 0.05 : 1 / 60);
+			const [dx, dz] = [Math.sin(heading) * step, Math.cos(heading) * step];
+			const to = d.walk(feet, dx, dz);
+			d.step(1 / 60);
+			const went = Math.hypot(to.x - feet.x, to.z - feet.z);
+			furthest = Math.max(furthest, went - step);
+			stuck = went < step * 0.2 ? stuck + 1 : 0;
+			if (stuck > 20) [heading, stuck] = [heading + Math.PI * (0.5 + random()), 0];
+			feet = to;
+		}
+		expect(furthest).toBeLessThan(0.002);
+	}, 120_000);
 
 	it('does not let a walker step over the sofa', () => {
 		const [, z] = walk(house3d, [0.4, 2.0], [0.4, 3.6]);

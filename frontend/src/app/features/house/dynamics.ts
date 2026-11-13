@@ -14,6 +14,13 @@ interface Walker {
 /** Metres a step must be deep, ahead of where the walker stands on its edge, for
  *  it to step up onto it: room for a foot. */
 const TREAD = 0.1;
+/** Metres further than GAP a straight sweep stops short of what it meets: left at
+ *  GAP itself, the controller took the floor for something in its way and cut each
+ *  step short (2.5 cm over 2 m). */
+const MARGIN = 0.001;
+/** The steepest ground the walker stands on (radians from level), as Rapier's
+ *  own character controller has it: steeper, it slips down. */
+const STEEPEST = Math.PI / 4;
 /** Metres the walker drops at most in a frame onto what is under it: down a stair,
  *  or off a ledge. */
 const DROP = 3;
@@ -280,20 +287,28 @@ export class Dynamics {
 		// flat move went the whole way, and the four queries more cost most where they
 		// find most (beside the carved bay sofa, 5-10 ms a step on the Mac).
 		const held = Math.hypot(flat.x - feet.x, flat.z - feet.z) < length * 0.99;
-		const up = held ? this.slide(feet, { x: 0, y: BODY.low, z: 0 }).by : new THREE.Vector3();
-		if (up.y > 0 && length > 0 && this.roomFor(feet.clone().add(up), dx / length, dz / length)) {
-			const high = feet.clone().add(up);
+		const up = held ? this.sweep(feet, 1, BODY.low).by : 0;
+		if (
+			up > 0 &&
+			length > 0 &&
+			this.roomFor(feet.clone().setY(feet.y + up), dx / length, dz / length)
+		) {
+			const high = feet.clone().setY(feet.y + up);
 			const over = high.clone().add(this.slide(high, across).by);
-			const down = this.slide(over, { x: 0, y: -up.y, z: 0 });
-			const landed = over.clone().add(down.by);
+			const down = this.sweep(over, -1, up);
+			const landed = over.clone().setY(over.y - down.by);
 			const further = (to: THREE.Vector3) => Math.hypot(to.x - feet.x, to.z - feet.z);
 			// Set down on a step, it stands there.
-			if (down.grounded && further(landed) > further(flat) + 1e-4) {
+			if (down.flat && further(landed) > further(flat) + 1e-4) {
 				this.walkerAt(feet).body.setNextKinematicTranslation(middleOf(landed));
 				return landed;
 			}
 		}
-		const to = flat.clone().add(this.slide(flat, { x: 0, y: -DROP, z: 0 }).by);
+		const fall = this.sweep(flat, -1, DROP);
+		const to = flat.clone().setY(flat.y - fall.by);
+		// Come down on ground too steep to stand on (a bean bag's side), it slips
+		// down it, no further in the frame than it walked.
+		if (fall.hit && !fall.flat) to.add(this.slide(to, { x: 0, y: -length, z: 0 }).by);
 		// Its body moved there by the next step, as a body moving pushes.
 		this.walkerAt(feet).body.setNextKinematicTranslation(middleOf(to));
 		return to;
@@ -325,6 +340,37 @@ export class Dynamics {
 	private roomFor(high: THREE.Vector3, ux: number, uz: number): boolean {
 		const went = this.slide(high, { x: ux * TREAD, y: 0, z: uz * TREAD }).by;
 		return Math.hypot(went.x, went.z) >= TREAD * 0.9;
+	}
+
+	/** The walker standing at `from` moved straight up (`way` 1) or down (-1) by at
+	 *  most `most`, stopping GAP short of what it meets: how far, and whether it met
+	 *  something. Straight, not slid as `slide` moves: slid down onto a slope (a
+	 *  sofa's rounded arm, a skirting's top), the controller carried it along it,
+	 *  up to a metre sideways in a frame. And whether what it met is ground flat
+	 *  enough to stand on. */
+	private sweep(
+		from: THREE.Vector3,
+		way: 1 | -1,
+		most: number,
+	): { by: number; hit: boolean; flat: boolean } {
+		const w = this.walkerAt(from);
+		const hit = this.world.castShape(
+			middleOf(from),
+			{ x: 0, y: 0, z: 0, w: 1 },
+			{ x: 0, y: way, z: 0 },
+			w.shape.shape,
+			GAP + MARGIN,
+			most,
+			false,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			(c) => !this.isWalker(c) && !this.isLoose(c),
+		);
+		if (!hit) return { by: most, hit: false, flat: false };
+		// What it met is ground to stand on if it faces up within STEEPEST.
+		return { by: hit.time_of_impact, hit: true, flat: hit.normal1.y >= Math.cos(STEEPEST) };
 	}
 
 	/** The walker standing at `from` moved `by`, as far as the room and its doors
