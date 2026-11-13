@@ -6,6 +6,8 @@ import { partsOf, pieceId, solidsOf } from './assembly';
 import type { JointState } from './assembly';
 import { MaterialLibrary, named, partMaterial, surfaceMaterial } from './materials';
 import { mergeStatic } from './merge';
+import { walkerWorld } from './footing';
+import type { WalkerWorld } from './footing';
 import { oneSided } from './sides';
 import { unwrap } from './unwrap';
 import type { Atlas, Layout } from './unwrap';
@@ -68,6 +70,7 @@ export function buildInterior(
 		lit ?? {
 			meshes: [],
 			movables: [],
+			walls: walkerWorld([]),
 			extents: new Map(),
 			atlas: {
 				width: 0,
@@ -113,9 +116,12 @@ export function litRoom(
 	layout?: Layout,
 ): Lit {
 	oneSided(stage.scene, (g) => stage.own(g));
+	// Before merging: merged, a mesh no longer says what it is.
+	const walls = walkerWorld(stage.scene.children);
 	const meshes = mergeStatic(stage.scene, (g) => stage.own(g));
 	return {
 		meshes,
+		walls,
 		movables: stage.scene.children.filter(
 			(o): o is THREE.Mesh => o instanceof THREE.Mesh && o.userData['movable'] !== undefined,
 		),
@@ -1209,6 +1215,8 @@ export interface Lit {
 	atlas: Atlas;
 	/** What can be picked up, as drawn, apart from `meshes`: no lightmap, no bake. */
 	movables: THREE.Mesh[];
+	/** What the walker walks among (`walkerWorld`). */
+	walls: WalkerWorld;
 }
 
 /** Glass this smooth transmits without scattering: a window to see the sky through. */

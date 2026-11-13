@@ -81,6 +81,11 @@ Each step lands deployed, the view working throughout, its cost read on the phon
    frames through every room (`walk.spec`'s, 700 of them) went no further in any
    frame than asked; the same walk on the old code jumped 0.76 m. Each step costs
    a third of what it did (7.5 ms against 21.5 in Node).
+   The walker walks among a world of its own (`walkerWorld`, Rapier's collision
+   groups keeping it apart): the rooms' shells as drawn, and each fixed piece as
+   its parts' boxes, not their carved triangles; what moves rests on the room as
+   drawn, and doors and drawers are in both. The same wandering walk: a step
+   2.9 ms on average against 8.0, the worst 5.9 ms against 24 (Node).
 2. **The GPU's time on screen.** Done: the corner says the slowest frame's GPU
    time (`GpuTimer`), or that the browser has no timer. Every step after is judged
    by it.

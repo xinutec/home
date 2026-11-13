@@ -8,6 +8,7 @@ import { mergeStatic } from './merge';
 import { buildHouse } from './room-builder';
 import { oneSided } from './sides';
 import { Dynamics, loadRapier } from './dynamics';
+import { walkerWorld } from './footing';
 import type { JointSpec } from './dynamics';
 import { Joints } from './joints';
 import { BODY, EYE, RUN_SPEED, WALK_SPEED, WalkControls, stickSpeed } from './walk';
@@ -61,7 +62,7 @@ function drawnMeshes(): THREE.Mesh[] {
 function drawn(): Dynamics {
 	const meshes = drawnMeshes();
 	for (const m of meshes) m.updateMatrixWorld();
-	return new Dynamics(R, meshes, new Joints(house, meshes).specs());
+	return new Dynamics(R, meshes, new Joints(house, meshes).specs(), walkerWorld(meshes));
 }
 
 describe('walking', () => {
@@ -169,8 +170,9 @@ describe('walking', () => {
 		const stage = { scene: new THREE.Scene(), own: <T>(r: T) => r };
 		buildHouse(stage, house, new MaterialLibrary(stage.own, false), false, false);
 		oneSided(stage.scene, () => undefined);
+		const walls = walkerWorld(stage.scene.children);
 		const fixed = mergeStatic(stage.scene, () => undefined);
-		const d = new Dynamics(R, fixed, new Joints(house, fixed).specs());
+		const d = new Dynamics(R, fixed, new Joints(house, fixed).specs(), walls);
 		let seed = 1;
 		const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
 		let feet = new THREE.Vector3(0.4, d.ground(0.4, 1.5, 1.5) ?? 0, 1.5);

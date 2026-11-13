@@ -1,5 +1,6 @@
 import * as RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
+import type { WalkerWorld } from './footing';
 import { BODY } from './walk';
 
 /** Metres the walker keeps clear of what it meets (the controller's offset). */
@@ -33,6 +34,17 @@ const FRICTION = 0.8;
 const BOUNCE = 0.1;
 /** How fast a spin dies away (1/s): a ball on carpet rolls a little, then stops. */
 const SPIN_DAMPING = 0.8;
+/** Who meets whom (Rapier's collision groups, membership above, filter below):
+ *  the things that move rest on the room as drawn; the walker walks among its
+ *  `WalkerWorld`; doors and drawers are in both. */
+const THINGS = 1;
+const WALKER = 2;
+function groups(member: number, meets: number): number {
+	return (member << 16) | meets;
+}
+/** What the walker's queries see. */
+const WALKS_AMONG = groups(WALKER, WALKER);
+
 /** Kilograms a door or drawer weighs. */
 const JOINT_KG = 2.5;
 /** Seconds a door's or drawer's motor eases it toward where it is sent over: a
@@ -96,7 +108,13 @@ export class Dynamics {
 
 	/** The room as drawn (`meshes`): what moves on a joint (`userData.moves`) a body
 	 *  of its own on it (`joints`, one for each), the rest fixed. */
-	constructor(R: typeof RAPIER, meshes: THREE.Mesh[], joints: JointSpec[] = []) {
+	constructor(
+		R: typeof RAPIER,
+		meshes: THREE.Mesh[],
+		joints: JointSpec[] = [],
+		/** What the walker walks among, if not the room as drawn (`walkerWorld`). */
+		walls?: WalkerWorld,
+	) {
 		this.R = R;
 		this.world = new R.World({ x: 0, y: -9.81, z: 0 });
 		this.world.timestep = STEP;
@@ -110,7 +128,25 @@ export class Dynamics {
 			else fixed.push(m);
 		}
 		const { vertices, indices } = soup(fixed, (m) => m.matrixWorld);
-		this.world.createCollider(R.ColliderDesc.trimesh(vertices, indices, flags));
+		const drawn = walls ? THINGS : THINGS | WALKER;
+		this.world.createCollider(
+			R.ColliderDesc.trimesh(vertices, indices, flags).setCollisionGroups(groups(drawn, drawn)),
+		);
+		if (walls) {
+			const { shell, boxes } = walls;
+			this.world.createCollider(
+				R.ColliderDesc.trimesh(shell.vertices, shell.indices, flags).setCollisionGroups(
+					WALKS_AMONG,
+				),
+			);
+			for (const { half, middle, turn } of boxes)
+				this.world.createCollider(
+					R.ColliderDesc.cuboid(half.x, half.y, half.z)
+						.setTranslation(middle.x, middle.y, middle.z)
+						.setRotation({ x: turn.x, y: turn.y, z: turn.z, w: turn.w })
+						.setCollisionGroups(WALKS_AMONG),
+				);
+		}
 		const room = this.world.createRigidBody(R.RigidBodyDesc.fixed());
 		for (const [key, parts] of byJoint) {
 			const spec = joints.find((j) => j.key === key);
@@ -153,7 +189,8 @@ export class Dynamics {
 		this.world.createCollider(
 			R.ColliderDesc.trimesh(shut.vertices, shut.indices, flags)
 				.setDensity(0)
-				.setFriction(FRICTION),
+				.setFriction(FRICTION)
+				.setCollisionGroups(groups(THINGS | WALKER, THINGS | WALKER)),
 			body,
 		);
 		const hinge = spec.type === 'hinge';
@@ -246,7 +283,8 @@ export class Dynamics {
 			hull
 				.setMass(how.kg)
 				.setFriction(FRICTION)
-				.setRestitution(how.bounce ?? BOUNCE),
+				.setRestitution(how.bounce ?? BOUNCE)
+				.setCollisionGroups(groups(THINGS, THINGS | WALKER)),
 			body,
 		);
 		this.bodies.set(key, body);
@@ -314,9 +352,9 @@ export class Dynamics {
 		return to;
 	}
 
-	/** The highest surface under [x, z] below `below`: of the room, its doors where
-	 *  they stand now, and the things in it, but the walker. None: nothing is under
-	 *  it. */
+	/** The highest surface under [x, z] below `below` that the walker stands on: of
+	 *  what it walks among and the doors where they stand now. None: nothing is
+	 *  under it. */
 	// dev-lint: allow-ts-test-only the walker calls it through its Footing (walk.ts)
 	ground(x: number, z: number, below: number): number | undefined {
 		const R = this.R;
@@ -326,7 +364,7 @@ export class Dynamics {
 			100,
 			true,
 			undefined,
-			undefined,
+			WALKS_AMONG,
 			undefined,
 			undefined,
 			(c) => !this.isWalker(c),
@@ -363,7 +401,7 @@ export class Dynamics {
 			most,
 			false,
 			undefined,
-			undefined,
+			WALKS_AMONG,
 			undefined,
 			undefined,
 			(c) => !this.isWalker(c) && !this.isLoose(c),
@@ -382,7 +420,7 @@ export class Dynamics {
 			w.shape,
 			by,
 			undefined,
-			undefined,
+			WALKS_AMONG,
 			(c) => !this.isWalker(c) && !this.isLoose(c),
 		);
 		const m = w.controller.computedMovement();
@@ -430,7 +468,12 @@ export class Dynamics {
 				Float32Array.from([...ring(-half, BODY.foot), ...ring(half, BODY.radius)]),
 			);
 			if (!hull) throw new Error("the walker's body has no hull");
-			const shape = this.world.createCollider(hull, body);
+			// It shoves the things that move; the room it walks among stops it by its
+			// queries.
+			const shape = this.world.createCollider(
+				hull.setCollisionGroups(groups(WALKER, THINGS)),
+				body,
+			);
 			this.walker = { body, shape, controller: this.world.createCharacterController(GAP) };
 		}
 		this.walker.body.setTranslation(middleOf(feet), true);

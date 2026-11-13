@@ -324,7 +324,9 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		// The one world the walker, the doors and the things are in, built once the
 		// room is drawn. Its build time on the host, to measure (`data-physics`, ms).
 		const physicsFrom = performance.now();
-		const dynamics = view.own(new Dynamics(await loadRapier(), lit.meshes, joints.specs()));
+		const dynamics = view.own(
+			new Dynamics(await loadRapier(), lit.meshes, joints.specs(), lit.walls),
+		);
 		joints.driveBy(dynamics);
 		const movables = new Movables(
 			view.scene,
