@@ -16,11 +16,19 @@ repo=$(cd "$(dirname "$0")/../.." && pwd -P)
 name=$(basename "$repo") # horus-run.sh puts it at ~/Code/$name
 ssh_opts=(-P 2222 -i "$HOME/.ssh/id_ed25519_horus" -o IdentitiesOnly=yes)
 remote="claude@horus.vpn:Code/$name"
+# Horus held awake for the whole of it, the copies before and after the bake too:
+# horus-run holds it only while its own command runs, and a copy after found it
+# asleep.
+"$HOME/Code/xinutec-infra/scripts/horus-run.sh" 'while sleep 60; do :; done' >/dev/null 2>&1 &
+hold=$!
+trap 'kill "$hold" 2>/dev/null' EXIT
+sleep 10
 # The cache goes over by itself first: the repository's copy comes with the run.
 if [ -d "$repo/.bake-cache" ]; then
   ssh -p 2222 -i "$HOME/.ssh/id_ed25519_horus" -o IdentitiesOnly=yes claude@horus.vpn \
     "rm -rf Code/$name/.bake-cache && mkdir -p Code/$name/.bake-cache"
-  scp -q "${ssh_opts[@]}" "$repo"/.bake-cache/* "$remote/.bake-cache/"
+  # Its files only: a bake's stages directory (empty once it finishes) is not one.
+  find "$repo/.bake-cache" -maxdepth 1 -type f -exec scp -q "${ssh_opts[@]}" {} "$remote/.bake-cache/" \;
 fi
 "$HOME/Code/xinutec-infra/scripts/horus-run.sh" --repo "$name" "
   G=\$(nix build --no-link --print-out-paths nixpkgs#libglvnd | head -1) &&
@@ -34,5 +42,8 @@ fi
     node e2e/bake.ts $*'"
 scp -q "${ssh_opts[@]}" "$remote/scenes/house.bake" "$repo/scenes/house.bake"
 mkdir -p "$repo/.bake-cache"
-scp -q "${ssh_opts[@]}" "$remote/.bake-cache/*" "$repo/.bake-cache/"
+for f in $(ssh -p 2222 -i "$HOME/.ssh/id_ed25519_horus" -o IdentitiesOnly=yes claude@horus.vpn \
+  "find Code/$name/.bake-cache -maxdepth 1 -type f -printf '%f\n'"); do
+  scp -q "${ssh_opts[@]}" "$remote/.bake-cache/$f" "$repo/.bake-cache/"
+done
 echo "bake-horus: $repo/scenes/house.bake"

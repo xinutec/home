@@ -499,7 +499,10 @@ fronts the carcasses are hollow (sides, back, bottom, a shelf; the sink's
 cupboard under its bowl, the worktop strips round it on the carcass's rails), the
 drawers boxes on 0.45 m of travel: the insides guessed, as their estimates say. An
 open door stops the walker where it stands now: what moves on each joint is a BVH
-of its own, in its own frame, met through the door's current place. Their light is baked: the lightmap with every
+of its own, in its own frame, met through the door's current place. (Since 13
+November they are not in the lightmap: they are lit from the probes, as what is
+picked up is, and only what each does to the fixed room's light is baked, as
+follows; doc/engine.md, step 6.) Their light is baked: the lightmap with every
 joint shut, then for each joint alone open (the baker draws a mesh where its matrix
 places it), tracing only the texels within 0.75 m of where it passes (`Joints.reach`),
 packed together; every other texel takes the shut bake's samples before they are

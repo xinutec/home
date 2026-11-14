@@ -142,7 +142,9 @@ export interface HouseBake {
 
 /**
  * Bakes the house's lightmap, `samples` a pixel, with every door and drawer shut,
- * then once more for each with it alone open, keeping what that changes.
+ * then once more for each with it alone open, keeping what that changes. The doors
+ * and drawers stand in the light but are not in the lightmap: they are lit from the
+ * probes, as what is picked up is.
  * `progress` hears samples done of all. `since` the last bake, it traces only near
  * the surfaces that changed since then and on charts no bake has lit, and bakes
  * again only the joints near them, in those places only: the rest is that bake's.

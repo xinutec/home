@@ -121,6 +121,9 @@ hand. The 3D house view (`frontend/.../features/house`) renders from these.
   down: along its profile by length, its last point at the top). A
   painting, a postcard: crop the photo to the thing, straightened, at a few pixels
   a millimetre.
+- **planar** — a material with `"planar": true` is a flat glossy pane on a part's
+  front (+z), a TV's glass: it reflects the room as it is from where it is seen
+  (drawn again, mirrored in it), not as the room's reflection probe saw it.
 - **lights** — each lamp: the `piece` it is, the part of it that `glows` (the
   glass, the flame), its `lumens` and colour temperature `kelvin`. The bake gives
   each lamp a light of its own: in full on its room's surfaces, with what opening

@@ -46,7 +46,7 @@ import { oneMaterialEach, picturesLoaded } from './trace-scene';
 import { Joints } from './joints';
 import { WalkControls } from './walk';
 import { imageStage } from './image-stage';
-import { PlanarReflections, withPlanar } from './planar';
+import { PlanarReflections } from './planar';
 import { FEATURES, type Feature, readFeature, readFeatures, writeFeature } from './view-settings';
 
 declare global {
@@ -267,7 +267,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 				catchError(() => of(undefined)),
 			);
 		forkJoin([this.http.get<HouseScene>('/api/house'), bake]).subscribe({
-			next: ([scene, baked]) => void this.open(withPlanar(withModels(scene)), baked),
+			next: ([scene, baked]) => void this.open(withModels(scene), baked),
 			error: (e) => {
 				this.loading.set(false);
 				if (e instanceof HttpErrorResponse && e.status === 404) this.empty.set(true);
@@ -325,7 +325,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		// room is drawn. Its build time on the host, to measure (`data-physics`, ms).
 		const physicsFrom = performance.now();
 		const dynamics = view.own(
-			new Dynamics(await loadRapier(), lit.meshes, joints.specs(), lit.walls),
+			new Dynamics(await loadRapier(), [...lit.meshes, ...lit.moving], joints.specs(), lit.walls),
 		);
 		joints.driveBy(dynamics);
 		const movables = new Movables(
@@ -461,7 +461,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 				view.requestFrame();
 				return;
 			}
-			const thing = movables.pick(caster.ray, lit.meshes);
+			const thing = movables.pick(caster.ray, [...lit.meshes, ...lit.moving]);
 			if (thing) {
 				movables.hold(thing, view.camera);
 				view.requestFrame();
@@ -530,10 +530,10 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		else if (this.query.trace) this.trace(view, this.query.trace);
 		else if (this.query.bake) {
 			const since = this.query.since && map ? await fetchLastBake(map) : undefined;
-			const joints = new Joints(scene, lit.meshes);
+			const joints = new Joints(scene, [...lit.meshes, ...lit.moving]);
 			this.bake(view, joints, lit, this.query.bake, since, !!this.query.shut, scene);
 		} else {
-			const joints = new Joints(scene, lit.meshes);
+			const joints = new Joints(scene, [...lit.meshes, ...lit.moving]);
 			this.light(view, scene, lit, map);
 			void this.walk(view, joints, lit, scene);
 		}
@@ -554,15 +554,7 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 		}
 		if (map && texture && (map.joints.length > 0 || map.lamps.length > 0))
 			this.liveLight = view.own(
-				new LiveLight(
-					view.renderer,
-					view.scene,
-					texture,
-					map.joints,
-					map.lamps,
-					map.pairs,
-					lit.meshes,
-				),
+				new LiveLight(view.renderer, view.scene, texture, map.joints, map.lamps, map.pairs),
 			);
 		if (map && texture && map.probes.length > 0) {
 			// A room's surfaces take only the lamps of other rooms: the rest is their
@@ -572,6 +564,8 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 				new ProbeLight(map.probes, (g) => g.lamp !== undefined && lampRoom.get(g.lamp) !== g.room),
 			);
 			this.movesLight = view.own(new ProbeLight(map.probes, () => true));
+			// The doors and drawers, not in the lightmap, as what is picked up.
+			for (const m of lit.moving) this.movesLight.dress(m, (r) => view.own(r));
 		}
 		if (applied) {
 			if (lit.movables.length > 0 && !this.fine) {

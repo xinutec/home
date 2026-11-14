@@ -70,6 +70,7 @@ export function buildInterior(
 		lit ?? {
 			meshes: [],
 			movables: [],
+			moving: [],
 			walls: walkerWorld([]),
 			extents: new Map(),
 			atlas: {
@@ -118,9 +119,18 @@ export function litRoom(
 	oneSided(stage.scene, (g) => stage.own(g));
 	// Before merging: merged, a mesh no longer says what it is.
 	const walls = walkerWorld(stage.scene.children);
-	const meshes = mergeStatic(stage.scene, (g) => stage.own(g));
+	const merged = mergeStatic(stage.scene, (g) => stage.own(g));
+	// The doors and drawers apart: lit from the probes, they are not in the lightmap.
+	// Each its own materials, which the lightmap's are not (`applyLightmap`).
+	const meshes = merged.filter((m) => m.userData['moves'] === undefined);
+	const moving = merged.filter((m) => m.userData['moves'] !== undefined);
+	for (const m of moving)
+		m.material = Array.isArray(m.material)
+			? m.material.map((x) => stage.own(x.clone()))
+			: stage.own(m.material.clone());
 	return {
 		meshes,
+		moving,
 		walls,
 		movables: stage.scene.children.filter(
 			(o): o is THREE.Mesh => o instanceof THREE.Mesh && o.userData['movable'] !== undefined,
@@ -1210,6 +1220,9 @@ const LIGHTMAP_TEXEL = 0.02;
  *  the lightmap (its geometries' `uv1`). */
 export interface Lit {
 	meshes: THREE.Mesh[];
+	/** The doors and drawers, merged, each saying its joint (`userData.moves`): lit
+	 *  from the probes, as what is picked up is; not in the lightmap. */
+	moving: THREE.Mesh[];
 	/** Each room's box, floor to ceiling, by name: its meshes carry `userData.room`. */
 	extents: Map<string, THREE.Box3>;
 	atlas: Atlas;

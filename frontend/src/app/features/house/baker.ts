@@ -286,7 +286,8 @@ interface World {
 }
 
 function buildWorld(lit: Lit, lamp: string | undefined): World {
-	const meshes = lit.meshes;
+	// The doors and drawers stand in the light where they are posed, with no chart.
+	const meshes = [...lit.meshes, ...lit.moving];
 	// Everything the rays can hit, as one geometry: its triangles, and per vertex what
 	// a hit there does (albedo and kind: 0 a solid's surface, seen from one side; 1
 	// glass, which light passes; 2 a sheet, seen from both, as a wall or a curtain).

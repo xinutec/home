@@ -30,7 +30,7 @@
     "steel": {"color": "#c9ccd0", "roughness": 0.35, "metalness": 0.9},
     "cast-iron": {"color": "#1c1c1e", "roughness": 0.45, "metalness": 0.6},
     "slate": {"color": "#1a1a1a", "roughness": 0.7},
-    "screen": {"color": "#060708", "roughness": 0.15},
+    "screen": {"color": "#060708", "roughness": 0.15, "planar": true},
     "wall-paint": {"color": "#a9a9a2", "roughness": 0.92, "estimate": "toned from keyframe 1, which mixes paint with light; settle by fitting to the photos under the traced light"},
     "carpet": {"color": "#7c7b7f", "roughness": 1, "texture": "carpet", "textureScale": 0.5, "estimate": "toned from keyframe 1, which mixes paint with light; settle by fitting to the photos under the traced light"},
     "ceiling-paint": {"color": "#f3f2ee", "roughness": 0.95},

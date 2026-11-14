@@ -292,6 +292,27 @@ export class ProbeLight {
 		return lightDirection(faces);
 	}
 
+	/** Lights `mesh` from the probes of the room its middle is in, as what is
+	 *  picked up is (a door, a drawer): each of its materials copied (`own` keeps
+	 *  the copy), reading them where each fragment is, without the room's
+	 *  reflection. */
+	dress(mesh: THREE.Mesh, own: <T extends { dispose(): void }>(r: T) => T): void {
+		const middle = new THREE.Box3().setFromObject(mesh).getCenter(new THREE.Vector3());
+		const tag = this.at(middle);
+		if (tag === undefined) return;
+		const probes = this.uniforms(tag);
+		const lit = (from: THREE.Material) => {
+			if (!(from instanceof THREE.MeshStandardMaterial))
+				throw new Error(`a probe-lit mesh is drawn in ${from.type}, not a standard material`);
+			const material = own(from.clone());
+			material.envMap = null;
+			material.onBeforeCompile = (shader) => this.patch(shader, probes, 'all');
+			material.customProgramCacheKey = () => 'probe-lit';
+			return material;
+		};
+		mesh.material = Array.isArray(mesh.material) ? mesh.material.map(lit) : lit(mesh.material);
+	}
+
 	/** Whether `room` has probes here. */
 	has(room: string): boolean {
 		return this.rooms.has(room);
@@ -356,9 +377,11 @@ export class ProbeLight {
 			uniform vec3 probeMin;
 			uniform vec3 probeSize;
 			${FACE_NAMES.map((n) => `uniform highp sampler3D ${n};`).join('\n')}
-			// The probes' light on a surface here facing n (world).
+			// The probes' light on a surface here facing n (world), read half a probe's
+			// step out along n: a door's face reads the room's probes, not those in the
+			// dark cupboard behind it (which, read where it is, gave it a sixth of its light).
 			vec3 probeLight(vec3 n) {
-				vec3 at = (vProbeAt - probeMin) / probeSize;
+				vec3 at = (vProbeAt + n * ${(PROBE_STEP / 2).toFixed(3)} - probeMin) / probeSize;
 				vec3 x = n.x >= 0.0 ? texture(probePX, at).rgb : texture(probeNX, at).rgb;
 				vec3 y = n.y >= 0.0 ? texture(probePY, at).rgb : texture(probeNY, at).rgb;
 				vec3 z = n.z >= 0.0 ? texture(probePZ, at).rgb : texture(probeNZ, at).rgb;

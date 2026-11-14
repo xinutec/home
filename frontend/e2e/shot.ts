@@ -11,7 +11,10 @@
 // --after ms (1500) after each for it to move: its clock is held, so a short
 // --after catches one exactly partway. Held, the clock leaves --exposure auto
 // metering wrongly (a carried cushion's frames came out far too bright): give an
-// exposure. --wait ms (2500) is how long the page runs before the shot. --off a,b switches those of the view's features off (view-settings).
+// exposure. --bake file draws with that bake, not scenes/house.bake (a trial
+// one); --dist dir draws with the build there (another version's). --wait ms
+// (2500) is how long the page runs before the shot. --off a,b switches those of
+// the view's features off (view-settings).
 import { chromium } from '@playwright/test';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { extname, join } from 'node:path';
@@ -33,11 +36,13 @@ const { values: a } = parseArgs({
 		after: { type: 'string', default: '1500' },
 		off: { type: 'string' },
 		wait: { type: 'string', default: '2500' },
+		bake: { type: 'string' },
+		dist: { type: 'string' },
 	},
 });
 const ORIGIN = 'https://home.xinutec.org';
 const ROOT = new URL('../..', import.meta.url).pathname;
-const DIST = new URL('../dist/frontend/browser', import.meta.url).pathname;
+const DIST = a.dist ?? new URL('../dist/frontend/browser', import.meta.url).pathname;
 const TYPES: Record<string, string> = {
 	'.js': 'text/javascript',
 	'.css': 'text/css',
@@ -70,7 +75,7 @@ await ctx.route(new RegExp(`^${ORIGIN}/(?!api/|auth/|login)`), (r) => {
 });
 await ctx.route('**/api/house/bake', (r) =>
 	r.fulfill({
-		body: readFileSync(join(ROOT, 'scenes/house.bake')),
+		body: readFileSync(a.bake ?? join(ROOT, 'scenes/house.bake')),
 		contentType: 'application/octet-stream',
 	}),
 );
@@ -88,9 +93,12 @@ await ctx.route('**/api/house', (r) =>
 	}),
 );
 // As the settings keep them on this device (view-settings.ts's keys).
-await ctx.addInitScript((off: string[]) => {
-	for (const f of off) localStorage.setItem(`house.${f}`, 'off');
-}, a.off?.split(',') ?? []);
+await ctx.addInitScript(
+	(off: string[]) => {
+		for (const f of off) localStorage.setItem(`house.${f}`, 'off');
+	},
+	a.off?.split(',') ?? [],
+);
 const page = await ctx.newPage();
 page.on('console', (m) => {
 	if (m.type() === 'error') console.error(`page: ${m.text()}`);

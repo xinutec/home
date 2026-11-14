@@ -49,21 +49,6 @@ const blurPass = new THREE.ShaderMaterial({
 /** Metres in front of its face the pane is drawn, clear of it in the depth buffer. */
 const LIFT = 0.001;
 
-/** The materials that are panes (`MaterialSpec.planar`) until the scene file says
- *  so itself: the bake is keyed by the file's every byte, and the next bake is the
- *  whole one that takes the doors out of it (doc/engine.md, step 6). */
-const PLANAR = ['screen'];
-
-/** `house` with those of PLANAR's materials it has marked as panes. */
-export function withPlanar(house: HouseScene): HouseScene {
-	const materials = { ...house.materials };
-	for (const key of PLANAR) {
-		const spec = materials[key];
-		if (spec) materials[key] = { ...spec, planar: true };
-	}
-	return { ...house, materials };
-}
-
 /** The pane's light: the mirrored room, by glass's Fresnel reflectance, added to
  *  the face behind it (its own dark glass, lit as baked). */
 const GLASS = {

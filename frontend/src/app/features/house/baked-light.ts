@@ -160,21 +160,6 @@ export function jointLists(joints: LightChange[]): {
 	return { texels: Uint32Array.from(order), first, count, entries };
 }
 
-/**
- * Which joint moves each texel of a `width` x `height` atlas, by its index in
- * `keys`: the texels of every mesh that moves on one (`userData.moves`), with their
- * gutter; -1 where the room stands still. A joint's change of light was baked with
- * every other joint shut, so it holds on another's part only while that is shut.
- */
-export function jointOwners(
-	meshes: THREE.Mesh[],
-	keys: string[],
-	width: number,
-	height: number,
-): Int16Array {
-	return texelOwners(meshes, (m) => keys.indexOf(String(m.userData['moves'] ?? '')), width, height);
-}
-
 /** Each texel of a `width` x `height` atlas as `of` its mesh says (-1 for none),
  *  with its chart's gutter; -1 where no mesh is. */
 export function texelOwners(
@@ -236,7 +221,9 @@ const LIST_ROW = 2048;
  * daylight, so nothing is uploaded a frame.
  *
  * A joint's change was baked in daylight, so it goes with the daylight; a lamp's
- * light with every joint shut, and a pair's with its joint alone open.
+ * light with every joint shut, and a pair's with its joint alone open. The doors
+ * and drawers themselves are not in the lightmap: they are lit from the probes
+ * (`ProbeLight.dress`), as what is picked up is.
  */
 export class LiveLight {
 	private readonly target: THREE.WebGLRenderTarget;
@@ -265,8 +252,6 @@ export class LiveLight {
 		joints: LightChange[],
 		lamps: LightChange[],
 		pairs: LightChange[],
-		/** The room's meshes as laid out in the lightmap: which of them moves on what. */
-		meshes: THREE.Mesh[],
 	) {
 		const { width, height } = base.image;
 		this.target = new THREE.WebGLRenderTarget(width, height, {
@@ -331,19 +316,6 @@ export class LiveLight {
 		g.setAttribute('shut', new THREE.Float32BufferAttribute(shut, 3));
 		g.setAttribute('first', new THREE.Float32BufferAttribute(lists.first, 1));
 		g.setAttribute('count', new THREE.Float32BufferAttribute(lists.count, 1));
-		const owners = jointOwners(
-			meshes,
-			joints.map((j) => j.key),
-			width,
-			height,
-		);
-		g.setAttribute(
-			'owner',
-			new THREE.Float32BufferAttribute(
-				Float32Array.from(lists.texels, (t) => owners[t]),
-				1,
-			),
-		);
 		this.keys = joints.map((j) => j.key);
 		this.lampKeys = lamps.map((l) => l.key);
 		this.open = { value: joints.map(() => 0) };
@@ -370,7 +342,6 @@ export class LiveLight {
 				open: this.open,
 				lamps: this.lamps,
 				pairs: this.pairWeights,
-				pairJoint: { value: this.pairs.map((p) => p.joint) },
 				pairLamp: { value: this.pairs.map((p) => p.lamp) },
 				casting: this.casting,
 				daylight: this.daylight,
@@ -381,7 +352,6 @@ export class LiveLight {
 				uniform float open[JOINT_SLOTS];
 				uniform vec3 lamps[LAMP_SLOTS];
 				uniform vec3 pairs[PAIR_SLOTS];
-				uniform float pairJoint[PAIR_SLOTS];
 				uniform float pairLamp[PAIR_SLOTS];
 				uniform int casting;
 				uniform float daylight;
@@ -389,7 +359,6 @@ export class LiveLight {
 				in vec3 shut;
 				in float first;
 				in float count;
-				in float owner;
 				out vec3 vLight;
 				out float vCast;
 				void main() {
@@ -407,13 +376,9 @@ export class LiveLight {
 							if (k - JOINTS - PAIRS == casting) castLight += its;
 							continue;
 						}
-						// Its joint: another joint's change, on a part this texel's joint moves,
-						// counts as far as that part is still shut: it was baked with it shut.
-						int j = k < JOINTS ? k : int(pairJoint[k - JOINTS]);
-						float shut = owner >= 0.0 && int(owner) != j ? 1.0 - open[int(owner)] : 1.0;
-						if (k < JOINTS) day += shut * open[k] * e.yzw;
+						if (k < JOINTS) day += open[k] * e.yzw;
 						else {
-							vec3 its = shut * pairs[k - JOINTS] * e.yzw;
+							vec3 its = pairs[k - JOINTS] * e.yzw;
 							lamp += its;
 							if (int(pairLamp[k - JOINTS]) == casting) castLight += its;
 						}

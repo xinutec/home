@@ -15,7 +15,8 @@ house:
 - the contact shadow's "what is under it", asked of the walker's collider's
   fixed part, which has no doors in it;
 - the room outlines, which pick the light probes a thing reads (`roomAt`);
-- the bake, which has a layer per door, per lamp, and per door and lamp.
+- the bake, which has a layer per door, per lamp, and per door and lamp (since
+  13 November no door in the lightmap itself: step 6).
 
 Every bug of 10 and 11 November was two copies disagreeing: a cushion's shadow
 drawn under a shut door's top while it lay on the open door; a cushion black in
@@ -47,8 +48,8 @@ and stalls on what it cannot move, as a real one; nothing detects a jam.
 | Movables | when moved | probes | the same |
 
 - **The lightmap stays** for what never moves: it is the best of what there is.
-  Doors and drawers leave it, so the per-door and door-and-lamp layers go and the
-  bake shrinks.
+  Doors and drawers leave it; what opening each does to the room stays baked
+  (step 6).
 - **Screen-space ambient occlusion** (GTAO, at half resolution) darkens contact
   where it is on screen, whatever lies on what. Who may darken a pixel depends on
   what it is: the room's surfaces have their creases in the bake, so only moving
@@ -167,8 +168,26 @@ Each step lands deployed, the view working throughout, its cost read on the phon
    across the floor and stalls on one caught against a wall. A door also stalls on
    the walker standing in its way. They start asleep: all of them settling at once
    cost the walk a 33 ms frame at its start on the Mac.
-6. **Doors out of the bake.** Doors and drawers lit as movables; the joint and
-   pair layers go. Its whole bake also takes the scene file's own `"planar": true`
-   on the `screen` material, and `PLANAR` in `planar.ts` goes (any edit to the file
-   needs a bake). Done when an open door's inside matches the old bake's within
-   the comparison's tolerance, and the bake is smaller.
+6. **Doors out of the bake.** Doors and drawers lit as movables. Done when an
+   open door's inside matches the old bake's within the comparison's tolerance,
+   and the bake is smaller.
+   Done (13 November): the doors and drawers are out of the lightmap and lit from
+   the probes (`ProbeLight.dress`), read half a probe step out along each face's
+   normal (read where it is, a shut door's face took the dark cupboard's probes
+   behind it: a sixth of its light). The bake has them standing shut in the light:
+   left out, light poured into a cupboard through every opening at once (2.4-5.5
+   times the old inside light); baked open, a door shaded the carcass beside it
+   while shut (a quarter of its light); baked shut alone, an opened cupboard was
+   black. So the joint and pair layers stay: what opening each does to the fixed
+   room near it, in daylight and under each lamp of its room. Scaling the
+   daylight's change by the light at the opening instead of the pairs was built and
+   dropped: at night the sideboard's insides came out at 0.62 of the old bake's
+   (the ceiling lamp shines in from above, which the light at the opening's face
+   does not see), and the wall by an open door at 1.15 (the door's shade of the
+   lamp's light bounced off the room is lost). The patch is in scratch
+   (engine-still/step6-ratio).
+   Against the old bake at 2048 samples (the sideboard, its doors and a drawer
+   open): shut, every surface 0.99-1.02; open by day, 0.99-1.04 (the insides
+   0.99-1.01); open at night, 0.98-1.02. The bake is 12.5 MB, from 14.8 (the doors'
+   own charts gone). Baked on the Mac: horus's lamps come out 1.5-5 times too
+   bright since 11 November, whatever the code (task 2106).
