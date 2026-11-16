@@ -54,13 +54,13 @@ The `k8s/…` manifests live in the home monorepo
 First time:
 
 1. DNS: `home` CNAME → `isis.xinutec.org` (in `code/dns/xinutec_org.tf`, `tofu apply`).
-2. Secret: `ssh root@isis.xinutec.org 'bash -s' < k8s/secret.sh` (prints the INGEST_TOKEN).
-3. Apply manifests (in order):
-   ```
-   ssh root@isis.xinutec.org 'kubectl apply -f -' < k8s/00-namespace.yaml
-   # ...01-pvc, 02-db, 03-app, 05-ingress
-   ```
-4. Point the pushers at it (the INGEST_TOKEN goes in the Mac Keychain), then
+2. `kubes/deploy.sh home` from the kubes checkout: it creates the namespace
+   and stops until the app's Secret holds every key the model declares.
+3. `plan-run secrets --settings <xinutec-infra>/plan/settings.json --local-repo
+   <kubes checkout> --values FILE --apply`, where FILE (mode 600) gives the two
+   typed keys as `home.NC_CLIENT_ID=…` and `home.NC_CLIENT_SECRET=…` lines; the
+   rest are generated. Then `kubes/deploy.sh home` again.
+4. Point the pushers at it (the INGEST_TOKEN, read from the Secret, goes in the Mac Keychain), then
    enable their launchd timers.
 
 Every change: push to `main` (CI builds `xinutec/home:latest`), then
