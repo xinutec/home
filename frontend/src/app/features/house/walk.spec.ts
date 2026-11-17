@@ -425,13 +425,16 @@ describe('the controls, as a first-person game’s', () => {
 				walker.update();
 			}
 		};
-		// Up the flight to its top, by the wall at the hall's end, then right onto the
-		// landing beside it.
-		go('KeyW', 3000);
-		go('KeyD', 1000);
+		// Up the flight to its platform, into the wall at the hall's end, then right up
+		// the short flight onto the landing, its shoulder against that wall all the way:
+		// the wall beside it is no ceiling over it, and no slope under it.
+		go('KeyW', 3500);
+		expect(camera.position.x).toBeLessThan(-0.6);
+		expect(camera.position.y).toBeCloseTo(2 + EYE, 2);
+		go('KeyD', 1500);
 		const landing = house.rooms.find((r) => r.name === 'landing');
-		expect(camera.position.x).toBeLessThan(-0.9);
-		expect(camera.position.z).toBeLessThan(4.6);
+		expect(camera.position.x).toBeLessThan(-0.6);
+		expect(camera.position.z).toBeLessThan(4.1);
 		expect(camera.position.y).toBeCloseTo((landing?.floor ?? NaN) + EYE, 2);
 	});
 

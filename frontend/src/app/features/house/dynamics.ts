@@ -10,6 +10,8 @@ const GAP = 0.01;
 interface Walker {
 	body: RAPIER.RigidBody;
 	shape: RAPIER.Collider;
+	/** Its shape SLIM narrower all round, for moving straight up or down. */
+	slim: RAPIER.Shape;
 	controller: RAPIER.KinematicCharacterController;
 }
 /** Metres a step must be deep, ahead of where the walker stands on its edge, for
@@ -19,6 +21,10 @@ const TREAD = 0.1;
  *  GAP itself, the controller took the floor for something in its way and cut each
  *  step short (2.5 cm over 2 m). */
 const MARGIN = 0.001;
+/** Metres narrower the walker is when swept straight up or down: a wall its
+ *  shoulder is held GAP from lies within GAP + MARGIN of it, and was taken for a
+ *  ceiling, or for ground too steep to stand on, so by a wall it climbed no stair. */
+const SLIM = 0.003;
 /** The steepest ground the walker stands on (radians from level), as Rapier's
  *  own character controller has it: steeper, it slips down. */
 const STEEPEST = Math.PI / 4;
@@ -396,7 +402,7 @@ export class Dynamics {
 			middleOf(from),
 			{ x: 0, y: 0, z: 0, w: 1 },
 			{ x: 0, y: way, z: 0 },
-			w.shape.shape,
+			w.slim,
 			GAP + MARGIN,
 			most,
 			false,
@@ -464,17 +470,25 @@ export class Dynamics {
 					return [r * Math.cos(turn), y, r * Math.sin(turn)];
 				}).flat();
 			const half = (BODY.high - GAP) / 2;
-			const hull = R.ColliderDesc.convexHull(
-				Float32Array.from([...ring(-half, BODY.foot), ...ring(half, BODY.radius)]),
-			);
-			if (!hull) throw new Error("the walker's body has no hull");
+			const frustum = (less: number) =>
+				R.ColliderDesc.convexHull(
+					Float32Array.from([...ring(-half, BODY.foot - less), ...ring(half, BODY.radius - less)]),
+				);
+			const hull = frustum(0);
+			const slim = frustum(SLIM);
+			if (!hull || !slim) throw new Error("the walker's body has no hull");
 			// It shoves the things that move; the room it walks among stops it by its
 			// queries.
 			const shape = this.world.createCollider(
 				hull.setCollisionGroups(groups(WALKER, THINGS)),
 				body,
 			);
-			this.walker = { body, shape, controller: this.world.createCharacterController(GAP) };
+			this.walker = {
+				body,
+				shape,
+				slim: slim.shape,
+				controller: this.world.createCharacterController(GAP),
+			};
 		}
 		this.walker.body.setTranslation(middleOf(feet), true);
 		this.world.propagateModifiedBodyPositionsToColliders();

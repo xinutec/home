@@ -37,6 +37,8 @@ const KNOWN_COLLISIONS = [
 	'kitchen-cubbies-divider/body × kitchen-cubbies-back/body',
 	'kitchen-cubbies-left/body × kitchen-cubbies-back/body',
 	'kitchen-cubbies-right/body × kitchen-cubbies-back/body',
+	// The bottom step's round end is a whole disc, half of it inside the step's block.
+	'hall-stair-foot/bullnose × hall-stair-foot/bullnose-end',
 ].sort();
 
 /**

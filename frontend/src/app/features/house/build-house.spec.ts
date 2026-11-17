@@ -8,7 +8,7 @@ import { buildHouse, solidTag } from './room-builder';
 import { mergeStatic } from './merge';
 import { oneSided } from './sides';
 import { unwrap } from './unwrap';
-import { passages, roomPerimeter, segments } from './scene-geometry';
+import { holds, passages, roomPerimeter, segments } from './scene-geometry';
 
 const scene = withModels(json as unknown as HouseScene);
 
@@ -41,7 +41,7 @@ describe('buildHouse', () => {
 		expect(faceless).toEqual([]);
 	});
 
-	it('cuts the landing’s stairwell where the scene says, a notch in its edge: open over it, floor round it', () => {
+	it('cuts the landing’s stairwell where the scene says, its corners and all: open over it, floor round it', () => {
 		const landing = scene.rooms.find((r) => r.name === 'landing');
 		const hole = landing?.holes?.[0];
 		expect(hole).toBeDefined();
@@ -55,22 +55,21 @@ describe('buildHouse', () => {
 				floor,
 				false,
 			).length > 0;
-		const [x0, x1] = [
-			Math.min(...(hole ?? []).map(([x]) => x)),
-			Math.max(...(hole ?? []).map(([x]) => x)),
-		];
-		const [z0, z1] = [
-			Math.min(...(hole ?? []).map(([, z]) => z)),
-			Math.max(...(hole ?? []).map(([, z]) => z)),
-		];
+		if (!landing || !hole) return;
+		const well = hole.map(([x, z]) => ({ x, z }));
+		const outline = roomPerimeter(landing);
 		const open: string[] = [];
 		const shut: string[] = [];
-		for (let x = x0 + 0.05; x < x1; x += 0.1)
-			for (let z = z0 + 0.05; z < z1; z += 0.1)
-				if (solid(x, z)) shut.push(`${x.toFixed(2)},${z.toFixed(2)}`);
-		for (let x = x0 + 0.05; x < x1; x += 0.1)
-			for (let z = 3.8; z < z0 - 0.05; z += 0.1)
-				if (!solid(x, z)) open.push(`${x.toFixed(2)},${z.toFixed(2)}`);
+		// Every 10 cm over the landing: open in the well, floor everywhere else.
+		const xs = outline.map((p) => p.x);
+		const zs = outline.map((p) => p.z);
+		for (let x = Math.min(...xs) + 0.05; x < Math.max(...xs); x += 0.1)
+			for (let z = Math.min(...zs) + 0.05; z < Math.max(...zs); z += 0.1) {
+				const at = `${x.toFixed(2)},${z.toFixed(2)}`;
+				if (holds(well, x, z)) {
+					if (solid(x, z)) shut.push(at);
+				} else if (holds(outline, x, z) && !solid(x, z)) open.push(at);
+			}
 		expect(shut, 'floor over the stairwell').toEqual([]);
 		expect(open, 'no floor beside it').toEqual([]);
 	});
