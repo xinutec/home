@@ -380,6 +380,10 @@ A frosted pane is drawn as the diffuse light it lets in (`windowRadiance`: its
 transmittance times the vertical daylight on it, over π), not as a hole onto the
 sky: paths seldom find a small hole, and the image came out as noise. Clear panes
 are glass, so the sky through them keeps its direction.
+That light is in the pane's own colour (`paneGlow`): the bathroom's drawn blind is
+its window's pane, a material that passes a quarter of the daylight, tinted. The
+pane's colour is part of what a bake is baked by (`e2e/bake.ts`): changed, the whole
+house is baked again, since an edit's incremental bake reaches only near the pane.
 `compare-view --trace N` sets the exposure like a camera, one number for the
 whole picture, from the regions' total brightness. No direct sun yet: keyframe 1
 shows none, and the bay's bearing is unknown.

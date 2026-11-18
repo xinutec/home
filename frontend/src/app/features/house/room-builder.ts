@@ -617,8 +617,9 @@ function addGlazing(
 		if (physical && !frame && !clear) {
 			// A diffusing pane as the light it lets in: an even emitter facing the room,
 			// which a path tracer can aim at, as frosted glass sends light every way.
+			// In the pane's own colour (`paneGlow`): white glass passes the sky's.
 			const light = new THREE.RectAreaLight(
-				new THREE.Color(...SKY),
+				new THREE.Color(...SKY).multiply(new THREE.Color(spec(key).color ?? '#ffffff')),
 				windowRadiance(spec(key).transmission ?? 1),
 				p.a1 - p.a0,
 				p.yt - p.yb,

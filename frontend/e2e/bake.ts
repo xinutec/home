@@ -55,16 +55,22 @@ const md5 = (b: Buffer) => createHash('md5').update(b).digest('hex');
 // texel's light may have, and only a whole bake will do.
 const SRC = new URL('../src/app/features/house/', import.meta.url).pathname;
 // A lamp's lumens and colour are applied as the room is drawn: only what glows is baked.
-const lights = (
-	JSON.parse(readFileSync(SCENE, 'utf8')) as {
-		lights?: { id: string; piece: string; glows: string }[];
-	}
-).lights?.map(({ id, piece, glows }) => ({ id, piece, glows }));
+const scene = JSON.parse(readFileSync(SCENE, 'utf8')) as {
+	lights?: { id: string; piece: string; glows: string }[];
+	materials?: Record<string, { color?: string; roughness?: number; transmission?: number }>;
+};
+const lights = scene.lights?.map(({ id, piece, glows }) => ({ id, piece, glows }));
+// A pane that passes daylight is a light too, in its own colour (a blind's): its
+// colour changed, the room's light has, far from the pane's own charts.
+const panes = Object.entries(scene.materials ?? {})
+	.filter(([, m]) => (m.transmission ?? 0) > 0)
+	.map(([key, m]) => [key, m.color, m.roughness, m.transmission])
+	.sort();
 const inputs = md5(
 	Buffer.concat([
 		readFileSync(join(SRC, 'baker.ts')),
 		readFileSync(join(SRC, 'sky.ts')),
-		Buffer.from(JSON.stringify({ lights, samples: args.samples })),
+		Buffer.from(JSON.stringify({ lights, panes, samples: args.samples })),
 	]),
 );
 // The last bake's raw sums, if they are this bake's base: for the committed bake,

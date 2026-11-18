@@ -8,6 +8,7 @@ import {
 	ZENITH_NITS,
 	kelvinColour,
 	lampRadiance,
+	paneGlow,
 	windowRadiance,
 } from './sky';
 
@@ -30,6 +31,23 @@ describe('windowRadiance', () => {
 		const vertical = Math.PI / 6 + 4 / 9 + ((GROUND_ALBEDO * 7) / 9) * (Math.PI / 2);
 		expect(windowRadiance(1)).toBeCloseTo(vertical / Math.PI, 3);
 		expect(windowRadiance(0.8)).toBeCloseTo((0.8 * vertical) / Math.PI, 3);
+	});
+});
+
+describe('paneGlow', () => {
+	it('is the sky’s light a diffusing pane passes, in the pane’s own colour', () => {
+		const through = windowRadiance(0.8);
+		// White frosted glass: the sky's colour.
+		expect(paneGlow(0.8, [1, 1, 1])).toEqual([
+			SKY[0] * through,
+			SKY[1] * through,
+			SKY[2] * through,
+		]);
+		// A drawn blind passes its own colour of it and none of the rest.
+		const blind = paneGlow(0.8, [1, 0.25, 0]);
+		expect(blind[0]).toBeCloseTo(SKY[0] * through, 6);
+		expect(blind[1]).toBeCloseTo(SKY[1] * through * 0.25, 6);
+		expect(blind[2]).toBe(0);
 	});
 });
 

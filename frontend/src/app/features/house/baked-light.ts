@@ -5,7 +5,7 @@ import type { Lit } from './room-builder';
 import type { MovingShadow } from './moving-shadow';
 import type { Occluders } from './occluders';
 import type { ProbeLight } from './probes';
-import { NIGHT_SKY, SKY, windowRadiance } from './sky';
+import { NIGHT_SKY, SKY, paneGlow } from './sky';
 import { GUTTER } from './unwrap';
 
 /** The merged room's fingerprint, as its lightmap stores it: every vertex's place
@@ -57,13 +57,14 @@ export function applyLightmap(
 		if (material instanceof THREE.MeshPhysicalMaterial && material.transmission > 0) {
 			// Glass, cheaply: a frosted pane as the light it lets in, a clear one not drawn.
 			const frosted = material.roughness > 0.1;
-			const glow = frosted ? windowRadiance(material.transmission) : 0;
+			const { r, g, b } = material.color;
+			const glow = frosted ? paneGlow(material.transmission, [r, g, b]) : [0, 0, 0];
 			material.transmission = 0;
 			// Clear glass not drawn: it passes about 92% of the light (4% reflected at
 			// each face), which against the sky beyond is white either way; drawn, it
 			// blends after the tone curve straight to the screen and greys that sky.
 			material.visible = frosted;
-			material.emissive.setRGB(SKY[0] * glow, SKY[1] * glow, SKY[2] * glow);
+			material.emissive.setRGB(glow[0], glow[1], glow[2]);
 			// The daylight it lets in, for the evening to take away (`showDaylight`).
 			material.userData['daylight'] = material.emissive.clone();
 			material.color.setRGB(0, 0, 0);

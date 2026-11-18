@@ -80,6 +80,14 @@ export function windowRadiance(t: number): number {
 	return (t * (sky + ground)) / Math.PI;
 }
 
+/** The light a diffusing pane of transmittance `t` and `colour` (linear r, g, b)
+ *  sends into the room: the sky's, in the pane's colour. White frosted glass passes
+ *  the sky's own; a drawn blind, its colour of it. */
+export function paneGlow(t: number, colour: readonly number[]): [number, number, number] {
+	const through = windowRadiance(t);
+	return [SKY[0] * through * colour[0], SKY[1] * through * colour[1], SKY[2] * through * colour[2]];
+}
+
 /** The overcast sky's zenith luminance, cd/m², which the trace's unit stands for: a
  *  bright overcast day. It sets how a lamp's lumens compare with the daylight. */
 export const ZENITH_NITS = 4000;

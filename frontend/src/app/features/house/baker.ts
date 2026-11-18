@@ -9,7 +9,7 @@ import {
 
 import { NO_AREA } from './room-builder';
 import type { Lit } from './room-builder';
-import { GROUND, GROUND_ALBEDO, LAMP_BAKED_LUMENS, SKY, lampRadiance, windowRadiance } from './sky';
+import { GROUND, GROUND_ALBEDO, LAMP_BAKED_LUMENS, SKY, lampRadiance, paneGlow } from './sky';
 
 /** Glass this smooth passes light straight through; rougher glass diffuses it. */
 const CLEAR_GLASS_ROUGHNESS = 0.1;
@@ -361,7 +361,8 @@ function buildWorld(lit: Lit, lamp: string | undefined): World {
 				if (area >= NO_AREA) glowing.push({ a, e1, e2, area });
 			}
 		if (!glass || lamp !== undefined) continue;
-		const glow = frosted ? windowRadiance(transmission) : 0;
+		const tint = std ? [std.color.r, std.color.g, std.color.b] : [1, 1, 1];
+		const glow = frosted ? paneGlow(transmission, tint) : [0, 0, 0];
 		for (let k = 0; k < tri.length; k += 3) {
 			const a = v(tri[k]);
 			const e1 = v(tri[k + 1]).sub(a);
@@ -375,7 +376,7 @@ function buildWorld(lit: Lit, lamp: string | undefined): World {
 				e1,
 				e2,
 				area,
-				le: [SKY[0] * glow, SKY[1] * glow, SKY[2] * glow],
+				le: glow,
 				t: frosted ? 0 : transmission,
 				sides: 2,
 			});
