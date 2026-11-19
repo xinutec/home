@@ -75,6 +75,28 @@ describe("scenes/house.json", () => {
 		expect(estimates.filter((e) => !/measure|settle|read/.test(e))).toEqual([]);
 	});
 
+	it("makes no piece of glass that glows with daylight: that is a window's pane", () => {
+		// A diffusing pane (frosted glass, a blind) is drawn and baked as the daylight
+		// it lets in. In a piece indoors it lit the room from a wall: a door's panes.
+		const all = scene as unknown as {
+			materials?: Record<string, { roughness?: number; transmission?: number }>;
+			models?: Record<string, { material?: string; parts?: { material?: string }[] }>;
+			furniture: { id?: string; material?: string; parts?: { id: string; material?: string }[] }[];
+		};
+		const glows = (key?: string) => {
+			const m = key === undefined ? undefined : all.materials?.[key];
+			return (m?.transmission ?? 0) > 0 && (m?.roughness ?? 1) > 0.1;
+		};
+		const pieces = [...all.furniture, ...Object.values(all.models ?? {})];
+		const found = pieces.flatMap((f) => [
+			...(glows(f.material) ? [`${"id" in f ? f.id : "a model"}`] : []),
+			...(f.parts ?? [])
+				.filter((p) => glows(p.material))
+				.map((p) => `${"id" in f ? f.id : "a model"}/${p.material}`),
+		]);
+		expect(found).toEqual([]);
+	});
+
 	it("gives no two boxes the same id", () => {
 		const ids = scene.furniture.flatMap((f) => (f.id ? [f.id] : []));
 		expect(ids.length).toBe(new Set(ids).size);
