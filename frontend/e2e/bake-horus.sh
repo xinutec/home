@@ -7,7 +7,8 @@
 # The Mac's working tree goes over (horus-run.sh --repo), horus builds the
 # frontend, and e2e/bake.ts runs there in headless Chromium: ANGLE over EGL, Mesa's
 # D3D12 driver, the NVIDIA adapter. libEGL.so.1 is libglvnd's, which the
-# distribution does not put on the library path. The last bake's raw sums
+# distribution does not put on the library path; it is the flake's nixpkgs' own, not
+# whatever the registry's nixpkgs is that day. The last bake's raw sums
 # (.bake-cache/, which git ignores and the copy leaves behind) go over first and
 # come back with the bake, so a bake there can be one of only what changed.
 set -euo pipefail
@@ -31,7 +32,7 @@ if [ -d "$repo/.bake-cache" ]; then
   find "$repo/.bake-cache" -maxdepth 1 -type f -exec scp -q "${ssh_opts[@]}" {} "$remote/.bake-cache/" \;
 fi
 "$HOME/Code/xinutec-infra/scripts/horus-run.sh" --repo "$name" "
-  G=\$(nix build --no-link --print-out-paths nixpkgs#libglvnd | head -1) &&
+  G=\$(nix build --inputs-from . --no-link --print-out-paths nixpkgs#libglvnd | head -1) &&
   nix develop -c bash -c '
     set -e
     pnpm install --frozen-lockfile >/dev/null

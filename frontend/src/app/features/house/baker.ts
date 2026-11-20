@@ -581,7 +581,12 @@ function kernel(
 				float alpha = acos(clamp(-dot(nab, nca), -1.0, 1.0));
 				float beta = acos(clamp(-dot(nbc, nab), -1.0, 1.0));
 				float gamma = acos(clamp(-dot(nca, nbc), -1.0, 1.0));
-				omega = alpha + beta + gamma - 3.14159265359;
+				// The solid angle by its tangent (Van Oosterom and Strackee, 1983), not as the
+				// angles' sum less π: a small triangle's angle is then what is left of three
+				// rounded acos, and under Direct3D that error passes SMALL_ANGLE, so a lamp's
+				// small far triangles were weighed many times over (its light 2-5 times too
+				// bright baked on horus, a lantern's 80 times).
+				omega = 2.0 * atan(abs(dot(a, cross(b, c))), 1.0 + dot(a, b) + dot(b, c) + dot(c, a));
 				float s = sin(u1 * omega - alpha);
 				float t = cos(u1 * omega - alpha);
 				float u = t - cos(alpha);
