@@ -221,10 +221,15 @@ export interface MaterialSpec {
 }
 
 /** How a thing that can be picked up falls: its weight, and how much of its speed
- *  it keeps off a bounce (0 a cushion, 0.6 a rubber ball; 0.1 unsaid). */
+ *  it keeps off a bounce (0 a cushion, 0.6 a rubber ball; 0.1 unsaid). A soft one
+ *  says how it gives: `give`, the metres it flattens for each kilogram laid on it
+ *  (its own weight too), and `recover`, the seconds it takes to come most of the
+ *  way back (0.4 unsaid). It is drawn so (`Squash`); its body keeps its shape. */
 export interface Movable {
 	kg: number;
 	bounce?: number;
+	give?: number;
+	recover?: number;
 	estimate?: string;
 }
 

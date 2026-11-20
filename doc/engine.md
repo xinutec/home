@@ -191,3 +191,23 @@ Each step lands deployed, the view working throughout, its cost read on the phon
    0.99-1.01); open at night, 0.98-1.02. The bake is 12.5 MB, from 14.8 (the doors'
    own charts gone). Baked on the Mac: horus's lamps come out 1.5-5 times too
    bright since 11 November, whatever the code (task 2106).
+7. **Soft things.** A cushion gives under what lies or lands on it. Done when
+   a cushion under a jar is drawn flatter and the jar as much lower, a cushion
+   dropped dents and comes back, and the frame costs the same.
+   In (20 November), drawn only: the world keeps every shape, so a pile of
+   cushions stands as still as a pile of boxes, and nothing here can upset it.
+   A soft thing says how it gives in the scene (`Movable.give`, `recover`). The
+   world tells who holds whom up and from which side, and the blow of each pair
+   that has just met (`Dynamics.press`, `blows`); how hard a thing is pressed
+   comes from the weights down the pile (`loads`), not from the world's pushes:
+   those came out up to three times the weight for a pile at rest, differently
+   by how it had come to rest. Each soft thing follows its load, down fast and
+   back in its own time, and dents at once under a blow (`Squash`); it is drawn
+   pressed in along the way it is pressed, its foot staying and its sides
+   bulging to keep its volume, by one matrix on its parts (`squashMatrix`), and
+   what lies on it is drawn as much lower (`sinks`). No shader, no new mesh.
+   Built and dropped: taking a soft thing's bounce and spin away where it
+   touches, to make it land dead. Measured, a box of a cushion's weight already
+   lands without a bounce and sleeps within a second, soft or not: what read as
+   hard was that nothing gave.
+   Switch: `soft` in the view's settings (reloads).

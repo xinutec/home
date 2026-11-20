@@ -261,3 +261,87 @@ describe('Movables', () => {
 		expect(now.y).toBeGreaterThan(0.6);
 	});
 });
+
+describe('Movables, a soft thing', () => {
+	/** A cushion lying flat on the floor (40 by 14 by 40 cm, giving 1 cm a kilogram)
+	 *  and a jar of 1.5 kg over it, `soft` things giving or not. */
+	async function pile(soft: boolean) {
+		const R = await loadRapier();
+		const scene = new THREE.Scene();
+		const mesh = (key: string, w: number, h: number, y: number) => {
+			const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), new THREE.MeshStandardMaterial());
+			m.position.set(0, y + h / 2, 0);
+			m.userData['movable'] = key;
+			scene.add(m);
+			return m;
+		};
+		const cushion = mesh('cushion', 0.4, 0.14, 0);
+		const jar = mesh('jar', 0.2, 0.2, 0.15);
+		const floor = new THREE.Mesh(new THREE.BoxGeometry(10, 0.1, 10));
+		floor.position.set(0, -0.05, 0);
+		floor.updateMatrixWorld();
+		const movables = new Movables(
+			scene,
+			[cushion, jar],
+			new Dynamics(R, [floor]),
+			undefined,
+			(r) => r,
+			(key) => (key === 'cushion' ? { kg: 0.3, give: 0.01 } : { kg: 1.5 }),
+			undefined,
+			soft,
+		);
+		const box = (m: THREE.Mesh) => {
+			scene.updateMatrixWorld(true);
+			return new THREE.Box3().setFromObject(m);
+		};
+		return { movables, cushion, jar, box };
+	}
+
+	it('is drawn pressed in by what lies on it, which is drawn as much lower', async () => {
+		const { movables, cushion, jar, box } = await pile(true);
+		settle(movables, eye(0));
+		// Its foot bears both weights and its top the jar's: half their sum, 1.65 kg.
+		expect(box(cushion).max.y).toBeCloseTo(0.14 - 0.0165, 2);
+		expect(box(cushion).min.y).toBeCloseTo(0, 2);
+		expect(box(jar).min.y).toBeCloseTo(box(cushion).max.y, 2);
+		// Wider by what keeps its volume.
+		const wide = box(cushion).max.x - box(cushion).min.x;
+		expect(wide).toBeCloseTo(0.4 / Math.sqrt(1 - 0.0165 / 0.14), 2);
+	});
+
+	it('comes back when what lay on it is taken off', async () => {
+		const { movables, cushion, box } = await pile(true);
+		const camera = eye(0);
+		const frames = settle(movables, camera);
+		movables.hold('jar', camera);
+		let t = frames * 16;
+		for (let i = 0; i < 180; i++) movables.update((t += 16), camera);
+		// Lying alone it gives for half its own weight: 1.5 mm.
+		expect(box(cushion).max.y).toBeCloseTo(0.14 - 0.0015, 3);
+	});
+
+	it('dents as the jar lands on it, more than it gives at rest, and comes back to that', async () => {
+		const { movables, cushion, box } = await pile(true);
+		// An eye whose hand, 55 cm ahead of it, is over the cushion.
+		const camera = eye(0);
+		camera.position.z = 0.55;
+		camera.updateMatrixWorld();
+		let t = settle(movables, camera) * 16;
+		// The jar lifted, and let go from where it is carried, a metre up.
+		movables.hold('jar', camera);
+		for (let i = 0; i < 30; i++) movables.update((t += 16), camera);
+		movables.drop();
+		let lowest = Infinity;
+		for (let i = 0; i < 600 && movables.update((t += 16), camera); i++)
+			lowest = Math.min(lowest, box(cushion).max.y);
+		expect(lowest).toBeLessThan(0.14 - 0.03);
+		expect(box(cushion).max.y).toBeGreaterThan(lowest + 0.005);
+	});
+
+	it('keeps its shape with the feature off', async () => {
+		const { movables, cushion, jar, box } = await pile(false);
+		settle(movables, eye(0));
+		expect(box(cushion).max.y).toBeCloseTo(0.14, 2);
+		expect(box(jar).min.y).toBeCloseTo(0.14, 2);
+	});
+});

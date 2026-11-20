@@ -4,12 +4,15 @@ import type { Dynamics } from './dynamics';
 import type { Occluders } from './occluders';
 import { MOVES_LAYER } from './image-stage';
 import type { ProbeLight, ProbeUniforms } from './probes';
+import { Squash, loads, sinks, squashMatrix } from './squash';
 
 /** A box's half-sizes to the half-axes of the ellipsoid of its volume, (6/π)^(1/3). */
 const BOX_TO_ELLIPSOID = Math.cbrt(6 / Math.PI);
 /** Metres ahead of the eye, and below it, that a held thing is carried. */
 const HOLD_AHEAD = 0.55;
 const HOLD_BELOW = 0.35;
+/** Seconds a soft thing takes to come most of the way back, unless it says. */
+const RECOVER = 0.4;
 /** Keeps a GPU resource for disposal with the view, and gives it back. */
 type Own = <T extends { dispose(): void }>(r: T) => T;
 
@@ -27,7 +30,19 @@ interface Movable {
 	/** Which room's probes it reads, and the uniforms it reads them by. */
 	room?: string;
 	probes?: ProbeUniforms;
+	/** What it weighs. */
+	kg: number;
+	/** Metres it is drawn below where the world has it: what gave under it (`sinks`). */
+	sink: number;
+	/** A soft thing's give (`Falls.give`): how far it is pressed in, the way it was
+	 *  last pressed (in its own frame, from what it lay on into it), its parts' box
+	 *  there, and the group its parts are drawn pressed in by. */
+	soft?: { squash: Squash; way: THREE.Vector3; box: THREE.Box3; shape: THREE.Group };
 }
+
+/** Seconds a frame's step of the soft things covers at most: a long pause is no
+ *  time for a cushion to come back in. */
+const LONGEST = 0.1;
 
 /**
  * The things in the room that can be picked up (`Furniture.movable`), as the room
@@ -35,12 +50,16 @@ interface Movable {
  * again lets it go: it falls, tumbles and comes to rest among the room and the
  * others (`Dynamics`, the room view's one world). It is lit where it is from the
  * light probes (`ProbeLight`, every source), not baked; what shades it, and what it
- * shades, the image stage's occlusion draws (`imageStage`).
+ * shades, the image stage's occlusion draws (`imageStage`). A soft one (a cushion)
+ * is drawn pressed in by what lies on it, and what lies on it as much lower: only
+ * drawn, the world they move in keeps every shape (`Squash`).
  */
 export class Movables {
 	private readonly things = new Map<string, Movable>();
 	private held?: { key: string; yaw: number };
 	private last?: number;
+	/** Whether a soft thing was still moving to where its load puts it, last frame. */
+	private giving = true;
 
 	constructor(
 		scene: THREE.Scene,
@@ -55,6 +74,8 @@ export class Movables {
 		how: (key: string) => Falls,
 		/** What they shade what is near them by, by day, if anything. */
 		private readonly occluders?: Occluders,
+		/** Whether the soft ones give (the view's `soft` feature). */
+		soft = true,
 	) {
 		const byKey = new Map<string, THREE.Mesh[]>();
 		for (const m of meshes) {
@@ -86,8 +107,11 @@ export class Movables {
 				}
 			}
 			const inOwnFrame = new THREE.Box3().setFromArray(points);
+			const falls = how(key);
 			const thing: Movable = {
 				group,
+				kg: falls.kg,
+				sink: 0,
 				height: box.max.y - box.min.y,
 				points: Float32Array.from(points),
 				occluder: occluders && {
@@ -100,7 +124,20 @@ export class Movables {
 			};
 			if (light) this.lightFromProbes(thing, parts, own);
 			this.things.set(key, thing);
-			dynamics.add(key, group, thing.points, how(key));
+			if (soft && falls.give !== undefined) {
+				// Its parts under a group of their own, which is drawn pressed in.
+				const shape = new THREE.Group();
+				shape.matrixAutoUpdate = false;
+				for (const m of parts) shape.add(m);
+				group.add(shape);
+				thing.soft = {
+					squash: new Squash({ give: falls.give, recover: falls.recover ?? RECOVER }),
+					way: new THREE.Vector3(0, 1, 0),
+					box: inOwnFrame,
+					shape,
+				};
+			}
+			dynamics.add(key, group, thing.points, falls);
 			this.place(thing);
 		}
 	}
@@ -168,14 +205,62 @@ export class Movables {
 			);
 			dynamics.follow(this.held.key, at, turn);
 		}
-		const moving = dynamics.step(dt) || this.held !== undefined;
+		let moving = dynamics.step(dt) || this.held !== undefined;
+		// With all at rest and every soft thing where its load puts it, nothing gives:
+		// the walk's frames, most of them, pay nothing for it.
+		if (moving || this.giving) {
+			this.giving = this.give(Math.min(dt, LONGEST));
+			if (this.giving) moving = true;
+		}
 		for (const [key, t] of this.things) {
 			dynamics.pose(key, t.group);
-			this.place(t);
+			t.group.position.y -= t.sink;
 		}
+		for (const t of this.things.values()) this.place(t);
 		// The clock runs on while all sleeps: the walker moving through the world is a
 		// step's worth of time like any other (a long pause is cut short by `step`).
 		this.last = now;
+		return moving;
+	}
+
+	/** Draws the soft things pressed in by what is on them, `seconds` on, and every
+	 *  thing lower by what gave under it; true while a soft thing still moves. */
+	private give(seconds: number): boolean {
+		if (![...this.things.values()].some((t) => t.soft)) return false;
+		let moving = false;
+		// Who holds whom up; what is in hand lies on nothing and nothing on it.
+		const held = this.held?.key;
+		const on = new Map(
+			[...this.things.keys()].map((key) => [
+				key,
+				key === held ? [] : (this.dynamics.press(key)?.on ?? []).filter((k) => k !== held),
+			]),
+		);
+		const load = loads(on, (key) => this.thing(key).kg);
+		const blows = this.dynamics.blows();
+		const drop = new Map<string, number>();
+		const turn = new THREE.Quaternion();
+		for (const [key, t] of this.things) {
+			const s = t.soft;
+			if (!s) continue;
+			// In the air or in hand nothing presses on it: it comes back as it goes.
+			const press = key === held ? undefined : this.dynamics.press(key);
+			if (press) s.way.copy(press.from).applyQuaternion(turn.copy(t.group.quaternion).invert());
+			// Its parts' box along the way it is pressed: the side it lies on, and through.
+			const middle = s.box.getCenter(new THREE.Vector3()).dot(s.way);
+			const half = s.box.getSize(new THREE.Vector3()).multiplyScalar(0.5);
+			const reach =
+				Math.abs(s.way.x) * half.x + Math.abs(s.way.y) * half.y + Math.abs(s.way.z) * half.z;
+			const blow = blows.get(key);
+			if (blow && press) s.squash.hit(blow, 2 * reach);
+			if (s.squash.step(press ? (load.get(key) ?? 0) : 0, 2 * reach, seconds)) moving = true;
+			s.shape.matrix.copy(squashMatrix(s.way, middle - reach, 2 * reach, s.squash.depth));
+			// Its top comes down by as much of that as is upward in the room.
+			const up = s.way.clone().applyQuaternion(t.group.quaternion).y;
+			drop.set(key, s.squash.depth * Math.max(0, up));
+		}
+		const sink = sinks(on, (k) => drop.get(k) ?? 0);
+		for (const [key, t] of this.things) t.sink = sink.get(key) ?? 0;
 		return moving;
 	}
 

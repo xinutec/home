@@ -40,6 +40,16 @@ const FRICTION = 0.8;
 const BOUNCE = 0.1;
 /** How fast a spin dies away (1/s): a ball on carpet rolls a little, then stops. */
 const SPIN_DAMPING = 0.8;
+/** What a thing that can be picked up lies on, as the last step it was awake for
+ *  left it. How hard it is pressed is not told: the pushes the world reports for
+ *  a pile at rest came out up to three times its weight, and changed with how it
+ *  had come to rest. Who holds whom up, and from which side, it tells right. */
+export interface Press {
+	/** The way its hardest push comes from, into it, in the room. */
+	from: THREE.Vector3;
+	/** The other such things holding it up, by key. */
+	on: string[];
+}
 /** Who meets whom (Rapier's collision groups, membership above, filter below):
  *  the things that move rest on the room as drawn; the walker walks among its
  *  `WalkerWorld`; doors and drawers are in both. */
@@ -99,6 +109,16 @@ export class Dynamics {
 	private readonly R: typeof RAPIER;
 	private left = 0;
 	private walker?: Walker;
+	private readonly events: RAPIER.EventQueue;
+	/** Each thing that can be picked up, by its collider's handle. */
+	private readonly keys = new Map<number, string>();
+	private readonly presses = new Map<string, Press>();
+	/** The pairs of colliders that pushed on each other in the last step. */
+	private touching = new Set<string>();
+	/** How each thing moved before the step, to tell how it landed. */
+	private readonly before = new Map<string, THREE.Vector3>();
+	/** The blows each thing has taken since `blows` last told them. */
+	private readonly struck = new Map<string, number>();
 	/** Each door and drawer by key: its body, its joint, and the motor's stiffness
 	 *  and damping for its weight. */
 	private readonly joints = new Map<
@@ -123,6 +143,7 @@ export class Dynamics {
 	) {
 		this.R = R;
 		this.world = new R.World({ x: 0, y: -9.81, z: 0 });
+		this.events = new R.EventQueue(true);
 		this.world.timestep = STEP;
 		this.world.lengthUnit = LENGTH_UNIT;
 		const flags = R.TriMeshFlags.FIX_INTERNAL_EDGES;
@@ -285,15 +306,19 @@ export class Dynamics {
 				.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w })
 				.setAngularDamping(SPIN_DAMPING),
 		);
-		this.world.createCollider(
+		const collider = this.world.createCollider(
 			hull
 				.setMass(how.kg)
 				.setFriction(FRICTION)
 				.setRestitution(how.bounce ?? BOUNCE)
-				.setCollisionGroups(groups(THINGS, THINGS | WALKER)),
+				.setCollisionGroups(groups(THINGS, THINGS | WALKER))
+				// Every push on it is told (`press`), however light.
+				.setActiveEvents(R.ActiveEvents.CONTACT_FORCE_EVENTS)
+				.setContactForceEventThreshold(0),
 			body,
 		);
 		this.bodies.set(key, body);
+		this.keys.set(collider.handle, key);
 		this.refresh();
 	}
 
@@ -500,12 +525,101 @@ export class Dynamics {
 	step(seconds: number): boolean {
 		this.left = Math.min(this.left + seconds, STEP * MAX_STEPS);
 		while (this.left >= STEP) {
-			this.world.step();
+			for (const [key, body] of this.bodies) {
+				const v = body.linvel();
+				(this.before.get(key) ?? this.before.set(key, new THREE.Vector3()).get(key))?.set(
+					v.x,
+					v.y,
+					v.z,
+				);
+			}
+			this.world.step(this.events);
+			this.pressed();
 			this.left -= STEP;
 		}
 		return [...this.bodies.values(), ...[...this.joints.values()].map((j) => j.body)].some(
 			(b) => !b.isSleeping(),
 		);
+	}
+
+	/** What `key` (a thing `add`ed) lies on, as its last step awake left it: asleep,
+	 *  it lies as it lay. Nothing: in the air, or in hand. */
+	press(key: string): Press | undefined {
+		return this.presses.get(key);
+	}
+
+	/** The blows each thing has taken since this last told them: for each landing
+	 *  on it, or of it on something, the weight that landed times the speed they met
+	 *  at (newton seconds; two things meeting, the weight their meeting stops). */
+	blows(): Map<string, number> {
+		const out = new Map(this.struck);
+		this.struck.clear();
+		return out;
+	}
+
+	/** Reads from the step's pushes what each thing awake through it lies on, and
+	 *  the blow of each pair that has just met. */
+	private pressed(): void {
+		const sums = new Map<string, { most: number; from: THREE.Vector3; on: string[] }>();
+		const sumOf = (key: string) => {
+			let s = sums.get(key);
+			if (!s) sums.set(key, (s = { most: 0, from: new THREE.Vector3(), on: [] }));
+			return s;
+		};
+		const now = new Set<string>();
+		this.events.drainContactForceEvents((e) => {
+			// The first of the pair's push on the second; it is pushed back as hard.
+			const f = e.totalForce();
+			const size = Math.hypot(f.x, f.y, f.z);
+			if (size === 0) return;
+			const pair = [this.keys.get(e.collider1()), this.keys.get(e.collider2())];
+			const id = `${e.collider1()}|${e.collider2()}`;
+			now.add(id);
+			if (!this.touching.has(id)) {
+				// Just met: how fast they closed along the push, and the weight that stops.
+				const [a, b] = pair.map((key) => (key === undefined ? undefined : this.before.get(key)));
+				const closing = Math.abs(
+					((a?.x ?? 0) - (b?.x ?? 0)) * f.x +
+						((a?.y ?? 0) - (b?.y ?? 0)) * f.y +
+						((a?.z ?? 0) - (b?.z ?? 0)) * f.z,
+				);
+				// The weight that stops: what lies on something, or is the room, stands; of
+				// two both in the air, or both lying, what their meeting stops of each.
+				const [ma, mb] = pair.map((key) =>
+					key === undefined || this.presses.has(key)
+						? Infinity
+						: (this.bodies.get(key)?.mass() ?? Infinity),
+				);
+				const [wa, wb] = pair.map((key) =>
+					key === undefined ? Infinity : (this.bodies.get(key)?.mass() ?? Infinity),
+				);
+				const both = (a: number, b: number) =>
+					a === Infinity ? b : b === Infinity ? a : (a * b) / (a + b);
+				const stops = ma === Infinity && mb === Infinity ? both(wa, wb) : both(ma, mb);
+				for (const key of pair)
+					if (key !== undefined)
+						this.struck.set(key, (this.struck.get(key) ?? 0) + (stops * closing) / size);
+			}
+			pair.forEach((key, i) => {
+				if (key === undefined) return;
+				const sign = i === 0 ? -1 : 1;
+				const s = sumOf(key);
+				if (size > s.most) {
+					s.most = size;
+					s.from.set(f.x, f.y, f.z).multiplyScalar(sign / size);
+				}
+				// Held up by the other, if that is one of these things too: pushed mostly up.
+				const other = pair[1 - i];
+				if (other !== undefined && sign * f.y > size * Math.SQRT1_2) s.on.push(other);
+			});
+		});
+		for (const [key, body] of this.bodies) {
+			if (body.isSleeping()) continue;
+			const s = sums.get(key);
+			if (s) this.presses.set(key, { from: s.from, on: s.on });
+			else this.presses.delete(key);
+		}
+		this.touching = now;
 	}
 
 	/** Where `key` is now: its place and turn into `object`. */
@@ -518,6 +632,7 @@ export class Dynamics {
 	}
 
 	dispose(): void {
+		this.events.free();
 		this.world.free();
 	}
 
