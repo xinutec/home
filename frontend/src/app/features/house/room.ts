@@ -340,7 +340,6 @@ export class RoomPage implements AfterViewInit, OnDestroy {
 				return how;
 			},
 			this.occluders,
-			readFeature('soft'),
 		);
 		// What moves takes the daylight by day, and every lamp at its weight.
 		// The things' shade follows the light's direction where they are.

@@ -65,10 +65,7 @@ hand. The 3D house view (`frontend/.../features/house`) renders from these.
 - **movable** (optional, on a piece) — it can be picked up in the room view (a
   tap carries it, a tap again lets it go: it falls, tumbles and comes to rest, and
   the walker pushes it aside). `kg`, its weight; `bounce`, how much of its speed it
-  keeps off a bounce (0.1 unsaid; a rubber ball 0.6); `estimate`, as elsewhere. A
-  soft one (a cushion) says `give`, the metres it flattens for each kilogram on it,
-  and `recover`, the seconds it takes to come back (0.4 unsaid): it is drawn
-  pressed in by what lies or lands on it. It
+  keeps off a bounce (0.1 unsaid; a rubber ball 0.6); `estimate`, as elsewhere. It
   is not baked: it is lit from the light probes where it is, with a contact shadow
   of its shape under it.
 - **parts** (optional) — what a piece is made of, inside its box (the box stays
