@@ -39,6 +39,8 @@ const KNOWN_COLLISIONS = [
 	'kitchen-cubbies-right/body × kitchen-cubbies-back/body',
 	// The bottom step's round end is a whole disc, half of it inside the step's block.
 	'hall-stair-foot/bullnose × hall-stair-foot/bullnose-end',
+	// The bean bag's back rises out of its seat: one bag, two solids.
+	'living-bean-bag/body × living-bean-bag/back',
 ].sort();
 
 /**
