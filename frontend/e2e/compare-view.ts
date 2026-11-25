@@ -4,6 +4,7 @@
 //   node e2e/compare-view.ts --photo-id living-kf1 [--out compare.png] [--deployed]
 //   node e2e/compare-view.ts --photo-id living-kf1 --tracer --trace 4096
 //   node e2e/compare-view.ts --photo P.jpg --eye=x,y,z --look=x,y,z [--fov 69] [--room living]
+//                            [--night] [--linear]
 //
 // --photo-id takes the photo, camera and regions from scenes/photos.json. The
 // photo itself is cut from observe's recording ($OBSERVE_ARCHIVE, default
@@ -63,6 +64,10 @@ const { values: args } = parseArgs({
 		anchor: { type: 'string', default: 'ceiling-paint' },
 		scene: { type: 'string' },
 		tracer: { type: 'boolean', default: false },
+		// The room by its ceiling light alone, as a photos.json record's light: 'night' sets it.
+		night: { type: 'boolean', default: false },
+		// No tone mapping: the render in linear light, as --fit draws it.
+		linear: { type: 'boolean', default: false },
 	},
 });
 if (args.tracer && (!args.trace || args.deployed)) {
@@ -76,9 +81,10 @@ const eye = record ? record.camera.eye.join(',') : args.eye;
 const look = record ? record.camera.look.join(',') : args.look;
 const fov = record ? String(record.camera.fov) : args.fov;
 const room = record ? record.room : args.room;
+const night = args.night || record?.light === 'night';
 if (!eye || !look || (!record && !args.photo)) {
 	console.error(
-		'usage: node e2e/compare-view.ts --photo-id ID | --photo P.jpg --eye=x,y,z --look=x,y,z [--fov 69]',
+		'usage: node e2e/compare-view.ts --photo-id ID | --photo P.jpg --eye=x,y,z --look=x,y,z [--fov 69] [--night] [--linear]',
 	);
 	process.exit(2);
 }
@@ -171,14 +177,14 @@ let exported: string | undefined;
 function traceOnHorus(exposure: number): Buffer {
 	const out = join(tmpdir(), `compare-view-${process.pid}.png`);
 	const flags = ['--exposure', String(exposure), '--samples', args.trace ?? '', '--out', out];
-	if (args.fit) flags.push('--tone', 'linear');
+	if (args.fit || args.linear) flags.push('--tone', 'linear');
 	if (exported !== sceneBody) {
 		const scene = join(tmpdir(), `compare-view-${process.pid}.json`);
 		writeFileSync(scene, sceneBody);
 		flags.push('--scene', scene);
 		if (exported === undefined) {
 			flags.push(`--eye=${eye}`, `--look=${look}`, '--fov', fov ?? '69', '--size', `${W}x${H}`);
-			if (record?.light === 'night') flags.push('--night');
+			if (night) flags.push('--night');
 		} else flags.push('--reuse');
 	} else flags.push('--reuse');
 	execFileSync(join(ROOT, 'tracer/horus.sh'), flags, { stdio: ['ignore', 'ignore', 'inherit'] });
@@ -197,8 +203,8 @@ async function renderAt(exposure: number): Promise<Buffer> {
 		exposure: String(exposure),
 	});
 	if (args.trace) q.set('trace', args.trace);
-	if (args.fit) q.set('tone', 'linear');
-	if (record?.light === 'night') q.set('night', '');
+	if (args.fit || args.linear) q.set('tone', 'linear');
+	if (night) q.set('night', '');
 	await page.goto(`${ORIGIN}/house/${room}?${q.toString()}`, { waitUntil: 'networkidle' });
 	const canvas = page.locator('.canvas canvas');
 	await canvas.waitFor();
